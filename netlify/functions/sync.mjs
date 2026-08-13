@@ -860,8 +860,6 @@ var sync_src_default = async (req) => {
     return new Response(JSON.stringify({ error: "store unavailable", reason: String((e && e.message) || e), hint: (e && e.hint) || "If reason mentions environment/credentials: add NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN env vars in Netlify, then redeploy." }), { status: 503, headers: cors });
   }
 };
-var config = { path: "/api/sync" };
 export {
-  config,
   sync_src_default as default
 };
