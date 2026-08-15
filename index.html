@@ -397,7 +397,7 @@ async function startFresh() {
   let serverOk = false;
   if (navigator.onLine) {
     try {
-      const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: true }) });
+      const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: true, resetKey: 'trice-reset-2026' }) });
       if (r.ok) { const j = await r.json(); localStorage.setItem('trice_reset_seen', String(j.resetAt || stamp)); SYNC.last = 0; localStorage.setItem('trice_sync_last', '0'); serverOk = true; }
     } catch (e) {}
   }
