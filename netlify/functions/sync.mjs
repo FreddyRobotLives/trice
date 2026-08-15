@@ -805,7 +805,8 @@ var sync_src_default = async (req) => {
     };
     if (req.method === "POST") {
       const b = await req.json().catch(() => ({}));
-      if (b.reset === true) {
+      if (b.reset === true && b.resetKey !== "trice-reset-2026") { /* legacy client reset attempt — refused */ }
+      else if (b.reset === true) {
         const stamp = Date.now();
         for (let a = 0; a < 6; a++) {
           const { state, etag } = await read();
