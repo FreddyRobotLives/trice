@@ -465,7 +465,7 @@ async function syncNow(){
   try{
     const dirty = S.trees.filter(t=>t.dirty).map(stripRuntime);
     const r = await fetch('/api/sync', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ since: SYNC.last, push: dirty, deletes: tombs(), projects: S.projects, user: S.surveyor || '' }) });
+      body: JSON.stringify({ since: Math.max(0, SYNC.last - 120000), push: dirty, deletes: tombs(), projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' }) });
     if(!r.ok) throw new Error('http '+r.status);
     const j = await r.json();
     SYNC.enabled = true;
@@ -473,14 +473,22 @@ async function syncNow(){
     if (seenRaw === null) { localStorage.setItem('trice_reset_seen', String(j.resetAt || 0)); }
     else if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) { await applyRemoteReset(j.resetAt); }
     mergeRemote(j.trees, j.deletes);
+    S.reviveNext = false;
+    let projChanged = false;
+    if (j.deletedProjects && j.deletedProjects.length) {
+      const before = S.projects.length;
+      S.projects = S.projects.filter(x => !j.deletedProjects.includes(x));
+      if (S.joined && j.deletedProjects.includes(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+      projChanged = S.projects.length !== before;
+    }
     if (Array.isArray(j.projects)) {
-      const add = j.projects.filter(p => p && !S.projects.includes(p));
-      if (add.length) {
-        S.projects.push(...add);
-        try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {}
-        const ae = document.activeElement;
-        if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render();
-      }
+      const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
+      if (add.length) { S.projects.push(...add); projChanged = true; }
+    }
+    if (projChanged) {
+      try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {}
+      const ae = document.activeElement;
+      if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render();
     }
     if (Array.isArray(j.users)) {
       const uadd = j.users.filter(u => u && !S.users.includes(u));
@@ -1427,6 +1435,22 @@ function allProjects() {
   for (const t of S.trees) if (t.site) s.add(t.site);
   return [...s].sort();
 }
+
+async function deleteProject(name) {
+  if (!confirm('Delete the empty project "' + name + '" for the whole team?')) return;
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ since: Date.now(), push: [], deletes: [], dropProject: name, user: S.surveyor || '' }) });
+    if (r.status === 409) { const j = await r.json(); toast('"' + name + '" still holds ' + j.trees + ' record' + (j.trees > 1 ? 's' : '') + ' — projects with work cannot be deleted'); return; }
+    if (!r.ok) throw new Error('http ' + r.status);
+    S.projects = S.projects.filter(x => x !== name);
+    localStorage.setItem('trice_projects', JSON.stringify(S.projects));
+    if (S.joined === name) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+    toast('"' + name + '" deleted for the team');
+    render();
+  } catch (e) { toast('Could not reach the server — try again with signal'); }
+}
+
 function selectProject(name) {
   if (S.site === name) {
     S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {}
@@ -1441,6 +1465,7 @@ function selectProject(name) {
   toast(`Joined ${name}`); render();
 }
 function createProject() {
+  S.reviveNext = true;
   const el = document.getElementById('projNew'); const v = ((el && el.value) || '').trim();
   if (!v) { toast('Name the project'); return; }
   selectProject(v);
@@ -1492,7 +1517,7 @@ function projectsCard() {
     <button class="trow" onclick="selectProject('${esc(k)}')">
       <span style="width:20px;height:20px;border-radius:50%;flex:none;border:2px solid ${on ? 'var(--accent)' : 'var(--line)'};display:flex;align-items:center;justify-content:center">${on ? '<span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:block"></span>' : ''}</span>
       <span class="mid"><span class="l1">${esc(p)}</span><span class="l2">${n.length ? `${n.length} asset${n.length > 1 ? 's' : ''}${hi ? ` · ${hi} high hazard` : ''}` : 'No assets yet'}${on ? ' · tap to leave' : ''}</span></span>
-      ${on ? '<span class="chip good">Joined</span>' : '<span class="chip info">Join ›</span>'}
+      ${on ? '<span class="chip good">Joined</span>' : (n.length ? '<span class="chip info">Join ›</span>' : `<span style="display:inline-flex;gap:6px;align-items:center"><span class="chip info">Join ›</span><button onclick="event.stopPropagation();deleteProject('${esc(k)}')" style="border:1px solid var(--line);background:#fff;color:var(--bad);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700">Delete</button></span>`)}
     </button>`; }).join('')}
     <div style="display:flex;gap:8px;${projs.length ? 'margin-top:10px;padding-top:13px;border-top:1px solid var(--hair)' : ''}">
       <input id="projNew" placeholder="New project — e.g. Lexington CC" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:#fff;color:var(--ink)">
