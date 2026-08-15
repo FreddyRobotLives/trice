@@ -375,7 +375,10 @@ async function applyRemoteReset(resetAt) {
       await DB.setMeta('lastArchive', { at: Date.now(), site: S.site, trees: S.trees.map(stripRuntime) });
       for (const t of S.trees) { try { await DB.delTree(t.id); } catch (e) {} }
     }
-    S.trees = []; S.seq = 1; try { await DB.setMeta('seq', 1); } catch (e) {}
+    const unsynced = S.trees.filter(t => t.dirty);
+    S.trees = unsynced;
+    for (const t of unsynced) { try { await DB.putTree(stripRuntime(t)); } catch (e) {} }
+    if (!unsynced.length) S.seq = 1; try { await DB.setMeta('seq', 1); } catch (e) {}
     localStorage.setItem('trice_tombs', '[]');
     SYNC.last = 0; localStorage.setItem('trice_sync_last', '0');
     localStorage.setItem('trice_reset_seen', String(resetAt));
@@ -413,28 +416,47 @@ async function downloadArchive() {
 }
 
 
-/* Force sync: pushes every record on this phone and pulls the whole team set.
-   Idempotent on the server, so always safe. Runs on every page load — a
-   reload is a guaranteed full re-sync — and from the sync chip. */
-async function forceSync(quiet) {
-  if (!navigator.onLine) { SYNC.status = 'offline'; syncChip(); if (!quiet) toast('Offline — will sync when signal returns'); return; }
+/* ---------------- Team backups (server snapshots) ---------------- */
+async function openBackups() {
+  S.backups = { loading: true, list: null }; render();
   try {
-    const push = S.trees.map(stripRuntime);
-    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ since: 0, push, deletes: tombs(), projects: S.projects, user: S.surveyor || '' }) });
+    const r = await fetch('/api/sync?list=backups');
+    const j = await r.json();
+    S.backups = { loading: false, list: j.backups || [] };
+  } catch (e) { S.backups = { loading: false, list: null, err: true }; }
+  render();
+}
+async function downloadTeamBackup(key) {
+  try {
+    toast('Fetching ' + key + '…');
+    const r = await fetch('/api/sync?download=' + encodeURIComponent(key));
     if (!r.ok) throw new Error('http ' + r.status);
     const j = await r.json();
-    SYNC.enabled = true;
-    const seenReset = parseInt(localStorage.getItem('trice_reset_seen') || '0', 10);
-    if (j.resetAt && j.resetAt > seenReset) { await applyRemoteReset(j.resetAt); syncChip(); return; }
-    mergeRemote(j.trees, j.deletes);
-    for (const t of S.trees) { if (t.dirty) { delete t.dirty; try { DB.putTree(stripRuntime(t)); } catch (e) {} } }
-    localStorage.setItem('trice_tombs', '[]');
-    SYNC.last = j.now || Date.now(); localStorage.setItem('trice_sync_last', String(SYNC.last));
-    SYNC.status = 'ok'; SYNC.lastOk = Date.now();
-    if (!quiet) toast(`Fully synced — ${S.trees.length} team record${S.trees.length === 1 ? '' : 's'}`);
-  } catch (e) { if (SYNC.enabled !== true) SYNC.enabled = false; SYNC.status = 'err'; if (!quiet) toast('Sync could not reach the server — will keep retrying'); }
-  syncChip();
+    const trees = j.trees ? Object.values(j.trees) : [];
+    const projects = j.projects ? (Array.isArray(j.projects) ? j.projects : Object.keys(j.projects)) : [];
+    download('trice-' + key + '.json', 'application/json',
+      JSON.stringify({ v: 2, site: '', archivedAt: j.at || Date.now(), seq: 1, projects, trees }));
+    toast(trees.length + ' records saved — move this file off the phone for a true offsite copy');
+  } catch (e) { toast('Could not fetch that backup — check signal'); }
+}
+function backupsSheet() {
+  const b = S.backups || {};
+  return `
+  <div class="sheet-scrim" onclick="S.backups=null;render()"></div>
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div class="slab" style="color:var(--info);font-weight:700">Team backups</div><div style="font-size:12px;color:var(--muted);margin-top:3px">The server snapshots all team data daily, and archives every reset. Download a copy and move it off the phone — that file is the true offsite backup.</div></div>
+      <button onclick="S.backups=null;render()" style="border:0;background:none;font-size:22px;line-height:1;color:var(--muted);width:44px;height:44px;flex:none">×</button>
+    </div>
+    ${b.loading ? '<div style="padding:18px 0"><span class="spinner ink"></span></div>'
+      : b.err ? '<div style="padding:14px 0;font-size:12.5px;color:#7a5a1d">Could not reach the server — try with signal.</div>'
+      : !b.list || !b.list.length ? '<div style="padding:14px 0;font-size:12.5px;color:var(--muted)">No snapshots yet — the first one is taken automatically at the first capture of a new day.</div>'
+      : b.list.map(k => `
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--hair)">
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">${esc(k.replace('backup-','Daily snapshot · ').replace('archive-','Reset archive · '))}</span></span>
+        <button onclick="downloadTeamBackup('${esc(k)}')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--ink)">Download</button>
+      </div>`).join('')}
+  </div>`;
 }
 
 async function syncNow(){
@@ -443,12 +465,13 @@ async function syncNow(){
   try{
     const dirty = S.trees.filter(t=>t.dirty).map(stripRuntime);
     const r = await fetch('/api/sync', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ since: Math.max(0, SYNC.last - 120000), push: dirty, deletes: tombs(), projects: S.projects, user: S.surveyor || '' }) });
+      body: JSON.stringify({ since: SYNC.last, push: dirty, deletes: tombs(), projects: S.projects, user: S.surveyor || '' }) });
     if(!r.ok) throw new Error('http '+r.status);
     const j = await r.json();
     SYNC.enabled = true;
-    const seenReset = parseInt(localStorage.getItem('trice_reset_seen') || '0', 10);
-    if (j.resetAt && j.resetAt > seenReset) { await applyRemoteReset(j.resetAt); }
+    const seenRaw = localStorage.getItem('trice_reset_seen');
+    if (seenRaw === null) { localStorage.setItem('trice_reset_seen', String(j.resetAt || 0)); }
+    else if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) { await applyRemoteReset(j.resetAt); }
     mergeRemote(j.trees, j.deletes);
     if (Array.isArray(j.projects)) {
       const add = j.projects.filter(p => p && !S.projects.includes(p));
@@ -2105,6 +2128,7 @@ function reportView() {
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${needsBackup() ? ` <span class="chip bad" style="margin-left:4px">${unbackedCount()} not backed up</span>` : ''}</span><span class="l2">${needsBackup() ? 'Do this before the phone leaves the site' : (lastBackupAt() ? `Everything, photos included · last backup ${fmtWhen(lastBackupAt())}` : 'Everything, photos included, as one file')}</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="openBackups()"><span class="mid"><span class="l1">Team backups — server snapshots</span><span class="l2">Daily automatic copies of all team records. Download any of them.</span></span><span style="color:var(--faint)">&#8250;</span></button>
     <button class="trow" onclick="downloadArchive()"><span class="mid"><span class="l1">Download last archived job</span><span class="l2">The register as it stood before the last fresh start</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="startFresh()"><span class="mid"><span class="l1" style="color:var(--bad)">Archive &amp; start a fresh register</span><span class="l2">For the whole team — everything is saved to the server and each phone first</span></span><span style="color:var(--faint)">›</span></button>
     <label class="trow" style="cursor:pointer"><input type="file" accept="application/json" onchange="importJSON(this)" style="display:none"><span class="mid"><span class="l1">Restore / merge backup</span><span class="l2">Merges another device’s walk into this one</span></span><span style="color:var(--faint)">›</span></label>
@@ -2650,7 +2674,8 @@ function render() {
     ${S.camOpen ? camView() : ''}
     ${S.zoomSrc ? zoomView() : ''}
     ${adjT ? adjustSheet(adjT) : ''}
-    ${S.projectId ? projectSheet(S.projectId) : ''}`;
+    ${S.projectId ? projectSheet(S.projectId) : ''}
+    ${S.backups ? backupsSheet() : ''}`;
   if (S.tab === 'map' && !S.zoomSrc) requestAnimationFrame(mountMap);
 }
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
@@ -2684,7 +2709,7 @@ function migrate(t) {
     try { const old = await DB.allTrees(); for (const t of old) { try { await DB.delTree(t.id); } catch (e) {} } } catch (e) {}
     for (const k of ['trice_site','trice_joined','trice_projects','trice_surveyor','trice_job','trice_prefix','trice_tombs','trice_sync_last','trice_reset_seen','trice_ucolor','trice_lastBackup','trice_read','trice_tab']) localStorage.removeItem(k);
     try { await DB.setMeta('seq', 1); await DB.setMeta('draft', null); await DB.setMeta('lastArchive', null); } catch (e) {}
-    try { if (navigator.onLine) fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: true }) }).then(r => r.json()).then(j => localStorage.setItem('trice_reset_seen', String(j.resetAt || Date.now()))).catch(() => {}); } catch (e) {}
+    /* Local clean-slate only — a device's first visit must NEVER reset the team store. */
     localStorage.setItem('trice_epoch', EPOCH);
     S.site = ''; S.surveyor = ''; S.job = {}; S.execRead = '';
   }
@@ -2702,11 +2727,16 @@ function migrate(t) {
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
   if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','report'].includes(lt)) S.tab = lt; }
   render();
-  forceSync(true); SYNC.timer = setInterval(syncNow, 25000);
+  syncNow(); SYNC.timer = setInterval(syncNow, 25000);
   window.addEventListener('online', syncNow);
   // GPS only starts after the user has granted it once (readiness check / camera) — never a prompt on page load
   if (S.caps && S.caps.gps) startGPS();
 })();
+</script>
+<script>
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('/sw.js').catch(function(){});
+}
 </script>
 </body>
 </html>
