@@ -480,15 +480,74 @@ function backupsSheet() {
   </div>`;
 }
 
+
+/* ---------------- Push batching — one oversized record can never block the rest ----------------
+   The server caps request bodies (~6MB). Pushing every dirty record in one POST
+   means one fat photo, or simply a long backlog, silently bricks all pushes.
+   Now: oversized photos are shrunk in place, pushes go out in ~3.5MB batches,
+   failed batches retry record-by-record, and failures are named out loud. */
+const PUSH_BUDGET = 3500000;
+async function shrinkRecordPhoto(t) {
+  try {
+    if (!t.photo || t.photo.length < 1800000) return false;
+    const blob = await (await fetch(t.photo)).blob();
+    const smaller = await scaleImageFile(blob, 1280, 0.7);
+    if (smaller && smaller.length < t.photo.length) { t.photo = smaller; try { await DB.putTree(stripRuntime(t)); } catch (e) {} return true; }
+  } catch (e) {}
+  return false;
+}
+function packBatches(list) {
+  const batches = []; let cur = [], size = 0;
+  for (const t of list) {
+    const len = JSON.stringify(t).length;
+    if (size + len > PUSH_BUDGET && cur.length) { batches.push(cur); cur = []; size = 0; }
+    cur.push(t); size += len;
+  }
+  if (cur.length) batches.push(cur);
+  return batches;
+}
+async function pushDirtyBatched(baseBody) {
+  let dirty = S.trees.filter(t => t.dirty);
+  for (const t of dirty) { if (JSON.stringify(t).length > 1800000) await shrinkRecordPhoto(t); }
+  dirty = S.trees.filter(t => t.dirty);
+  const batches = packBatches(dirty.map(stripRuntime));
+  const failed = [];
+  let lastResponse = null;
+  if (!batches.length) batches.push([]);
+  for (let i = 0; i < batches.length; i++) {
+    const body = Object.assign({}, baseBody, { push: batches[i] });
+    if (i > 0) { body.deletes = []; body.dropProject = null; body.reviveProject = null; }
+    try {
+      const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error('http ' + r.status);
+      lastResponse = await r.json();
+      for (const t of batches[i]) { const x = S.trees.find(y => y.id === t.id); if (x && x.dirty) { delete x.dirty; try { DB.putTree(stripRuntime(x)); } catch (e) {} } }
+    } catch (e) {
+      // batch failed — retry each record alone so one poison record cannot sink the rest
+      for (const t of batches[i]) {
+        try {
+          const r2 = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({}, baseBody, { push: [t], deletes: [], dropProject: null, reviveProject: null })) });
+          if (!r2.ok) throw new Error('http ' + r2.status);
+          lastResponse = await r2.json();
+          const x = S.trees.find(y => y.id === t.id); if (x && x.dirty) { delete x.dirty; try { DB.putTree(stripRuntime(x)); } catch (e2) {} }
+        } catch (e2) { failed.push(t.id); }
+      }
+    }
+  }
+  return { lastResponse, failed };
+}
+
 async function syncNow(){
   // Always try — a cold function start or blip must not disable team sync for the session.
   if(!navigator.onLine){ SYNC.status='offline'; syncChip(); return; }
   try{
-    const dirty = S.trees.filter(t=>t.dirty).map(stripRuntime);
-    const r = await fetch('/api/sync', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ since: Math.max(0, SYNC.last - 120000), push: dirty, deletes: tombs(), projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' }) });
-    if(!r.ok) throw new Error('http '+r.status);
-    const j = await r.json();
+    const hadDirty = S.trees.filter(t=>t.dirty).length;
+    const { lastResponse, failed } = await pushDirtyBatched({ since: Math.max(0, SYNC.last - 120000), deletes: tombs(), projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' });
+    if (!lastResponse) throw new Error('all pushes failed');
+    if (failed.length) toast(failed.length + ' record(s) could not reach the server: ' + failed.slice(0,3).join(', ') + (failed.length>3?'…':'') + ' — will retry');
+    else if (hadDirty) SYNC.lastPush = Date.now();
+    const j = lastResponse;
     SYNC.enabled = true;
     const seenRaw = localStorage.getItem('trice_reset_seen');
     if (seenRaw === null) { localStorage.setItem('trice_reset_seen', String(j.resetAt || 0)); }
