@@ -846,6 +846,11 @@ var sync_src_default = async (req) => {
           if (dn && state.users[dn]) { delete state.users[dn]; changed = true; }
         }
         if (!changed) break;
+        const __day = new Date().toISOString().slice(0, 10);
+        if (state._backupDay !== __day) {
+          state._backupDay = __day;
+          try { await store.setJSON("backup-" + __day, { at: Date.now(), trees: state.trees, deletes: state.deletes, projects: state.projects }); } catch (e) {}
+        }
         if (await write(state, r0.etag)) break;
         if (a === 5) return new Response(JSON.stringify({ error: "busy" }), { status: 503, headers: cors });
       }
@@ -855,6 +860,19 @@ var sync_src_default = async (req) => {
       return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
     }
     const { state } = await read();
+    const __url = new URL(req.url);
+    if (__url.searchParams.get("list") === "backups") {
+      const out = [];
+      try { const { blobs } = await store.list(); for (const bb of blobs) { if (/^(backup|archive)-/.test(bb.key)) out.push(bb.key); } } catch (e) {}
+      out.sort().reverse();
+      return new Response(JSON.stringify({ backups: out }), { headers: cors });
+    }
+    const __dl = __url.searchParams.get("download");
+    if (__dl && /^(backup|archive)-[A-Za-z0-9_.-]+$/.test(__dl)) {
+      const snap2 = await store.get(__dl, { type: "json" });
+      if (!snap2) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
+      return new Response(JSON.stringify(snap2), { headers: cors });
+    }
     return new Response(JSON.stringify((() => { const trees = Object.values(state.trees); const byProject = {}; for (const t of trees) { const s = t.site || "Unassigned"; byProject[s] = (byProject[s] || 0) + 1; } const assessors = [...new Set(trees.map((t) => t.surveyor).filter(Boolean))]; const last = trees.reduce((m, t) => Math.max(m, t.updated || 0), 0); return { ok: true, assets: trees.length, projects: Object.keys(state.projects), users: Object.keys(state.users), byProject, assessors, lastActivity: last ? new Date(last).toISOString() : null, resetAt: state.resetAt || 0 }; })(), null, 1), { headers: cors });
   } catch (e) {
     return new Response(JSON.stringify({ error: "store unavailable", reason: String((e && e.message) || e), hint: (e && e.hint) || "If reason mentions environment/credentials: add NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN env vars in Netlify, then redeploy." }), { status: 503, headers: cors });
