@@ -833,9 +833,19 @@ var sync_src_default = async (req) => {
           state.deletes[id] = Date.now();
           if (state.trees[id]) { delete state.trees[id]; changed = true; }
         }
+        state.projectDeletes = state.projectDeletes || {};
+        if (b.reviveProject) { const rn = String(b.reviveProject).trim().slice(0, 80); if (rn && state.projectDeletes[rn]) { delete state.projectDeletes[rn]; changed = true; } }
         for (const p of b.projects || []) {
           const n = String(p || "").trim().slice(0, 80);
-          if (n && !state.projects[n]) { state.projects[n] = Date.now(); changed = true; }
+          if (n && !state.projects[n] && !state.projectDeletes[n]) { state.projects[n] = Date.now(); changed = true; }
+        }
+        if (b.dropProject) {
+          const dn = String(b.dropProject).trim().slice(0, 80);
+          if (dn && state.projects[dn] !== void 0) {
+            const inUse = Object.values(state.trees).filter((t) => (t.site || "") === dn || (t.project || "") === dn).length;
+            if (inUse > 0) return new Response(JSON.stringify({ error: "in use", trees: inUse }), { status: 409, headers: cors });
+            delete state.projects[dn]; state.projectDeletes[dn] = Date.now(); changed = true;
+          }
         }
         if (b.user && typeof b.user === "string") {
           const un = b.user.trim().slice(0, 60);
@@ -857,7 +867,7 @@ var sync_src_default = async (req) => {
       const since = b.since || 0;
       const trees = Object.values(state.trees).filter((t) => (t.syncedAt || t.updated || 0) > since);
       const deletes = Object.entries(state.deletes).filter(([, ts]) => ts > since).map(([id]) => id);
-      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
+      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
     }
     const { state } = await read();
     const __url = new URL(req.url);
