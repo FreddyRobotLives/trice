@@ -417,6 +417,27 @@ async function downloadArchive() {
 
 
 /* ---------------- Team backups (server snapshots) ---------------- */
+
+/* ---------------- Force refresh this device ----------------
+   Clears every cached layer (app shell, offline loader, local synced copies,
+   sync watermark) and reloads fresh from the server. Unsynced work is pushed
+   first and always kept. */
+async function forceRefreshDevice() {
+  let dirty = S.trees.filter(t => t.dirty);
+  if (dirty.length && navigator.onLine) { toast('Pushing ' + dirty.length + ' unsynced record' + (dirty.length > 1 ? 's' : '') + ' first…'); try { await syncNow(); } catch (e) {} }
+  dirty = S.trees.filter(t => t.dirty);
+  if (dirty.length && !confirm(dirty.length + ' record(s) still have not reached the server. They stay safe on this device either way. Refresh now?')) return;
+  if (!dirty.length && !confirm('Clear this device\u2019s cached app and data copies, then re-pull everything from the server?')) return;
+  const keep = S.trees.filter(t => t.dirty);
+  for (const t of S.trees) { if (!t.dirty) { try { await DB.delTree(t.id); } catch (e) {} } }
+  S.trees = keep;
+  localStorage.setItem('trice_sync_last', '0');
+  try { if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (const r of regs) { try { await r.unregister(); } catch (e) {} } } } catch (e) {}
+  try { if (window.caches) { const ks = await caches.keys(); for (const k of ks) { try { await caches.delete(k); } catch (e) {} } } } catch (e) {}
+  toast('Cleared — reloading fresh from the server…');
+  setTimeout(() => location.reload(), 700);
+}
+
 async function openBackups() {
   S.backups = { loading: true, list: null }; render();
   try {
@@ -2153,6 +2174,7 @@ function reportView() {
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${needsBackup() ? ` <span class="chip bad" style="margin-left:4px">${unbackedCount()} not backed up</span>` : ''}</span><span class="l2">${needsBackup() ? 'Do this before the phone leaves the site' : (lastBackupAt() ? `Everything, photos included · last backup ${fmtWhen(lastBackupAt())}` : 'Everything, photos included, as one file')}</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="forceRefreshDevice()"><span class="mid"><span class="l1">Force refresh this device</span><span class="l2">Clears cached app &amp; local copies, re-pulls everything. Unsynced work is pushed first, never lost.</span></span><span style="color:var(--faint)">&#8250;</span></button>
     <button class="trow" onclick="openBackups()"><span class="mid"><span class="l1">Team backups — server snapshots</span><span class="l2">Daily automatic copies of all team records. Download any of them.</span></span><span style="color:var(--faint)">&#8250;</span></button>
     <button class="trow" onclick="downloadArchive()"><span class="mid"><span class="l1">Download last archived job</span><span class="l2">The register as it stood before the last fresh start</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="startFresh()"><span class="mid"><span class="l1" style="color:var(--bad)">Archive &amp; start a fresh register</span><span class="l2">For the whole team — everything is saved to the server and each phone first</span></span><span style="color:var(--faint)">›</span></button>
