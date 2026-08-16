@@ -257,6 +257,7 @@ const S = {
   usersMeta: [],
   admin: localStorage.getItem('trice_admin') === '1',
   projects: (() => { try { return JSON.parse(localStorage.getItem('trice_projects') || '[]'); } catch (e) { return []; } })(),
+  projectParents: (() => { try { return JSON.parse(localStorage.getItem('trice_parents') || '{}'); } catch (e) { return {}; } })(),
   readBusy: false,
   trees: [], seq: 1,
   draft: null,
@@ -554,6 +555,7 @@ async function syncNow(){
     else if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) { await applyRemoteReset(j.resetAt); }
     mergeRemote(j.trees, j.deletes);
     S.reviveNext = false;
+    if (j.projectParents) { S.projectParents = j.projectParents; try { localStorage.setItem('trice_parents', JSON.stringify(j.projectParents)); } catch (e) {} }
     let projChanged = false;
     if (j.deletedProjects && j.deletedProjects.length) {
       const before = S.projects.length;
@@ -1516,6 +1518,46 @@ function allProjects() {
   return [...s].sort();
 }
 
+
+/* ---------------- Main / sub-projects ---------------- */
+const parentOf = name => (S.projectParents || {})[name] || null;
+const subsOf = name => Object.entries(S.projectParents || {}).filter(([c, pa]) => pa === name).map(([c]) => c);
+function projScope(name) { return [name, ...subsOf(name)]; }
+async function setProjectParent(child, parent) {
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ since: Date.now(), push: [], deletes: [], setParent: { child, parent }, projects: S.projects, user: S.surveyor || '' }) });
+    if (r.status === 409) { const j = await r.json(); toast(j.reason || 'Only one level of sub-projects is allowed'); return false; }
+    if (!r.ok) throw new Error('http ' + r.status);
+    const j = await r.json();
+    if (j.projectParents) { S.projectParents = j.projectParents; try { localStorage.setItem('trice_parents', JSON.stringify(j.projectParents)); } catch (e) {} }
+    return true;
+  } catch (e) { toast('Could not reach the server — try again with signal'); return false; }
+}
+async function toggleSub(child) {
+  const main = S.subsFor; if (!main) return;
+  const cur = parentOf(child);
+  const ok = await setProjectParent(child, cur === main ? null : main);
+  if (ok) render();
+}
+function subsSheet(main) {
+  const others = allProjects().filter(p => p !== main && !subsOf(p).length);
+  const k = main.replace(/'/g, "\\'");
+  return `
+  <div class="sheet-scrim" onclick="S.subsFor=null;render()"></div>
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><div class="slab" style="color:var(--info);font-weight:700">Sub-projects of</div><div style="font-size:16px;font-weight:700;margin-top:2px">${esc(main)}</div><div style="font-size:11.5px;color:var(--muted)">Check every location that belongs under this main project. Reports and counts roll up automatically.</div></div>
+      <button onclick="S.subsFor=null;render()" style="border:0;background:none;font-size:22px;line-height:1;color:var(--muted);width:44px;height:44px;flex:none">×</button>
+    </div>
+    ${others.length ? others.map(o => { const ok2 = o.replace(/'/g, "\\'"); const on = parentOf(o) === main; const foreign = parentOf(o) && parentOf(o) !== main; return `
+    <button onclick="toggleSub('${esc(ok2)}')" style="display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;padding:13px 0;border-top:1px solid var(--hair);text-align:left;color:var(--ink)" ${foreign ? 'disabled' : ''}>
+      <span style="width:22px;height:22px;border-radius:7px;flex:none;border:2px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--accent)' : '#fff'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800">${on ? '✓' : ''}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:600;${foreign ? 'color:var(--faint)' : ''}">${esc(o)}</span>${foreign ? `<span style="display:block;font-size:11px;color:var(--faint)">Already under ${esc(parentOf(o))}</span>` : ''}</span>
+    </button>`; }).join('') : '<div style="padding:14px 0;font-size:12.5px;color:var(--muted)">No other projects yet.</div>'}
+  </div>`;
+}
+
 async function deleteProject(name) {
   if (!confirm('Delete the empty project "' + name + '" for the whole team?')) return;
   try {
@@ -1593,11 +1635,11 @@ function projectsCard() {
   return `
   <div class="slab" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Projects — join one or create your own</span><button onclick="refreshProjects()" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;color:var(--info);text-transform:none;letter-spacing:0">↻ Sync</button></div>
   <div class="card" style="padding:${projs.length ? '3px 15px 13px' : '15px'}">
-    ${projs.map(p => { const k = p.replace(/'/g, "\\'"); const on = S.site === p; const n = S.trees.filter(t => siteOfT(t) === p); const hi = n.filter(t => t.hazard === 'High Hazard').length; return `
-    <button class="trow" onclick="selectProject('${esc(k)}')">
-      <span style="width:20px;height:20px;border-radius:50%;flex:none;border:2px solid ${on ? 'var(--accent)' : 'var(--line)'};display:flex;align-items:center;justify-content:center">${on ? '<span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:block"></span>' : ''}</span>
-      <span class="mid"><span class="l1">${esc(p)}</span><span class="l2">${n.length ? `${n.length} asset${n.length > 1 ? 's' : ''}${hi ? ` · ${hi} high hazard` : ''}` : 'No assets yet'}${on ? ' · tap to leave' : ''}</span></span>
-      ${on ? '<span class="chip good">Joined</span>' : (n.length ? '<span class="chip info">Join ›</span>' : `<span style="display:inline-flex;gap:6px;align-items:center"><span class="chip info">Join ›</span><button onclick="event.stopPropagation();deleteProject('${esc(k)}')" style="border:1px solid var(--line);background:#fff;color:var(--bad);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700">Delete</button></span>`)}
+    ${projs.filter(p => !parentOf(p)).flatMap(m => [m, ...subsOf(m).filter(c => projs.includes(c))]).map(p => { const k = p.replace(/'/g, "\\'"); const on = S.site === p; const isSub = !!parentOf(p); const scope = isSub ? [p] : projScope(p); const n = S.trees.filter(t => scope.includes(siteOfT(t))); const own = S.trees.filter(t => siteOfT(t) === p).length; const hi = n.filter(t => t.hazard === 'High Hazard').length; const nSubs = isSub ? 0 : subsOf(p).length; return `
+    <button class="trow" onclick="selectProject('${esc(k)}')" style="${isSub ? 'padding-left:26px' : ''}">
+      <span style="width:20px;height:20px;border-radius:${isSub ? '6px' : '50%'};flex:none;border:2px solid ${on ? 'var(--accent)' : 'var(--line)'};display:flex;align-items:center;justify-content:center">${on ? `<span style="width:10px;height:10px;border-radius:${isSub ? '3px' : '50%'};background:var(--accent);display:block"></span>` : ''}</span>
+      <span class="mid"><span class="l1">${isSub ? '<span style="color:var(--faint)">↳ </span>' : ''}${esc(p)}</span><span class="l2">${n.length ? `${n.length} asset${n.length > 1 ? 's' : ''}${nSubs ? ` · ${nSubs} location${nSubs > 1 ? 's' : ''}` : ''}${hi ? ` · ${hi} high hazard` : ''}` : (nSubs ? `${nSubs} location${nSubs > 1 ? 's' : ''} · no assets yet` : 'No assets yet')}${on ? ' · tap to leave' : ''}</span></span>
+      <span style="display:inline-flex;gap:6px;align-items:center">${!isSub ? `<button onclick="event.stopPropagation();S.subsFor='${esc(k)}';render()" style="border:1px solid var(--line);background:#fff;color:var(--info);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700">Subs${nSubs ? ' · ' + nSubs : ''}</button>` : ''}${on ? '<span class="chip good">Joined</span>' : (own || nSubs ? '<span class="chip info">Join ›</span>' : `<span class="chip info">Join ›</span><button onclick="event.stopPropagation();deleteProject('${esc(k)}')" style="border:1px solid var(--line);background:#fff;color:var(--bad);border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700">Delete</button>`)}</span>
     </button>`; }).join('')}
     <div style="display:flex;gap:8px;${projs.length ? 'margin-top:10px;padding-top:13px;border-top:1px solid var(--hair)' : ''}">
       <input id="projNew" placeholder="New project — e.g. Lexington CC" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:11px;padding:11px 13px;background:#fff;color:var(--ink)">
@@ -2373,7 +2415,7 @@ function weatherCard() {
 
 /* ---------------- Projects & per-assessor reporting ---------------- */
 const siteOfT = t => t.site || S.site || 'Unassigned site';
-function projTrees(site) { return S.trees.filter(t => siteOfT(t) === site); }
+function projTrees(site) { const scope = (typeof projScope === 'function') ? projScope(site) : [site]; return S.trees.filter(t => scope.includes(siteOfT(t))); }
 function projectsSection() {
   const sites = {};
   for (const t of S.trees) { const k = siteOfT(t); sites[k] = sites[k] || { n: 0, hi: 0, users: new Set() }; sites[k].n++; if (t.hazard === 'High Hazard') sites[k].hi++; sites[k].users.add(t.surveyor || 'Unassigned'); }
@@ -2445,8 +2487,9 @@ function printReport(scope) {
   scope = scope || {};
   if (scope.review) lastReviewScope = scope;
   const siteOf = t => t.site || S.site || 'Unassigned site';
+  const siteScope = scope.site ? ((typeof projScope === 'function') ? projScope(scope.site) : [scope.site]) : null;
   const TS = S.trees.filter(t =>
-    (!scope.site || siteOf(t) === scope.site) &&
+    (!siteScope || siteScope.includes(siteOf(t))) &&
     (!scope.zone || (t.zone || '') === scope.zone) &&
     (!scope.hazard || (t.hazard || '') === scope.hazard) &&
     (!scope.assessor || (t.surveyor || 'Unassigned') === scope.assessor));
@@ -2781,7 +2824,8 @@ function render() {
     ${S.zoomSrc ? zoomView() : ''}
     ${adjT ? adjustSheet(adjT) : ''}
     ${S.projectId ? projectSheet(S.projectId) : ''}
-    ${S.backups ? backupsSheet() : ''}`;
+    ${S.backups ? backupsSheet() : ''}
+    ${S.subsFor ? subsSheet(S.subsFor) : ''}`;
   if (S.tab === 'map' && !S.zoomSrc) requestAnimationFrame(mountMap);
 }
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
