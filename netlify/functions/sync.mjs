@@ -840,12 +840,26 @@ var sync_src_default = async (req) => {
           const n = String(p || "").trim().slice(0, 80);
           if (n && !state.projects[n] && !state.projectDeletes[n]) { state.projects[n] = Date.now(); changed = true; }
         }
+        state.projectParents = state.projectParents || {};
+        if (b.setParent && b.setParent.child) {
+          const ch = String(b.setParent.child).trim().slice(0, 80);
+          const pa = b.setParent.parent ? String(b.setParent.parent).trim().slice(0, 80) : null;
+          if (state.projects[ch] !== void 0) {
+            if (pa === null) { if (state.projectParents[ch]) { delete state.projectParents[ch]; changed = true; } }
+            else if (state.projects[pa] !== void 0 && pa !== ch) {
+              if (state.projectParents[pa]) return new Response(JSON.stringify({ error: "one level", reason: "That project is itself a sub-project" }), { status: 409, headers: cors });
+              if (Object.values(state.projectParents).includes(ch)) return new Response(JSON.stringify({ error: "one level", reason: "That project has sub-projects of its own" }), { status: 409, headers: cors });
+              state.projectParents[ch] = pa; changed = true;
+            }
+          }
+        }
         if (b.dropProject) {
           const dn = String(b.dropProject).trim().slice(0, 80);
           if (dn && state.projects[dn] !== void 0) {
             const inUse = Object.values(state.trees).filter((t) => (t.site || "") === dn || (t.project || "") === dn).length;
             if (inUse > 0) return new Response(JSON.stringify({ error: "in use", trees: inUse }), { status: 409, headers: cors });
-            delete state.projects[dn]; state.projectDeletes[dn] = Date.now(); changed = true;
+            if (Object.values(state.projectParents || {}).includes(dn)) return new Response(JSON.stringify({ error: "has subs" }), { status: 409, headers: cors });
+            delete state.projects[dn]; if ((state.projectParents || {})[dn]) delete state.projectParents[dn]; state.projectDeletes[dn] = Date.now(); changed = true;
           }
         }
         if (b.user && typeof b.user === "string") {
@@ -868,7 +882,7 @@ var sync_src_default = async (req) => {
       const since = b.since || 0;
       const trees = Object.values(state.trees).filter((t) => (t.syncedAt || t.updated || 0) > since);
       const deletes = Object.entries(state.deletes).filter(([, ts]) => ts > since).map(([id]) => id);
-      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
+      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: state.projectParents || {}, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
     }
     const { state } = await read();
     const __url = new URL(req.url);
