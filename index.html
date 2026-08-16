@@ -594,7 +594,7 @@ async function syncNow(){
     }
     for(const t of dirty){ const x=S.trees.find(y=>y.id===t.id); if(x){ delete x.dirty; try{DB.putTree(stripRuntime(x));}catch(e){} } }
     localStorage.setItem('trice_tombs','[]');
-    SYNC.last = j.now || Date.now(); localStorage.setItem('trice_sync_last', String(SYNC.last));
+    SYNC.last = j.now || Date.now(); localStorage.setItem('trice_sync_last', String(SYNC.last)); SYNC.busyCount = 0;
     SYNC.status='ok'; SYNC.lastOk=Date.now();
   }catch(e){ if(SYNC.enabled!==true) SYNC.enabled=false; SYNC.status='err'; SYNC.lastErr=(e&&e.message)||'network'; }
   syncChip();
@@ -1609,7 +1609,11 @@ async function syncDiag() {
   try {
     const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ since: Date.now(), push: [], deletes: [], projects: [], user: S.surveyor || '' }) });
     if (r.ok) { const j = await r.json(); const np = (j.projects || []).length; toast(`Team sync is LIVE — server reachable, ${np} shared project${np === 1 ? '' : 's'} on file. This device syncs every 25 seconds.`); await syncNow(); }
-    else if (r.status === 503) toast('Server reached, but shared storage is unavailable — ask your Trice admin (site storage must be enabled)');
+    else if (r.status === 503) {
+      SYNC.busyCount = (SYNC.busyCount || 0) + 1;
+      if (SYNC.busyCount === 1) { setTimeout(() => syncNow(), 1500 + Math.floor(Math.random() * 1500)); toast('Server is mid-write for a teammate — retrying quietly…'); }
+      else toast('Shared storage is busy right now — your work is safe on this phone and will sync on the next pass');
+    }
     else if (r.status === 404) toast('Sync relay missing on this site — republish the FULL Trice package, every folder included');
     else toast(`Trice sync error ${r.status} — try again shortly`);
   } catch (e) { toast('No connection to the sync server — check signal; Trice retries automatically'); }
@@ -2184,11 +2188,11 @@ function mountMap() {
 
 /* ---- Sheet tab: the live spreadsheet ---- */
 function setSheetProject(p) { S.sheetProject = p; render(); }
-function sheetScope() { return S.sheetProject ? S.trees.filter(t => siteOfT(t) === S.sheetProject) : S.trees; }
+function sheetScope() { if (!S.sheetProject) return S.trees; const scope = projScope(S.sheetProject); return S.trees.filter(t => scope.includes(siteOfT(t))); }
 function sheetRows(src) {
-  const head = ['Tree ID','Project','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
+  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
   const rows = [head];
-  for (const t of src) { const a = t.ai || {}; rows.push([t.id, siteOfT(t), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
+  for (const t of src) { const a = t.ai || {}; rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
   return rows;
 }
 async function copyForSheets() {
@@ -2431,9 +2435,9 @@ function exportXLSX(list, label) {
   if (!SRC.length) { toast('Log some assets first'); return; }
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
   const j = S.job || {};
-  const reg = [['Asset ID','Site','Zone','Species','Latin','Qty','DBH (in)','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Removal ($)','Disposal ($)','Stump ($)','Line total ($)','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at']];
+  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Removal ($)','Disposal ($)','Stump ($)','Line total ($)','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at']];
   for (const t of SRC) { const a = t.ai || {};
-    reg.push([t.id, t.site||'', t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'']);
+    reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'']);
   }
   const highs=SRC.filter(t=>t.hazard==='High Hazard').length, mods=SRC.filter(t=>t.hazard==='Moderate').length, clr=SRC.filter(t=>t.hazard==='Cleared').length;
   const sum = [['Trice — Tree assessment'],[''],['Site', S.site||''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor||''],['ISA cert #', j.assessorCert||''],['Carrier', j.carrier||''],['Claim', j.claim||''],['Event', j.stormName||''],['Date of loss', j.dateOfLoss||''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],['Remediation priced ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)]];
@@ -2492,14 +2496,23 @@ function projTrees(site) { const scope = (typeof projScope === 'function') ? pro
 function projectsSection() {
   const sites = {};
   for (const t of S.trees) { const k = siteOfT(t); sites[k] = sites[k] || { n: 0, hi: 0, users: new Set() }; sites[k].n++; if (t.hazard === 'High Hazard') sites[k].hi++; sites[k].users.add(t.surveyor || 'Unassigned'); }
-  const names = Object.keys(sites).sort();
+  // Roll locations up under their mains; order = main, then its locations, indented
+  const allNames = new Set(Object.keys(sites));
+  for (const nm of Object.keys(sites)) { const pa = parentOf(nm); if (pa) allNames.add(pa); }
+  const mains = [...allNames].filter(nm => !parentOf(nm)).sort();
+  const names = mains.flatMap(mn => [mn, ...subsOf(mn).filter(c => sites[c]).sort()]);
+  for (const mn of mains) {
+    const agg = sites[mn] || (sites[mn] = { n: 0, hi: 0, users: new Set() });
+    for (const c of subsOf(mn)) { const cs = sites[c]; if (cs) { agg.n += cs.n; agg.hi += cs.hi; for (const u of cs.users) agg.users.add(u); } }
+    agg.subCount = subsOf(mn).filter(c => (sites[c] || {}).n).length;
+  }
   if (!names.length) return '';
   return `
   <div class="slab" style="margin:18px 0 8px">Projects</div>
   <div class="card" style="padding:9px 15px">
     ${names.map(n => { const p = sites[n]; const k = n.replace(/'/g, "\\'"); return `
     <button class="trow" onclick="S.projectId='${esc(k)}';render()">
-      <span class="mid"><span class="l1">${esc(n)}</span><span class="l2">${p.n} asset${p.n>1?'s':''} · ${p.users.size} assessor${p.users.size>1?'s':''}${p.hi ? ` · <span style="color:var(--bad);font-weight:700">${p.hi} high hazard</span>` : ''}</span></span>
+      <span class="mid" style="${parentOf(n) ? 'padding-left:16px' : ''}"><span class="l1">${parentOf(n) ? '<span style="color:var(--faint)">↳ </span>' : ''}${esc(n)}</span><span class="l2">${p.n} asset${p.n>1?'s':''}${p.subCount ? ` across ${p.subCount} location${p.subCount>1?'s':''}` : ''} · ${p.users.size} assessor${p.users.size>1?'s':''}${p.hi ? ` · <span style="color:var(--bad);font-weight:700">${p.hi} high hazard</span>` : ''}</span></span>
       <span style="color:var(--faint)">›</span>
     </button>`; }).join('')}
   </div>
@@ -2567,7 +2580,8 @@ function printReport(scope) {
     (!scope.hazard || (t.hazard || '') === scope.hazard) &&
     (!scope.assessor || (t.surveyor || 'Unassigned') === scope.assessor));
   if (!TS.length) { toast('Nothing in that scope yet'); return; }
-  const multiSite = (scope.all === true) && new Set(TS.map(siteOf)).size > 1;
+  const groupKey = t => { const st = siteOf(t); const pa = (typeof parentOf === 'function') ? parentOf(st) : null; return pa ? pa + '\u2003\u2192\u2003' + st : st; };
+  const multiSite = new Set(TS.map(groupKey)).size > 1 && (scope.all === true || (scope.site && !((typeof parentOf === 'function') && parentOf(scope.site))));
   const el = document.getElementById('printReport');
   const j = S.job || {};
   const T = totals(TS);
@@ -2635,10 +2649,10 @@ function printReport(scope) {
     ${sec('register') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Asset register</div>
     <table>
       <tr><th>ID</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Cause of loss</th><th>Location</th><th style="text-align:right">Line total</th></tr>
-      ${(multiSite ? [...new Set(TS.map(siteOf))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? siteOf(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="10" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; return (sk != null ? `<tr><td colspan="11" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc(t.cause||'')}</td><td>${esc(t.locDetails||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${lineTotal(t) ? money(lineTotal(t)) : '—'}</td></tr>`; }).join('') + sub; }).join('')}
+      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="10" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; return (sk != null ? `<tr><td colspan="11" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc(t.cause||'')}</td><td>${esc(t.locDetails||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${lineTotal(t) ? money(lineTotal(t)) : '—'}</td></tr>`; }).join('') + sub; }).join('')}
     </table>
     ` : ''}${sec('photos') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Photo journal — every asset, on the record</div>
-    ${(multiSite ? [...new Set(TS.map(siteOf))].sort() : (byHole ? zGroups : [null])).map(sk => (sk ? `<div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(sk)}</div>` : '') + TS.filter(t => !sk || (multiSite ? siteOf(t) === sk : zKey(t) === sk)).map(t => { const a = t.ai||{}; return `
+    ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => (sk ? `<div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(sk)}</div>` : '') + TS.filter(t => !sk || (multiSite ? groupKey(t) === sk : zKey(t) === sk)).map(t => { const a = t.ai||{}; return `
       <div class="ptree">
         <img src="${t.photo}" alt="${esc(t.id)}">
         <div style="flex:1;min-width:0">
@@ -2885,7 +2899,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v12</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v13.1</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}</div>
     </div>
@@ -2950,7 +2964,7 @@ function migrate(t) {
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
   if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','report'].includes(lt)) S.tab = lt; }
   render();
-  syncNow(); SYNC.timer = setInterval(syncNow, 25000);
+  syncNow(); SYNC.timer = setInterval(syncNow, 25000 + Math.floor(Math.random() * 12000));
   window.addEventListener('online', syncNow);
   // GPS only starts after the user has granted it once (readiness check / camera) — never a prompt on page load
   if (S.caps && S.caps.gps) startGPS();
