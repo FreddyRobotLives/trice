@@ -790,11 +790,15 @@ var sync_src_default = async (req) => {
       }
     })();
     const freshState = () => ({ trees: {}, deletes: {}, projects: {}, users: {}, resetAt: 0 });
+    const T0 = Date.now();
+    const BUDGET = 6500;
+    const overBudget = () => Date.now() - T0 > BUDGET;
+    const busyNow = () => new Response(JSON.stringify({ error: "busy", where: "storage-slow", elapsed: Date.now() - T0 }), { status: 503, headers: cors });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const jitter = (a) => 120 * (a + 1) + Math.floor(Math.random() * 250);
+    const jitter = (a) => 60 * (a + 1) + Math.floor(Math.random() * 120);
     const read = async () => {
       let res = null;
-      for (let ra = 0; ra < 3 && !res; ra++) {
+      for (let ra = 0; ra < 2 && !res && !overBudget(); ra++) {
         try { res = await store.getWithMetadata("state", { type: "json", consistency: "strong" }); } catch (e) { res = null; if (ra < 2) await sleep(jitter(ra)); }
       }
       const state = (res && res.data) || freshState();
@@ -813,6 +817,7 @@ var sync_src_default = async (req) => {
       else if (b.reset === true) {
         const stamp = Date.now();
         for (let a = 0; a < 6; a++) {
+          if (overBudget()) return busyNow();
           if (a > 0) await sleep(jitter(a));
           const { state, etag } = await read();
           if (Object.keys(state.trees).length) await store.setJSON("archive-" + stamp, state);
@@ -823,6 +828,7 @@ var sync_src_default = async (req) => {
       }
       let state = freshState();
       for (let a = 0; a < 10; a++) {
+        if (overBudget()) return busyNow();
         if (a > 0) await sleep(jitter(a));
         const r0 = await read();
         state = r0.state;
@@ -850,6 +856,8 @@ var sync_src_default = async (req) => {
         if (b.setParent && b.setParent.child) {
           const ch = String(b.setParent.child).trim().slice(0, 80);
           const pa = b.setParent.parent ? String(b.setParent.parent).trim().slice(0, 80) : null;
+          if (state.projects[ch] === void 0) return new Response(JSON.stringify({ error: "unknown project", reason: "The server does not know a project named \"" + ch + "\" — sync first, then retry" }), { status: 409, headers: cors });
+          if (pa !== null && state.projects[pa] === void 0) return new Response(JSON.stringify({ error: "unknown project", reason: "The server does not know a main project named \"" + pa + "\"" }), { status: 409, headers: cors });
           if (state.projects[ch] !== void 0) {
             if (pa === null) { if (state.projectParents[ch]) { delete state.projectParents[ch]; changed = true; } }
             else if (state.projects[pa] !== void 0 && pa !== ch) {
