@@ -790,9 +790,13 @@ var sync_src_default = async (req) => {
       }
     })();
     const freshState = () => ({ trees: {}, deletes: {}, projects: {}, users: {}, resetAt: 0 });
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const jitter = (a) => 120 * (a + 1) + Math.floor(Math.random() * 250);
     const read = async () => {
       let res = null;
-      try { res = await store.getWithMetadata("state", { type: "json", consistency: "strong" }); } catch (e) { res = null; }
+      for (let ra = 0; ra < 3 && !res; ra++) {
+        try { res = await store.getWithMetadata("state", { type: "json", consistency: "strong" }); } catch (e) { res = null; if (ra < 2) await sleep(jitter(ra)); }
+      }
       const state = (res && res.data) || freshState();
       state.trees = state.trees || {}; state.deletes = state.deletes || {}; state.projects = state.projects || {}; state.users = state.users || {};
       return { state, etag: res && res.etag };
@@ -809,6 +813,7 @@ var sync_src_default = async (req) => {
       else if (b.reset === true) {
         const stamp = Date.now();
         for (let a = 0; a < 6; a++) {
+          if (a > 0) await sleep(jitter(a));
           const { state, etag } = await read();
           if (Object.keys(state.trees).length) await store.setJSON("archive-" + stamp, state);
           const next = { trees: {}, deletes: {}, projects: {}, users: state.users, resetAt: stamp };
@@ -817,7 +822,8 @@ var sync_src_default = async (req) => {
         return new Response(JSON.stringify({ error: "busy" }), { status: 503, headers: cors });
       }
       let state = freshState();
-      for (let a = 0; a < 6; a++) {
+      for (let a = 0; a < 10; a++) {
+        if (a > 0) await sleep(jitter(a));
         const r0 = await read();
         state = r0.state;
         let changed = false;
@@ -877,7 +883,7 @@ var sync_src_default = async (req) => {
           try { await store.setJSON("backup-" + __day, { at: Date.now(), trees: state.trees, deletes: state.deletes, projects: state.projects }); } catch (e) {}
         }
         if (await write(state, r0.etag)) break;
-        if (a === 5) return new Response(JSON.stringify({ error: "busy" }), { status: 503, headers: cors });
+        if (a === 9) return new Response(JSON.stringify({ error: "busy", where: "write-contention", attempts: 10 }), { status: 503, headers: cors });
       }
       const since = b.since || 0;
       const trees = Object.values(state.trees).filter((t) => (t.syncedAt || t.updated || 0) > since);
