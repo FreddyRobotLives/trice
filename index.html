@@ -600,14 +600,22 @@ async function syncNow(){
   syncChip();
 }
 function syncChip(){
-  const el=document.getElementById('syncChip'); if(!el) return;
   let txt, col;
-  if(SYNC.enabled===false){ txt='This device only'; col='var(--faint)'; }
-  else if(SYNC.status==='ok'){ txt='Team-synced'; col='var(--good)'; }
-  else if(SYNC.status==='offline'){ txt='Offline · saving here'; col='var(--warn)'; }
-  else if(SYNC.status==='err'){ txt='Sync retrying…'; col='var(--warn)'; }
-  else { txt=''; col='var(--faint)'; }
-  el.textContent=txt; el.style.color=col;
+  if (SYNC.syncing) { txt='Syncing…'; col='var(--info)'; }
+  else if (SYNC.busyCount) { txt='Server busy · retrying'; col='var(--warn)'; }
+  else if (SYNC.enabled===false) { txt='This device only'; col='var(--faint)'; }
+  else if (SYNC.status==='ok') { txt='● Team-synced'; col='var(--good)'; }
+  else if (SYNC.status==='offline') { txt='Offline · saving here'; col='var(--warn)'; }
+  else if (SYNC.status==='err') { txt='Sync retrying…'; col='var(--warn)'; }
+  else { txt='● Sync'; col='var(--faint)'; }
+  for (const id of ['syncChip','syncTop']) { const el=document.getElementById(id); if (el) { el.textContent=txt; el.style.color=col; } }
+}
+async function manualSync(){
+  if (SYNC.syncing) return;
+  SYNC.syncing = true; syncChip();
+  try { await syncNow(); } catch (e) {}
+  SYNC.syncing = false; syncChip();
+  toast(SYNC.status==='ok' ? 'Synced — ' + S.trees.length + ' record' + (S.trees.length===1?'':'s') + ' on this device' : (SYNC.status==='offline' ? 'Offline — will sync when signal returns' : 'Sync is retrying — your work is safe on this phone'));
 }
 
 /* ---------------- Never-lose-a-capture: draft autosave ----------------
@@ -1539,10 +1547,12 @@ async function setProjectParent(child, parent) {
   try {
     const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ since: Date.now(), push: [], deletes: [], setParent: { child, parent }, projects: S.projects, user: S.surveyor || '' }) });
-    if (r.status === 409) { const j = await r.json(); toast(j.reason || 'Only one level of sub-projects is allowed'); return false; }
+    if (r.status === 409) { const j = await r.json(); toast(j.reason || 'The server refused that move'); return false; }
     if (!r.ok) throw new Error('http ' + r.status);
     const j = await r.json();
     if (j.projectParents) { S.projectParents = j.projectParents; try { localStorage.setItem('trice_parents', JSON.stringify(j.projectParents)); } catch (e) {} }
+    const applied = parent ? (S.projectParents || {})[child] === parent : !(S.projectParents || {})[child];
+    if (!applied) { toast('The server did not apply that move — pull all team data and try again'); return false; }
     return true;
   } catch (e) { toast('Could not reach the server — try again with signal'); return false; }
 }
@@ -1669,40 +1679,44 @@ function pickerRows() {
   const mains = projs.filter(p => !parentOf(p));
   const ordered = mains.flatMap(mn => [mn, ...subsOf(mn).filter(c => projs.includes(c))]);
   const list = q ? ordered.filter(p => p.toLowerCase().includes(q)) : ordered;
+  window.__PICK = list;
+  window.__MAINS = mains;
   if (!list.length) return `<div style="padding:22px 0;text-align:center;font-size:12.5px;color:var(--faint)">${q ? 'No project matches.' : 'No projects yet — create the first below.'}</div>`;
-  return list.map(pj => {
-    const k = pj.replace(/'/g, "\\'");
+  return list.map((pj, i) => {
     const isSub = !!parentOf(pj);
     const on = S.site === pj;
     const own = S.trees.filter(t => siteOfT(t) === pj).length;
     const nSubs = isSub ? 0 : subsOf(pj).length;
     const scopeN = isSub ? own : S.trees.filter(t => projScope(pj).includes(siteOfT(t))).length;
     const canDelete = !own && !nSubs;
-    const eligibleMains = allProjects().filter(x => x !== pj && !parentOf(x) && !subsOf(pj).length);
     return `
     <div style="display:flex;align-items:center;gap:11px;padding:13px 0 13px ${isSub ? '22px' : '0'};border-top:1px solid var(--hair)">
-      <button onclick="selectProject('${esc(k)}');S.showPicker=false;render()" style="flex:1;min-width:0;display:flex;align-items:center;gap:11px;border:0;background:none;padding:0;text-align:left;color:var(--ink)">
+      <button onclick="pickJoin(${i})" style="flex:1;min-width:0;display:flex;align-items:center;gap:11px;border:0;background:none;padding:0;text-align:left;color:var(--ink)">
         <span style="width:20px;height:20px;border-radius:${isSub ? '6px' : '50%'};flex:none;border:1.5px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--accent)' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800">${on ? '✓' : ''}</span>
         <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:${isSub ? '500' : '700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pj)}</span>
-        <span style="display:block;font-size:11px;color:var(--muted)">${scopeN ? scopeN + ' asset' + (scopeN > 1 ? 's' : '') : 'Empty'}${nSubs ? ' · ' + nSubs + ' location' + (nSubs > 1 ? 's' : '') : ''}</span></span>
+        <span style="display:block;font-size:11px;color:var(--muted)">${scopeN ? scopeN + ' asset' + (scopeN > 1 ? 's' : '') : 'Empty'}${nSubs ? ' · ' + nSubs + ' location' + (nSubs > 1 ? 's' : '') : ''}${isSub ? ' · under ' + esc(parentOf(pj)) : ''}</span></span>
       </button>
       ${S.pickerEdit ? `
       <span style="display:inline-flex;gap:7px;align-items:center;flex:none">
-        ${!nSubs ? `<select onchange="moveProject('${esc(k)}', this.value)" style="border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:11.5px;color:var(--ink);max-width:118px">
-          <option value="">${isSub ? 'Under ' + esc(parentOf(pj)) : 'Top level'}</option>
-          ${isSub ? '<option value="__top__">Move to top level</option>' : ''}
-          ${eligibleMains.map(mn => parentOf(pj) === mn ? '' : `<option value="${esc(mn.replace(/'/g, '&#39;'))}">Under ${esc(mn)}</option>`).join('')}
+        ${!nSubs ? `<select onchange="pickMove(${i}, this.value)" style="border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:11.5px;color:var(--ink);max-width:128px">
+          <option value="">File under…</option>
+          ${isSub ? '<option value="top">Top level (no main)</option>' : ''}
+          ${window.__MAINS.map((mn, mi) => (mn === pj || parentOf(pj) === mn) ? '' : `<option value="${mi}">${esc(mn)}</option>`).join('')}
         </select>` : `<span style="font-size:10.5px;color:var(--faint)">main</span>`}
-        ${canDelete ? `<button onclick="deleteProject('${esc(k)}')" style="border:0;background:none;color:var(--bad);font-size:12px;font-weight:700;padding:8px 4px">Delete</button>` : ''}
+        ${canDelete ? `<button onclick="pickDelete(${i})" style="border:0;background:none;color:var(--bad);font-size:12px;font-weight:700;padding:8px 4px">Delete</button>` : ''}
       </span>` : ''}
     </div>`;
   }).join('');
 }
-async function moveProject(child, value) {
-  if (value === '') return;
-  const parent = value === '__top__' ? null : value;
+function pickJoin(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; selectProject(nm); S.showPicker = false; render(); }
+function pickDelete(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; deleteProject(nm); }
+async function pickMove(i, val) {
+  const child = (window.__PICK || [])[i]; if (!child || val === '') return;
+  const parent = val === 'top' ? null : (window.__MAINS || [])[parseInt(val, 10)];
+  if (val !== 'top' && !parent) return;
   const ok = await setProjectParent(child, parent);
   if (ok) { toast(parent ? `"${child}" filed under "${parent}"` : `"${child}" moved to top level`); render(); }
+  else render();
 }
 function projectPicker() {
   return `
@@ -2899,9 +2913,9 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v13.1</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v14</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
-      <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}</div>
+      <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
     <div class="view">${body}</div>
     <div class="nav">${navBtn('survey','Survey')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheet')}${navBtn('report','Report')}</div>
