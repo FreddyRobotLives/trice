@@ -47,3 +47,8 @@ Report → Data → Verify team data on any two phones. Same "This phone / Serve
 - PWA install metadata refreshed (theme color, apple-touch-icon). SW cache v22 — phones pick the build up on next online load.
 
 Deploy: commit these files to FreddyRobotLives/trice, push, let Netlify build trice.live. NEVER drag-and-drop (it drops netlify/functions).
+
+## v21.2 — 17 Aug 2026
+- Landing page first: hero (mark, tagline, mountains) -> Get Started / Team Access -> company list -> WTR password -> profile picker. One password entry per device.
+- Sheets: "⛶ Full screen" puts the grid alone on screen; Predict pricing and Accept all stay in the fullscreen bar. Leaving the tab closes it.
+- Desktop rail: Capture removed (mobile center Capture button unchanged).

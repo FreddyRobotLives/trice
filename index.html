@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v21.1">
+<meta name="version" content="trice-v21.4">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -105,6 +105,7 @@ body{overflow-x:hidden}
 .nav .fab svg{width:26px;height:26px}
 .nav .fab svg path{stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round}
 .nav .fab:active{transform:scale(.95)}
+.ndot{position:absolute;top:5px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--accent);border:1.5px solid #fff}
 
 /* Live camera */
 .cam{position:fixed;inset:0;z-index:90;background:#000;display:flex;flex-direction:column}
@@ -204,6 +205,8 @@ input,select,textarea{border-radius:11px}
   .nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:0;padding:12px 0;font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:#a8aaad;font-weight:600;border-radius:0;min-height:0}
   .nav button:hover{color:#5c5f63}
   .nav button.on{color:#101214;font-weight:800}
+  .nav button.on::before{content:'';position:absolute;left:-19px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(200,69,44,.12)}
+  .nav .ndot{position:static;display:inline-block;margin-left:10px;width:6px;height:6px;border:0;vertical-align:middle;opacity:.85;box-shadow:0 0 0 3px rgba(200,69,44,.12)}
   .nav button svg,.nav button .ic{display:none}
   .railtop{display:block;margin:0 0 72px}
   .railmark{font-size:21px;font-weight:800;letter-spacing:.34em;color:#101214}
@@ -1947,26 +1950,11 @@ async function refreshProjects() {
 }
 function nameCard() {
   const us = knownUsers();
-  if (!S.landGo && !us.length && !S.surveyor) {
-    /* First screen on a fresh phone — the landing. */
-    return `
-  <div style="min-height:calc(100vh - 200px);display:flex;flex-direction:column;justify-content:center;text-align:center;padding:10px 6px">
-    <div style="display:flex;justify-content:center"><div class="logo" style="width:64px;height:64px;border-radius:16px;gap:5px"><span style="height:3.5px;width:16px"></span><span style="height:3.5px;width:24px"></span><span style="height:3.5px;width:32px"></span></div></div>
-    <div style="font-size:34px;font-weight:800;letter-spacing:.32em;margin-top:22px;color:var(--ink)">TRICE</div>
-    <div style="font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:6px">WTR field module</div>
-    <div style="font-size:23px;font-weight:700;line-height:1.3;margin-top:34px;letter-spacing:-.01em">Field data.<br>Clear decisions.</div>
-    <div style="font-size:13px;color:var(--muted);margin-top:10px;line-height:1.6">Assess. Document. Act.<br>All your fieldwork, in one place.</div>
-    <div style="margin-top:38px;max-width:340px;margin-left:auto;margin-right:auto;width:100%">
-      <button class="btn primary" onclick="S.landGo=true;render()">Get started</button>
-    </div>
-    <div style="margin-top:26px;font-size:10.5px;color:var(--faint)">Work better. Track smarter. Protect what matters.</div>
-  </div>`;
-  }
   return `
   <div style="max-width:420px;margin:0 auto">
     <div style="text-align:center;padding:14px 0 4px">
       <div style="display:flex;justify-content:center"><div class="logo" style="width:46px;height:46px;border-radius:12px"><span></span><span></span><span></span></div></div>
-      <div style="font-size:17px;font-weight:800;letter-spacing:.26em;margin-top:12px">TRICE</div>
+      <div style="font-size:17px;font-weight:800;letter-spacing:.26em;margin-top:12px;text-indent:.26em">TRICE</div>
     </div>
     <div class="card" style="padding:24px 18px;margin-top:12px">
       <div style="font-size:17px;font-weight:700">Who's assessing?</div>
@@ -2005,7 +1993,6 @@ function homeGlance() {
     <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> carry an amber AI prediction (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
     ${ADMIN() ? `<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
       ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : '⚡ Predict pricing'}</button>` : ''}
-      ${preds ? `<button class="btn primary" style="flex:1;min-width:150px;padding:11px" onclick="acceptAllPreds()">✓ Accept all ${preds}</button>` : ''}
       <button class="btn ghost" style="flex:1;min-width:130px;padding:11px" onclick="go('sheet')">Open the grid</button>
     </div>` : `<button class="btn ghost" style="margin-top:11px;padding:11px" onclick="go('sheet')">Open the live grid</button>`}
   </div>` : ''}
@@ -3277,11 +3264,11 @@ function sheetView() {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       ${ADMIN() ? `
       <button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
-      ${preds ? `<button onclick="acceptAllPreds()" style="${pill};background:var(--good);color:#fff;border-color:transparent">✓ Accept all ${preds}</button><button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
+      ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
       <span style="flex:1"></span>
+      <button onclick="S.gridFull=true;render()" style="${pill}" title="Grid only — everything else hidden">⛶ Full screen</button>
       <button onclick="S.sheetSummary=!S.sheetSummary;render()" style="${pill}">${S.sheetSummary ? '✕ Close summary' : '☰ Summary & exports'}</button>
     </div>
-    ${preds && ADMIN() ? `<div style="font-size:10.5px;color:#7a5a1d;background:var(--warn-bg);border:1px solid #eadfc2;border-radius:9px;padding:7px 11px;line-height:1.45"><strong>Amber numbers are predictions</strong> — calibrated on Amy's rate card, her ten priced rows and the Lexington 2017 schedule. Nothing hits the record until you edit a cell or hit ✓. Hover any amber cell for the basis.</div>` : ''}
   </div>
   <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px)">
     ${body.length ? gridTable(head, body, src) : `<div class="card" style="text-align:center;padding:26px 16px;margin-top:8px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">${S.sheetQ || S.sheetHaz ? 'Nothing matches the filter' : 'No rows yet'}</div><div style="font-size:12px;color:var(--faint);margin-top:4px">${S.sheetQ || S.sheetHaz ? 'Clear the search or the hazard chip above.' : "Every capture writes a row here the moment it's logged — this is the spreadsheet, living."}</div></div>`}
@@ -3318,6 +3305,18 @@ function sheetView() {
       </div>
       <div style="margin-top:10px;font-size:10.5px;color:var(--faint);line-height:1.5">Predictions never leave the app in exports — only accepted prices export. The Pricing column labels each line so nothing predicted can pass as priced.</div>
     </div>
+  </div>` : ''}
+  ${S.gridFull && body.length ? `
+  <div style="position:fixed;inset:0;z-index:140;background:var(--bg);display:flex;flex-direction:column">
+    <div style="flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;border-bottom:1px solid var(--line);background:#fff">
+      <span class="slab" style="flex:none">The grid · ${esc(label)}</span>
+      <span style="font-size:11px;color:var(--muted);font-weight:600;flex:none">${body.length} rows · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span>${preds ? ` · <span style="color:#b8842a;font-weight:700">≈${money(T.predTotal)} predicted</span>` : (unpriced ? ` · ${unpriced} unpriced` : '')}</span>
+      <span style="flex:1"></span>
+      ${ADMIN() ? `<button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
+      ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : ''}
+      <button onclick="S.gridFull=false;render()" style="${pill}">✕ Close</button>
+    </div>
+    <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px)">${gridTable(head, body, src)}</div>
   </div>` : ''}`;
 }
 function gridTable(head, body, src) {
@@ -3494,7 +3493,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.1</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.4</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4047,31 +4046,70 @@ function camView() {
 function emptyState(t, b) {
   return `<div style="text-align:center;padding:52px 16px;background:#fff;border:1px dashed #ddd9cf;border-radius:16px"><div style="font-size:16px;font-weight:600;color:#5c584f">${esc(t)}</div><div style="font-size:13px;color:var(--faint);margin-top:5px;max-width:300px;margin-left:auto;margin-right:auto">${esc(b)}</div></div>`;
 }
-/* ---------------- Team gate (v21.1) ----------------
+/* ---------------- Landing + team gate (v21.2) ----------------
+   Landing hero first, then Team Access -> company -> password.
    One shared team password, checked on-device and remembered per device.
    This is an access gate, not authentication — the app is a public file. */
 const GATE_HASH = 1630778633; /* djb2 of the WTR team password */
 const gateOk = () => { try { return localStorage.getItem('trice_gate') === String(GATE_HASH); } catch (e) { return true; } };
 function gateHash(str) { let h = 5381; for (const c of str) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0; return h; }
+function landStep(st) { S.landStep = st; render(); const e = document.getElementById('gatePw'); if (e) setTimeout(() => e.focus(), 60); }
 function gateTry() {
   const el = document.getElementById('gatePw'); const v = (el && el.value || '').trim();
-  if (gateHash(v) === GATE_HASH) { try { localStorage.setItem('trice_gate', String(GATE_HASH)); } catch (e) {} toast('Welcome to the WTR field module'); render(); }
+  if (gateHash(v) === GATE_HASH) { try { localStorage.setItem('trice_gate', String(GATE_HASH)); } catch (e) {} S.landStep = null; toast('Welcome to the WTR field module'); render(); }
   else { toast('That password is not right — check with Andy or Cc'); if (el) { el.value = ''; el.focus(); } }
 }
+const LAND_MTNS = `<svg viewBox="0 0 400 150" style="width:100%;display:block" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+  <path d="M0 105 60 52 95 88 150 30 205 92 250 58 305 100 350 70 400 96V150H0Z" fill="#c9c5bc" opacity=".55"/>
+  <path d="M0 122 45 82 90 112 140 68 195 116 255 84 310 118 360 96 400 116V150H0Z" fill="#b3afa5" opacity=".6"/>
+  <path d="M0 150v-14l10-4 6 8 8-12 7 10 9-6 8 9 10-13 8 11 9-7 9 10 11-14 8 12 10-8 8 10 11-12 9 11 9-8 9 10 10-12 9 12 10-9 8 10 11-13 8 11 10-7 9 10 10-12 8 11 10-8 8 10 10-11 8 10 9-7 8 9 9-10 7 9V150Z" fill="#8f8b81" opacity=".75"/>
+  <rect x="0" y="0" width="400" height="150" fill="url(#lgfade)"/><defs><linearGradient id="lgfade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3f1ec"/><stop offset=".35" stop-color="#f3f1ec" stop-opacity="0"/><stop offset=".82" stop-color="#f3f1ec" stop-opacity="0"/><stop offset="1" stop-color="#f3f1ec"/></linearGradient></defs>
+</svg>`;
 function gateView() {
-  return `<div class="view" style="display:flex;flex-direction:column;justify-content:center">
-    <div style="max-width:360px;margin:0 auto;width:100%;text-align:center;padding:10px 6px">
-      <div style="display:flex;justify-content:center"><div class="logo" style="width:56px;height:56px;border-radius:14px;gap:4.5px"><span style="height:3px;width:14px"></span><span style="height:3px;width:21px"></span><span style="height:3px;width:28px"></span></div></div>
-      <div style="font-size:15px;font-weight:800;letter-spacing:.22em;margin-top:18px">WTR FIELD MODULE</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:8px">Enter the team password to continue.</div>
-      <div class="field" style="margin-top:22px;text-align:left"><label>Password</label>
-        <div style="position:relative">
-          <input id="gatePw" type="${S.gateShow ? 'text' : 'password'}" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')gateTry()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 44px 12px 13px;background:#fff;color:var(--ink);font-size:15px">
-          <button onclick="S.gateShow=!S.gateShow;const v=document.getElementById('gatePw').value;render();const e=document.getElementById('gatePw');e.value=v;e.focus()" title="Show / hide" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;font-size:15px;color:var(--faint);padding:8px;cursor:pointer">${S.gateShow ? '🙈' : '👁'}</button>
+  const back = to => `<button onclick="landStep(${to ? `'${to}'` : 'null'})" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:14px;border:0;background:none;font-size:22px;color:var(--ink);padding:8px;cursor:pointer" aria-label="Back">‹</button>`;
+  if (S.landStep === 'company') return `<div class="view" style="position:relative">
+    ${back(null)}
+    <div style="max-width:420px;margin:0 auto;padding-top:76px">
+      <div style="font-size:30px;font-weight:700;letter-spacing:-.01em">Team Access</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:8px">Select your company to continue.</div>
+      <div class="slab" style="margin:30px 0 10px">Companies</div>
+      <button class="card" onclick="landStep('pw')" style="width:100%;display:flex;align-items:center;gap:10px;padding:19px 18px;text-align:left;border:1px solid var(--line);cursor:pointer">
+        <span style="flex:1;font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--ink)">WTR FIELD MODULE</span><span style="color:var(--faint);font-size:18px">›</span>
+      </button>
+      <div style="text-align:center;margin-top:34vh;font-size:13px;color:var(--muted)">Don't see your company?<br><a href="#" onclick="toast('New teams are set up by the Trice admin — ask Cc');return false" style="font-weight:700;color:var(--ink)">Contact Support</a></div>
+    </div>
+  </div>`;
+  if (S.landStep === 'pw') return `<div class="view" style="position:relative;display:flex;flex-direction:column;justify-content:flex-start">
+    ${back("company")}
+    <div style="max-width:380px;margin:0 auto;width:100%;text-align:center;padding-top:86px">
+      <div style="display:flex;justify-content:center"><div class="logo" style="width:60px;height:60px;border-radius:15px;gap:4.5px"><span style="height:3.2px;width:15px"></span><span style="height:3.2px;width:22px"></span><span style="height:3.2px;width:29px"></span></div></div>
+      <div style="font-size:19px;font-weight:800;letter-spacing:.06em;margin-top:20px">WTR FIELD MODULE</div>
+      <div style="font-size:13.5px;color:var(--muted);margin-top:10px">Enter your password to continue.</div>
+      <div class="card" style="margin-top:26px;padding:13px 16px;text-align:left">
+        <label style="font-size:12px;color:var(--muted);display:block">Password</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <span style="font-size:15px;color:var(--ink)">🔒</span>
+          <input id="gatePw" type="${S.gateShow ? 'text' : 'password'}" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')gateTry()" style="flex:1;border:0;background:none;color:var(--ink);font-size:16px;letter-spacing:${S.gateShow ? '0' : '.18em'};outline:none;min-width:0">
+          <button onclick="S.gateShow=!S.gateShow;const v=document.getElementById('gatePw').value;render();const e=document.getElementById('gatePw');e.value=v;e.focus()" title="Show / hide" style="border:0;background:none;font-size:16px;color:var(--faint);padding:4px;cursor:pointer">${S.gateShow ? '🙈' : '👁'}</button>
         </div>
       </div>
-      <button class="btn primary" style="margin-top:16px" onclick="gateTry()">Continue</button>
-      <div style="margin-top:16px;font-size:11px;color:var(--faint)">One entry per device — this phone stays signed in.<br>Forgot it? Ask Andy or Cc.</div>
+      <button class="btn primary" style="margin-top:18px" onclick="gateTry()">Continue</button>
+      <div style="margin-top:20px"><a href="#" onclick="toast('Ask Andy or Cc for the team password');return false" style="font-size:13.5px;font-weight:600;color:var(--body);text-decoration:underline">Forgot Password?</a></div>
+    </div>
+  </div>`;
+  /* Landing hero — the first screen on any un-gated device. */
+  return `<div class="view" style="display:flex;flex-direction:column;padding-left:0!important;padding-right:0!important">
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:26px 22px 0">
+      <div style="display:flex;justify-content:center"><div class="logo" style="width:66px;height:66px;border-radius:17px;gap:5px"><span style="height:3.5px;width:16px"></span><span style="height:3.5px;width:24px"></span><span style="height:3.5px;width:32px"></span></div></div>
+      <div style="font-size:36px;font-weight:800;letter-spacing:.3em;margin-top:22px;color:var(--ink);text-indent:.3em">TRICE</div>
+      <div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:36px;letter-spacing:-.01em">Field data.<br>Clear decisions.</div>
+      <div style="font-size:13.5px;color:var(--muted);margin-top:12px;line-height:1.65">Assess. Document. Act.<br>All your fieldwork, in one place.</div>
+    </div>
+    <div style="flex:none;margin-top:22px">${LAND_MTNS}</div>
+    <div style="flex:none;padding:6px 22px calc(env(safe-area-inset-bottom,0px) + 8px);max-width:420px;margin:0 auto;width:100%;box-sizing:border-box">
+      <button class="btn primary" onclick="landStep('company')">Get Started</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="landStep('company')">🏢&nbsp; Team Access</button>
+      <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--faint)">Work better. Track smarter. Protect what matters.</div>
     </div>
   </div>`;
 }
@@ -4086,18 +4124,18 @@ function render() {
   else if (S.tab === 'sheet') body = sheetView();
   else if (S.tab === 'team') body = teamView();
   else body = reportView();
-  const navBtn = (tab, label) => `<button class="${S.tab === tab ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span style="position:absolute;top:5px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--accent);border:1.5px solid #fff"></span>' : ''}${ICONS[tab]}<span>${label}</span></button>`;
+  const navBtn = (tab, label) => `<button class="${S.tab === tab ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${ICONS[tab]}<span>${label}</span>${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span class="ndot" title="Unsynced records on this device"></span>' : ''}</button>`;
   const adjT = S.adjustId && S.trees.find(x => x.id === S.adjustId);
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v21.1</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v21.4</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
-      ? `${navBtn('survey','Home')}<button onclick="fabCapture()" style="position:relative">${ICONS.capture}<span>Capture</span></button>${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheets')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
+      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheets')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('trees','Register')}${navBtn('report','Report')}`}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
@@ -4120,7 +4158,7 @@ function fabCapture() {
   S.detailId = null; S.editId = null; openCamera();
 }
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { S.tab = tab; S.sheetSummary = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function go(tab) { S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Boot (migrates v2/v3 records) ---- */
 function migrate(t) {
