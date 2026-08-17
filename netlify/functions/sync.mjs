@@ -829,7 +829,7 @@ var sync_src_default = async (req) => {
       if (b.op === "manifest") {
         const { state: st } = await read();
         const ids = Object.values(st.trees).map((t) => [t.id, t.updated || 0]);
-        return new Response(JSON.stringify({ now: Date.now(), resetAt: st.resetAt || 0, assets: ids.length, ids, deletes: Object.keys(st.deletes || {}) }), { headers: cors });
+        return new Response(JSON.stringify({ v: "11.7", now: Date.now(), resetAt: st.resetAt || 0, assets: ids.length, ids, deletes: Object.keys(st.deletes || {}) }), { headers: cors });
       }
       if (Array.isArray(b.need)) {
         const { state: st } = await read();
@@ -843,7 +843,7 @@ var sync_src_default = async (req) => {
           out.push(t); sz += len;
         }
         const pending = b.need.slice(cut === b.need.length ? b.need.length : cut);
-        return new Response(JSON.stringify({ now: Date.now(), trees: out, pending, assets: Object.keys(st.trees).length }), { headers: cors });
+        return new Response(JSON.stringify({ v: "11.7", now: Date.now(), trees: out, pending, assets: Object.keys(st.trees).length }), { headers: cors });
       }
       let state = freshState();
       for (let a = 0; a < 10; a++) {
@@ -873,6 +873,19 @@ var sync_src_default = async (req) => {
           if (n && !state.projects[n] && !state.projectDeletes[n]) { state.projects[n] = Date.now(); changed = true; }
         }
         state.projectParents = state.projectParents || {};
+        if (!state.projectParents2) {
+          state.projectParents2 = {};
+          for (const [c0, p0] of Object.entries(state.projectParents)) state.projectParents2[c0] = { p: p0, at: 1 };
+          if (Object.keys(state.projectParents2).length) changed = true;
+        }
+        for (const [c1, e1] of Object.entries(b.parentsLWW || {})) {
+          const cn1 = String(c1 || "").trim().slice(0, 80);
+          if (!cn1 || !e1 || typeof e1 !== "object") continue;
+          const pn1 = e1.p ? String(e1.p).trim().slice(0, 80) : null;
+          const at1 = +e1.at || 0;
+          const cur1 = state.projectParents2[cn1];
+          if (!cur1 || at1 > (cur1.at || 0)) { state.projectParents2[cn1] = { p: pn1, at: at1 }; changed = true; }
+        }
         if (b.setParent && b.setParent.child) {
           const ch = String(b.setParent.child).trim().slice(0, 80);
           const pa = b.setParent.parent ? String(b.setParent.parent).trim().slice(0, 80) : null;
@@ -927,7 +940,9 @@ var sync_src_default = async (req) => {
         trees.push(t); sz2 += len; next = stamp2(t); nextId = String(t.id);
       }
       const deletes = Object.entries(state.deletes).filter(([, ts]) => ts > since).map(([id]) => id);
-      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, more, next, nextId, assets: Object.keys(state.trees).length, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: state.projectParents || {}, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
+      const pp2 = state.projectParents2 || {};
+      const ppFlat = {}; for (const [c9, e9] of Object.entries(pp2)) { if (e9 && e9.p) ppFlat[c9] = e9.p; }
+      return new Response(JSON.stringify({ v: "11.7", now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, more, next, nextId, assets: Object.keys(state.trees).length, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: ppFlat, projectParents2: pp2, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
     }
     const { state } = await read();
     const __url = new URL(req.url);
@@ -943,7 +958,7 @@ var sync_src_default = async (req) => {
       if (!snap2) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
       return new Response(JSON.stringify(snap2), { headers: cors });
     }
-    return new Response(JSON.stringify((() => { const trees = Object.values(state.trees); const byProject = {}; for (const t of trees) { const s = t.site || "Unassigned"; byProject[s] = (byProject[s] || 0) + 1; } const assessors = [...new Set(trees.map((t) => t.surveyor).filter(Boolean))]; const last = trees.reduce((m, t) => Math.max(m, t.updated || 0), 0); return { ok: true, assets: trees.length, projects: Object.keys(state.projects), users: Object.keys(state.users), byProject, assessors, lastActivity: last ? new Date(last).toISOString() : null, resetAt: state.resetAt || 0 }; })(), null, 1), { headers: cors });
+    return new Response(JSON.stringify((() => { const trees = Object.values(state.trees); const byProject = {}; for (const t of trees) { const s = t.site || "Unassigned"; byProject[s] = (byProject[s] || 0) + 1; } const assessors = [...new Set(trees.map((t) => t.surveyor).filter(Boolean))]; const last = trees.reduce((m, t) => Math.max(m, t.updated || 0), 0); return { ok: true, v: "11.7", assets: trees.length, projects: Object.keys(state.projects), users: Object.keys(state.users), byProject, assessors, lastActivity: last ? new Date(last).toISOString() : null, resetAt: state.resetAt || 0 }; })(), null, 1), { headers: cors });
   } catch (e) {
     return new Response(JSON.stringify({ error: "store unavailable", reason: String((e && e.message) || e), hint: (e && e.hint) || "If reason mentions environment/credentials: add NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN env vars in Netlify, then redeploy." }), { status: 503, headers: cors });
   }
