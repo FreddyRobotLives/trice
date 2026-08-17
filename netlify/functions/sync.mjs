@@ -1004,17 +1004,24 @@ var sync_src_default = async (req) => {
       };
       await lwwMap("meta/users", b.empLWW, (e, cur) => Object.assign({}, cur || {}, {
         name: String(e.name || "").slice(0, 60), role: String(e.role || "").slice(0, 60),
-        cert: String(e.cert || "").slice(0, 40), phone: String(e.phone || "").slice(0, 30),
+        cert: String(e.cert || "").slice(0, 40), certExp: String(e.certExp || "").slice(0, 10),
+        phone: String(e.phone || "").slice(0, 30),
         email: String(e.email || "").slice(0, 80), rate: +e.rate || 0, active: e.active !== false
       }));
       await lwwMap("meta/assign", b.assignLWW, (e) => ({
         user: String(e.user || "").slice(0, 60), project: String(e.project || "").slice(0, 80),
-        date: String(e.date || "").slice(0, 10), note: String(e.note || "").slice(0, 200), del: e.del === true
+        date: String(e.date || "").slice(0, 10), time: String(e.time || "").slice(0, 30),
+        note: String(e.note || "").slice(0, 200), del: e.del === true
       }));
       await lwwMap("meta/hours", b.hoursLWW, (e) => ({
         user: String(e.user || "").slice(0, 60), project: String(e.project || "").slice(0, 80),
         date: String(e.date || "").slice(0, 10), hours: Math.max(0, Math.min(24, +e.hours || 0)),
+        kind: ["work", "pto", "sick"].includes(e.kind) ? e.kind : "work",
+        in: +e.in > 0 ? +e.in : 0,
         note: String(e.note || "").slice(0, 200), approved: e.approved === true, del: e.del === true
+      }));
+      await lwwMap("meta/budgets", b.budgetLWW, (e) => ({
+        hours: Math.max(0, +e.hours || 0), cost: Math.max(0, +e.cost || 0)
       }));
       if (b.user && typeof b.user === "string") {
         const un = b.user.trim().slice(0, 60);
@@ -1072,7 +1079,8 @@ var sync_src_default = async (req) => {
       const ids = Object.entries(live).map(([id, r]) => [id, r.u, photos[id] || null]);
       const assign = (await safeGetJSON("meta/assign")) || {};
       const hours = (await safeGetJSON("meta/hours")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours,
+      const budgets = (await safeGetJSON("meta/budgets")) || {};
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
