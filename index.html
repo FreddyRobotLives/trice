@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v20">
+<meta name="version" content="trice-v20.3">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -609,7 +609,7 @@ async function putDirty() {
         if (!x) continue;
         if (okIds.has(m.id)) { delete x.dirty; }
         else failed.push(m.id);
-        if (okPh.has(m.id)) x.photoSent = x.photoAt;
+        if (okPh.has(m.id)) { x.photoSent = x.photoAt; if (SYNC.epoch) x.photoKey = 'e' + SYNC.epoch + '/p/' + x.id + '!' + x.photoAt; }
         try { DB.putTree(stripRuntime(x)); } catch (e) {}
       }
     } catch (e) {
@@ -2987,6 +2987,21 @@ function shEdit(id, field, val) {
   try { DB.putTree(stripRuntime(t)); } catch (e) {}
   toast('Saved — syncing to the team');
 }
+/* ---- Sheet data (restored) ---- */
+function setSheetProject(p) { S.sheetProject = p; render(); }
+function sheetScope() { const vis = S.trees.filter(visT); if (!S.sheetProject) return vis; return vis.filter(t => projMatches(siteOfT(t), S.sheetProject)); }
+function sheetRows(src) {
+  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
+  const rows = [head];
+  for (const t of src) { const a = t.ai || {}; rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
+  return rows;
+}
+async function copyForSheets() {
+  const rows = sheetRows(sheetScope());
+  const tsv = rows.map(r => r.map(c => String(c ?? '').replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
+  try { await navigator.clipboard.writeText(tsv); toast('Copied — paste straight into Google Sheets'); }
+  catch (e) { toast('Copy blocked by the browser — use Export CSV instead'); }
+}
 function sheetView() {
   const projs = topProjects();
   if (S.sheetProject && !projs.includes(S.sheetProject)) S.sheetProject = null;
@@ -3221,15 +3236,31 @@ function exportXLSX(list, label) {
   if (!SRC.length) { toast('Log some assets first'); return; }
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
   const j = S.job || {};
-  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Removal ($)','Disposal ($)','Stump ($)','Line total ($)','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at']];
+  const imgUrl = t => t.photoKey ? location.origin + '/api/sync?img=' + encodeURIComponent(t.photoKey) : '';
+  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Removal ($)','Disposal ($)','Stump ($)','Line total ($)','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at','Photo','Photo URL']];
   for (const t of SRC) { const a = t.ai || {};
-    reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'']);
+    reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'', '', imgUrl(t)]);
   }
   const highs=SRC.filter(t=>t.hazard==='High Hazard').length, mods=SRC.filter(t=>t.hazard==='Moderate').length, clr=SRC.filter(t=>t.hazard==='Cleared').length;
-  const sum = [['Trice — Tree assessment'],[''],['Site', S.site||''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor||''],['ISA cert #', j.assessorCert||''],['Carrier', j.carrier||''],['Claim', j.claim||''],['Event', j.stormName||''],['Date of loss', j.dateOfLoss||''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],['Remediation priced ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)]];
+  const sum = [['Trice — Tree assessment'],[''],['Site', S.site||''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor||''],['ISA cert #', j.assessorCert||''],['Carrier', j.carrier||''],['Claim', j.claim||''],['Event', j.stormName||''],['Date of loss', j.dateOfLoss||''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],['Remediation priced ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],[''],['Photos', 'The Photo column shows each image in-cell in Excel 365 and Google Sheets. The Photo URL column opens the image in any browser and works in every Excel version.']];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'Summary');
-  const ws = XLSX.utils.aoa_to_sheet(reg); ws['!cols'] = reg[0].map((h,i)=>({wch: Math.max(10, String(h).length+2)}));
+  const ws = XLSX.utils.aoa_to_sheet(reg);
+  ws['!cols'] = reg[0].map((h,i)=>({wch: h === 'Photo' ? 18 : Math.max(10, String(h).length+2)}));
+  /* Photos: an in-cell IMAGE() (renders the picture right in Excel 365 / Google Sheets)
+     plus a plain hyperlink that works in every spreadsheet ever made. */
+  const pCol = reg[0].indexOf('Photo'), uCol = reg[0].indexOf('Photo URL');
+  const rowsMeta = [{ hpx: 20 }];
+  for (let r = 1; r < reg.length; r++) {
+    const u = reg[r][uCol];
+    rowsMeta.push({ hpx: u ? 74 : 20 });
+    if (!u) continue;
+    const pAddr = XLSX.utils.encode_cell({ r, c: pCol });
+    ws[pAddr] = { t: 'e', f: 'IMAGE("' + u + '",,1)' };
+    const uAddr = XLSX.utils.encode_cell({ r, c: uCol });
+    if (ws[uAddr]) ws[uAddr].l = { Target: u, Tooltip: 'Open photo' };
+  }
+  ws['!rows'] = rowsMeta;
   XLSX.utils.book_append_sheet(wb, ws, 'Register');
   XLSX.writeFile(wb, `trice-assessment-${label ? label + '-' : ''}${new Date().toISOString().slice(0,10)}.xlsx`);
 }
