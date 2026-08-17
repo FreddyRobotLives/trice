@@ -8,16 +8,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v22.2">
-<meta property="og:title" content="Trice — every tree, on the record">
-<meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
-<meta property="og:image" content="https://trice.live/og.png">
+<meta name="version" content="trice-v22.6">
+<meta property="og:title" content="Trice — field data. Clear decisions.">
+<meta property="og:description" content="Photograph a tree. AI writes the row. Species, hazard, GPS, pricing. Live map, live grid, and a carrier-ready exhibit from one walk.">
+<meta property="og:image" content="https://trice.live/og.png?v=23">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
 <meta property="og:url" content="https://trice.live/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://trice.live/og.png">
+<meta name="twitter:image" content="https://trice.live/og.png?v=23">
 <meta name="description" content="AI tree assessment with GPS photo proof — every tree, on the record.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -331,6 +331,8 @@ const S = {
   repViz: (() => { try { return JSON.parse(localStorage.getItem('trice_repviz') || '{"hazmix":true,"zone":true}'); } catch (e) { return { hazmix: true, zone: true }; } })(),
   usersMeta: [],
   emp: (() => { try { return JSON.parse(localStorage.getItem('trice_emp') || '{}'); } catch (e) { return {}; } })(),
+  subs: (() => { try { return JSON.parse(localStorage.getItem('trice_subs') || '{}'); } catch (e) { return {}; } })(),
+  subsDirty: {},
   assign: (() => { try { return JSON.parse(localStorage.getItem('trice_assign') || '{}'); } catch (e) { return {}; } })(),
   hoursMap: (() => { try { return JSON.parse(localStorage.getItem('trice_hours') || '{}'); } catch (e) { return {}; } })(),
   empDirty: {}, assignDirty: {}, hoursDirty: {}, budgetDirty: {},
@@ -602,7 +604,7 @@ async function putDirty() {
   dirty = S.trees.filter(t => t.dirty);
   const failed = [];
   let i = 0;
-  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, budgetLWW: S.budgetDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
+  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, budgetLWW: S.budgetDirty, subsLWW: S.subsDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
   let metaSent = false;
   while (i < dirty.length || !metaSent) {
     const recs = [], photos = {};
@@ -618,7 +620,7 @@ async function putDirty() {
       if (needPhoto) photos[t.id] = { at: t.photoAt, data: t.photo };
       sz += mlen + plen; i++;
     }
-    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {}, budgetLWW: {} } : baseMeta);
+    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {}, budgetLWW: {}, subsLWW: {} } : baseMeta);
     metaSent = true;
     try {
       const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -630,6 +632,7 @@ async function putDirty() {
       if (body.assignLWW && Object.keys(body.assignLWW).length) S.assignDirty = {};
       if (body.hoursLWW && Object.keys(body.hoursLWW).length) S.hoursDirty = {};
       if (body.budgetLWW && Object.keys(body.budgetLWW).length) S.budgetDirty = {};
+      if (body.subsLWW && Object.keys(body.subsLWW).length && parseFloat(j.v) >= 12.1) S.subsDirty = {};
       const okIds = new Set(j.saved || []);
       const okPh = new Set(j.savedPhotos || []);
       for (const m of recs) {
@@ -723,7 +726,8 @@ function applySharedMeta(j) {
   if (mergeLWW(S.assign, j.assign, S.assignDirty)) teamCh = true;
   if (mergeLWW(S.hoursMap, j.hours, S.hoursDirty)) teamCh = true;
   if (mergeLWW(S.budgets, j.budgets, S.budgetDirty)) teamCh = true;
-  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
+  if (mergeLWW(S.subs, j.subs, S.subsDirty)) teamCh = true;
+  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); localStorage.setItem('trice_subs', JSON.stringify(S.subs)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
   let projChanged = false;
   if (Array.isArray(j.deletedProjects)) {
     const before = S.projects.length;
@@ -1508,9 +1512,8 @@ async function saveEdit(id) {
   t.pending = false;
   t.reviewed = true; t.overrideBy = S.surveyor || 'Assessor'; t.overrideAt = Date.now(); markDirty(t);
   try { await DB.putTree(stripRuntime(t)); } catch (e) {}
-  S.editId = null;
   toast(`${id} — override signed ${t.overrideBy}, original AI retained`);
-  render();
+  backFromEdit();
 }
 
 /* ---------------- Exports ---------------- */
@@ -2375,7 +2378,30 @@ function treesView() {
 
 /* ---- Detail / Edit ---- */
 function openDetail(id) { S.detailId = id; S.editId = null; S.tab = 'trees'; S.zoomSrc = null; render(); }
-function openEdit(id) { S.detailId = id; S.editId = id; S.tab = 'trees'; S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function openEdit(id, from) {
+  S.editFrom = from || null;
+  if (from === 'sheet') {
+    const g = document.getElementById('gridScroll'); S.gridScrollY = g ? g.scrollTop : 0;
+    const tw = document.getElementById('gridTableScroll'); S.gridTableY = tw ? tw.scrollTop : 0; S.gridTableX = tw ? tw.scrollLeft : 0;
+  }
+  S.detailId = id; S.editId = id; S.tab = 'trees'; S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0;
+}
+/* Leaving the editor goes back where it was opened from — the grid returns to the
+   exact scroll position, the register returns to the record detail. */
+function backFromEdit() {
+  S.editId = null;
+  if (S.editFrom === 'sheet') {
+    S.editFrom = null; S.detailId = null; S.tab = 'sheet';
+    try { localStorage.setItem('trice_tab', 'sheet'); } catch (e) {}
+    render();
+    setTimeout(() => {
+      const g = document.getElementById('gridScroll'); if (g) g.scrollTop = S.gridScrollY || 0;
+      const tw = document.getElementById('gridTableScroll'); if (tw) { tw.scrollTop = S.gridTableY || 0; tw.scrollLeft = S.gridTableX || 0; }
+    }, 30);
+    return;
+  }
+  render();
+}
 function detailView(t) {
   const a = t.ai || {};
   if (S.editId === t.id) return editView(t);
@@ -2430,7 +2456,7 @@ function editView(t) {
   const a = t.ai || {};
   const f = (k, label, val, ph='', type='text') => `<div class="field" style="margin-top:10px"><label>${label}</label><input id="ed_${k}" type="${type}" value="${esc(val ?? '')}" placeholder="${esc(ph)}"></div>`;
   return `
-  <button onclick="S.editId=null;render()" style="border:0;background:none;color:var(--info);font-weight:600;font-size:13px;padding:0;margin-bottom:10px">‹ Cancel</button>
+  <button onclick="backFromEdit()" style="border:0;background:none;color:var(--info);font-weight:600;font-size:13px;padding:0;margin-bottom:10px">‹ ${S.editFrom === 'sheet' ? 'Back to the grid' : 'Cancel'}</button>
   <div class="card">
     <div class="slab" style="color:var(--info);font-weight:700">Edit ${t.id} — arborist override</div>
     <div style="font-size:12px;color:var(--muted);margin-top:4px">Signed and dated on save; the original AI assessment stays on the record underneath.</div>
@@ -2859,10 +2885,10 @@ function teamPerf() {
 }
 function teamView() {
   if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Team management is an admin desktop tool — turn on Admin in the header on a desktop browser.</div>';
-  const secs = [['perf','Performance'],['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees']];
+  const secs = [['perf','Performance'],['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees'],['subs','Subcontractors']];
   return `
   <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">${secs.map(([k, l]) => `<button onclick="S.teamSec='${k}';render()" style="border:1px solid ${S.teamSec === k ? 'var(--ink)' : 'var(--line)'};background:${S.teamSec === k ? 'var(--ink)' : '#fff'};color:${S.teamSec === k ? '#fff' : 'var(--ink)'};border-radius:999px;padding:9px 17px;font-size:12.5px;font-weight:700">${l}</button>`).join('')}</div>
-  ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : S.teamSec === 'emp' ? teamEmp() : teamPerf()}`;
+  ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : S.teamSec === 'emp' ? teamEmp() : S.teamSec === 'subs' ? teamSubs() : teamPerf()}`;
 }
 function activeEmps() { return Object.values(S.emp).filter(e => e && e.name && e.active !== false).sort((a, b) => a.name.localeCompare(b.name)); }
 function teamClock() {
@@ -3045,6 +3071,69 @@ function teamEmp() {
   </div>`;
 }
 
+/* ---- Subcontractors ----
+   Synced team-wide like Employees (LWW per company). Tracks who does the work the
+   crew doesn't: trade, contact, COI insurance expiry with renewal warnings, and the
+   project they're working. Feeds the "Sub work scope" deliverable on Report. */
+function subUpd(name, field, val) {
+  const s = S.subs[name] || { name, active: true };
+  if (field === 'active') val = !!val;
+  s[field] = val; s.at = Date.now();
+  S.subs[name] = s; S.subsDirty[name] = s;
+  try { localStorage.setItem('trice_subs', JSON.stringify(S.subs)); } catch (er) {}
+  queueSync();
+}
+function subAdd() {
+  const el = document.getElementById('subNew'); const name = (el && el.value || '').trim();
+  if (!name) return;
+  if (S.subs[name] && S.subs[name].del !== true) { toast('That subcontractor is already on the list'); return; }
+  S.subs[name] = { name, contact: '', trade: '', phone: '', email: '', rateNote: '', coiExp: '', project: '', notes: '', active: true, at: Date.now() };
+  S.subsDirty[name] = S.subs[name];
+  try { localStorage.setItem('trice_subs', JSON.stringify(S.subs)); } catch (er) {}
+  queueSync(); render();
+}
+function subDel(name) {
+  if (!confirm('Remove ' + name + ' from the subcontractor list? This syncs to every device.')) return;
+  subUpd(name, 'del', true);
+  toast(name + ' removed');
+  render();
+}
+function teamSubs() {
+  const subs = Object.values(S.subs).filter(s => s && s.name && s.del !== true).sort((a, b) => (b.active !== false) - (a.active !== false) || a.name.localeCompare(b.name));
+  const soon = Date.now() + 30 * 864e5;
+  const projs = allProjects();
+  const active = subs.filter(s => s.active !== false).length;
+  const coiIssues = subs.filter(s => { if (s.active === false) return false; const x = s.coiExp ? new Date(s.coiExp + 'T12:00').getTime() : 0; return !x || x < soon; }).length;
+  const TRADES = ['Take-down','Crane','Stump grinding','Debris hauling','Pruning','Land clearing','Traffic control','Other'];
+  return `
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px">
+    <div class="card" style="flex:1;min-width:150px;padding:14px 16px"><div class="slab">On the roster</div><div style="font-size:24px;font-weight:800;margin-top:3px">${active}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">active subcontractor${active === 1 ? '' : 's'}${subs.length > active ? ' \u00b7 ' + (subs.length - active) + ' inactive' : ''}</div></div>
+    <div class="card" style="flex:1;min-width:150px;padding:14px 16px"><div class="slab" style="${coiIssues ? 'color:var(--bad)' : ''}">Insurance</div><div style="font-size:24px;font-weight:800;margin-top:3px;color:${coiIssues ? 'var(--bad)' : 'var(--good)'}">${coiIssues}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${coiIssues ? 'COI missing, expired, or renewing within 30 days' : 'every active sub carries a current COI on file'}</div></div>
+    <div class="card" style="flex:1;min-width:190px;padding:14px 16px;display:flex;flex-direction:column;justify-content:center"><div class="slab">Send them the work</div><button onclick="go('report');setTimeout(printSubScope,120)" style="margin-top:8px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer">Print sub work scope \u203a</button><div style="font-size:10px;color:var(--faint);margin-top:6px">Photos, damage &amp; recommendations \u2014 no pricing. Scoped by the Report filters.</div></div>
+  </div>
+  <div class="slab" style="margin:0 0 8px">Subcontractors</div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:1060px">
+      <tr style="text-align:left;color:var(--faint);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase"><th style="padding:6px 8px 8px 0">Company</th><th style="padding:6px 8px 8px 0">Contact</th><th style="padding:6px 8px 8px 0">Trade</th><th style="padding:6px 8px 8px 0">Phone</th><th style="padding:6px 8px 8px 0">Email</th><th style="padding:6px 8px 8px 0">Rate note</th><th style="padding:6px 8px 8px 0">COI expires</th><th style="padding:6px 8px 8px 0">Project</th><th style="padding:6px 8px 8px 0">Active</th><th style="padding:6px 0 8px"></th></tr>
+      ${subs.map(s => { const k = s.name.replace(/'/g, "\\'"); const off = s.active === false; const x = s.coiExp ? new Date(s.coiExp + 'T12:00').getTime() : 0; const expired = x && x < Date.now(); const expSoon = x && !expired && x < soon; const noCoi = !x && !off; return `
+      <tr style="border-top:1px solid var(--hair);${off ? 'opacity:.5' : ''}">
+        <td style="padding:8px 8px 8px 0;font-weight:700;white-space:nowrap">${esc(s.name)}${expired ? ' <span class="chip bad" style="font-size:9px">COI expired</span>' : (expSoon ? ' <span class="chip warn" style="font-size:9px">COI renews soon</span>' : (noCoi ? ' <span class="chip warn" style="font-size:9px">no COI on file</span>' : ''))}</td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(s.contact || '')}" onchange="subUpd('${esc(k)}','contact',this.value)" style="${TEAM_INP};width:110px"></td>
+        <td style="padding:8px 8px 8px 0"><select onchange="subUpd('${esc(k)}','trade',this.value)" style="${TEAM_INP};width:128px"><option value="">\u2014</option>${TRADES.map(tr => `<option ${s.trade === tr ? 'selected' : ''}>${tr}</option>`).join('')}</select></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(s.phone || '')}" onchange="subUpd('${esc(k)}','phone',this.value)" style="${TEAM_INP};width:104px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(s.email || '')}" onchange="subUpd('${esc(k)}','email',this.value)" style="${TEAM_INP};width:140px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(s.rateNote || '')}" placeholder="e.g. $180/h crane" onchange="subUpd('${esc(k)}','rateNote',this.value)" style="${TEAM_INP};width:112px"></td>
+        <td style="padding:8px 8px 8px 0"><input type="date" value="${esc(s.coiExp || '')}" onchange="subUpd('${esc(k)}','coiExp',this.value);render()" style="${TEAM_INP}"></td>
+        <td style="padding:8px 8px 8px 0"><select onchange="subUpd('${esc(k)}','project',this.value)" style="${TEAM_INP};width:150px"><option value="">\u2014</option>${projs.map(p => `<option ${s.project === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></td>
+        <td style="padding:8px 8px 8px 0"><input type="checkbox" ${off ? '' : 'checked'} onchange="subUpd('${esc(k)}','active',this.checked);render()" style="width:17px;height:17px"></td>
+        <td style="padding:8px 0"><button onclick="subDel('${esc(k)}')" title="Remove" style="border:0;background:none;color:var(--faint);font-size:15px;cursor:pointer;padding:4px">\u00d7</button></td>
+      </tr>`; }).join('')}
+      <tr style="border-top:1px solid var(--hair)"><td colspan="10" style="padding:10px 0 2px"><input id="subNew" placeholder="New subcontractor \u2014 company name" onkeydown="if(event.key==='Enter')subAdd()" style="${TEAM_INP};width:240px"> <button onclick="subAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;margin-left:6px">Add</button></td></tr>
+    </table>
+  </div>
+  <div style="margin-top:9px;font-size:11px;color:var(--faint);line-height:1.55">Every field syncs to the whole team. COI is the certificate of insurance \u2014 a sub with an expired or missing COI gets a warning chip here and should not be on a client site. Rate note is free text; sub invoices stay in Job costing.</div>`;
+}
+
 /* Admin desktop: the Sheets grid is directly editable — every change is a
    normal record edit that syncs to the whole team like any capture. */
 const SHEET_EDIT = {
@@ -3080,7 +3169,7 @@ function shCell(id, col, val, t) {
     if (hasPred(t)) return `<span class="mono" style="font-weight:700;color:#b8842a" title="Predicted — not yet accepted">≈${money(predTotal(t))}</span>`;
     return `<span style="color:var(--faint)">—</span>`;
   }
-  if (!admin || !ed) return `<span ${admin ? '' : `onclick="openEdit('${esc(k)}')" style="cursor:pointer"`}>${esc(String(val ?? ''))}</span>`;
+  if (!admin || !ed) return `<span onclick="openEdit('${esc(k)}','sheet')" style="cursor:pointer">${esc(String(val ?? ''))}</span>`;
   if (ed.kind === 'proj') {
     const site = siteOfT(t);
     return `<select onchange="shEdit('${esc(k)}','site',this.value)" onkeydown="gridKey(event)" style="${SH_INP};max-width:200px">${allProjects().map(p => `<option ${p === site ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>`;
@@ -3282,7 +3371,7 @@ function sheetView() {
       <button onclick="S.sheetSummary=!S.sheetSummary;render()" style="${pill}">${S.sheetSummary ? '✕ Close summary' : '☰ Summary & exports'}</button>
     </div>
   </div>
-  <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="gridScroll" style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);overflow-y:auto;-webkit-overflow-scrolling:touch">
     ${body.length ? gridHero(src, label) : ''}
     ${body.length ? `<div class="slab" style="margin:18px 2px 8px">Working grid — tap a row to edit</div>` : ''}
     ${body.length ? (IS_DESKTOP() ? `<div style="height:62vh">${gridTable(head, body, src)}</div>` : gridCards(src)) : `<div class="card" style="text-align:center;padding:26px 16px;margin-top:8px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">${S.sheetQ || S.sheetHaz ? 'Nothing matches the filter' : 'No rows yet'}</div><div style="font-size:12px;color:var(--faint);margin-top:4px">${S.sheetQ || S.sheetHaz ? 'Clear the search or the hazard chip above.' : "Every capture writes a row here the moment it's logged — this is the spreadsheet, living."}</div></div>`}
@@ -3544,7 +3633,7 @@ function gridCardRow(t) {
   const price = hasPred(t) ? `<span class="mono" style="font-size:12px;font-weight:700;color:#b8842a">≈${money(predTotal(t))}</span>`
     : (priced ? `<span class="mono" style="font-size:12.5px;font-weight:700">${money(priced)}</span>` : `<span style="font-size:10.5px;color:var(--faint)">Unpriced</span>`);
   return `
-  <button class="trow" onclick="openEdit('${t.id}')">
+  <button class="trow" onclick="openEdit('${t.id}','sheet')">
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -3557,10 +3646,10 @@ function gridCardRow(t) {
 function gridTable(head, body, src) {
   const byId = {}; for (const t of (src || [])) byId[t.id] = t;
   const s = S.sheetSort || {};
-  return `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
+  return `<div id="gridTableScroll" style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
-      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr ${ADMIN() ? '' : `onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer"`}>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
+      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer">${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
     </table>
   </div>`;
 }
@@ -3733,7 +3822,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.2</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4421,7 +4510,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.2</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.6</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
