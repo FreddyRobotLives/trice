@@ -114,6 +114,9 @@ body{overflow-x:hidden}
 .mapctl{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
 .mapctl button{border:0;border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 4px 14px -6px rgba(8,12,18,.4);font-size:11.5px;font-weight:700;padding:8px 12px;color:var(--ink)}
 .mapctl button.on{background:var(--ink);color:#fff}
+.projpin{width:52px;height:52px;border-radius:50%;background:var(--ink);border:2.5px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
+.projpin>span:first-child{font-size:15px;font-weight:800;letter-spacing:.03em;line-height:1}
+.projpin .projn{font-size:9px;font-weight:700;color:rgba(255,255,255,.75);margin-top:2px;line-height:1}
 .pin2{position:relative;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(8,12,18,.6),0 4px 14px rgba(8,12,18,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
 .pin2 .qty{position:absolute;right:-7px;top:-7px;min-width:17px;height:17px;border-radius:999px;background:#16181d;color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff}
 .leaflet-popup-content-wrapper{border-radius:12px;box-shadow:0 10px 30px -14px rgba(8,12,18,.4)}
@@ -2283,8 +2286,8 @@ function netCard() {
   </div>`;
 }
 function mapView() {
-  const projs = allProjects();
-  const scoped = S.trees.filter(t => !S.mapProject || siteOfT(t) === S.mapProject);
+  const projs = topProjects();
+  const scoped = S.trees.filter(t => projMatches(siteOfT(t), S.mapProject));
   const all = scoped.filter(t => typeof t.lat === 'number');
   const users = mapUsers(scoped);
   const names = Object.keys(users).sort((a, b) => a === S.surveyor ? -1 : (b === S.surveyor ? 1 : a.localeCompare(b)));
@@ -2293,10 +2296,10 @@ function mapView() {
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px">
     <span class="slab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hazard map · ${esc(S.mapProject || 'All projects')}</span>
-    <span style="font-size:12px;color:var(--muted);flex:none">${withGps.length} pinned${S.mapUser ? ' · ' + esc(S.mapUser) : ''}</span>
+    <span style="font-size:12px;color:var(--muted);flex:none">${S.mapProject ? withGps.length + ' pinned' : (() => { const roots = new Set(withGps.map(t => rootProjOf(siteOfT(t)))); return roots.size + ' location' + (roots.size === 1 ? '' : 's') + ' · ' + withGps.length + ' assets'; })()}${S.mapUser ? ' · ' + esc(S.mapUser) : ''}</span>
   </div>
   ${(projs.length > 1 || names.length > 1) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-    ${projs.length > 1 ? filterSel(S.mapProject, projs.map(projOpt), 'setMapProject(this.value||null)', 'All projects') : ''}
+    ${projs.length > 1 ? filterSel(S.mapProject, projs, 'setMapProject(this.value||null)', 'All projects') : ''}
     ${names.length > 1 ? filterSel(S.mapUser, names.map(n => [n, n + (n === S.surveyor ? ' (you)' : '') + ' \u00b7 ' + users[n].n]), 'S.mapUser=this.value||null;render()', 'Everyone \u00b7 ' + all.length) : ''}
   </div>` : ''}
   <div id="mapWrap">
@@ -2311,20 +2314,51 @@ function mapView() {
     <span style="display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;border-radius:50%;background:var(--warn);border:2px solid #fff;box-shadow:0 0 0 1px var(--line)"></span>Moderate · ${T.byHaz['Moderate'].lines}</span>
     <span style="display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;border-radius:50%;background:var(--good);border:2px solid #fff;box-shadow:0 0 0 1px var(--line)"></span>✓ Cleared · ${T.byHaz['Cleared'].lines}</span>
   </div>
-  <div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.55">Crews navigate straight to the red pins. As work completes, mark the asset Cleared and the pin flips green in real time — the map is the task list, and the register keeps itself current.</div>
+  <div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.55">${S.mapProject ? 'Crews navigate straight to the red pins. As work completes, mark the asset Cleared and the pin flips green in real time — the map is the task list, and the register keeps itself current.' : 'Each badge is a project — the ring shows its worst open hazard. Tap a badge to open that project and see every specimen pin.'}</div>
   ${netCard()}`;
 }
 function setBasemap(k) { S.basemap = k; localStorage.setItem('trice_basemap', k); render(); }
 function setMapProject(p) { S.mapProject = p; S.mapUser = null; render(); }
+/* The map opens as a project atlas: one badge per project (initials + worst
+   open hazard as the ring color). Specimen pins appear once a project is
+   chosen — by tapping its badge or the dropdown. */
+function rootProjOf(site) { let c = site || '', g = 0; while (parentOf(c) && g++ < 8) c = parentOf(c); return c || 'Unassigned'; }
+function projInitials(name) {
+  const skip = new Set(['of', 'the', 'at', 'a', 'an', 'de', 'la', 'and', '&']);
+  const words = String(name || '').split(/[^A-Za-z0-9]+/).filter(w => w && !skip.has(w.toLowerCase()));
+  const out = words.map(w => w[0].toUpperCase()).join('');
+  return (out || '?').slice(0, 3);
+}
+function projBadgeIcon(name, info) {
+  const ring = info.worst === 2 ? 'var(--bad)' : (info.worst === 1 ? 'var(--warn)' : 'var(--good)');
+  return L.divIcon({ className: '', html: `<div class="projpin" style="box-shadow:0 0 0 3.5px ${ring},0 5px 16px rgba(8,12,18,.45)"><span>${esc(projInitials(name))}</span><span class="projn">${info.n}</span></div>`, iconSize: [52, 52], iconAnchor: [26, 26] });
+}
 function mountMap() {
   const el = document.getElementById('map'); if (!el || typeof L === 'undefined') return;
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   let withGps = S.trees.filter(t => typeof t.lat === 'number');
-  if (S.mapProject) withGps = withGps.filter(t => siteOfT(t) === S.mapProject);
+  if (S.mapProject) withGps = withGps.filter(t => projMatches(siteOfT(t), S.mapProject));
   if (S.mapUser) withGps = withGps.filter(t => (t.surveyor || 'Unassigned') === S.mapUser);
   leafletMap = L.map(el, { zoomControl: true, attributionControl: true });
   baseLayer(S.basemap).addTo(leafletMap);
-  if (withGps.length) {
+  if (!S.mapProject && withGps.length) {
+    const groups = {};
+    for (const t of withGps) {
+      const r = rootProjOf(siteOfT(t));
+      const g = groups[r] || (groups[r] = { lat: 0, lng: 0, n: 0, worst: 0 });
+      g.lat += t.lat; g.lng += t.lng; g.n++;
+      const w = t.hazard === 'High Hazard' ? 2 : (t.hazard === 'Moderate' ? 1 : 0);
+      if (w > g.worst) g.worst = w;
+    }
+    const bounds = [];
+    for (const [name, g] of Object.entries(groups)) {
+      const at = [g.lat / g.n, g.lng / g.n];
+      const nm = name.replace(/'/g, "\\'");
+      L.marker(at, { icon: projBadgeIcon(name, g) }).addTo(leafletMap).on('click', () => setMapProject(name)).bindTooltip(name, { direction: 'top', offset: [0, -30] });
+      bounds.push(at);
+    }
+    leafletMap.fitBounds(bounds, { padding: [56, 56], maxZoom: 15 });
+  } else if (withGps.length) {
     const bounds = [];
     for (const t of withGps) {
       L.marker([t.lat, t.lng], { icon: pinIcon(t) }).addTo(leafletMap).on('click', () => openZoom(t.id, true));
@@ -2355,7 +2389,7 @@ async function copyForSheets() {
   catch (e) { toast('Copy blocked by the browser — use Export CSV instead'); }
 }
 function sheetView() {
-  const projs = allProjects();
+  const projs = topProjects();
   if (S.sheetProject && !projs.includes(S.sheetProject)) S.sheetProject = null;
   const src = sheetScope().slice().sort((a, b) => a.id < b.id ? -1 : 1);
   const label = S.sheetProject || 'All projects';
@@ -2367,7 +2401,7 @@ function sheetView() {
   const zmax = Math.max(1, ...zones.map(z => z[1].cost));
   const bmax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
   return `
-  ${projs.length ? `<div style="margin-bottom:12px">${filterSel(S.sheetProject, projs.map(projOpt), 'setSheetProject(this.value||null)', 'All projects')}</div>` : ''}
+  ${projs.length ? `<div style="margin-bottom:12px">${filterSel(S.sheetProject, projs, 'setSheetProject(this.value||null)', 'All projects')}</div>` : ''}
   <div class="slab" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Live sheet · ${esc(label)}</span><span style="font-size:10px;font-weight:700;color:var(--good);letter-spacing:.06em">● LIVE</span></div>
   <div class="card">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
@@ -2426,7 +2460,7 @@ function filterSel(cur, opts, oc, allLabel) {
   const sel = norm.some(o => o[0] === cur);
   return `<span style="position:relative;display:inline-flex;max-width:100%"><select onchange="${oc}" style="appearance:none;-webkit-appearance:none;border:1px solid ${sel ? 'transparent' : 'var(--line)'};background:${sel ? 'var(--info)' : '#fff'};color:${sel ? '#fff' : 'var(--ink)'};border-radius:999px;padding:10px 32px 10px 15px;font-size:13px;font-weight:600;font-family:inherit;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:40px">${[`<option value="">${esc(allLabel)}</option>`, ...norm.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`)].join('')}</select><span style="position:absolute;right:13px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:8.5px;color:${sel ? '#fff' : 'var(--faint)'}">▼</span></span>`;
 }
-const projOpt = p => [p, '↳ '.repeat(Math.min(projDepth(p), 2)) + p];
+const topProjects = () => allProjects().filter(p => !parentOf(p));
 function setRepZone(z) { S.repZone = (S.repZone === z) ? null : z; render(); }
 function normZone(z) { return String(z || '').trim().replace(/\s+/g, ' '); }
 function zoneSort(a, b) { const na = parseInt((a.match(/\d+/) || [])[0], 10), nb = parseInt((b.match(/\d+/) || [])[0], 10); if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb; return a < b ? -1 : (a > b ? 1 : 0); }
@@ -2446,7 +2480,7 @@ function certGaps() {
 }
 function reportView() {
   const j = S.job || {};
-  const projs = allProjects();
+  const projs = topProjects();
   if (S.repProject && !projs.includes(S.repProject)) S.repProject = null;
   const scoped = repScope();
   const zones = [...new Set(repScopeProject().map(t => (t.zone || '').trim()))].filter(Boolean).sort(zoneSort);
@@ -2457,7 +2491,7 @@ function reportView() {
   const hazCard = (h, glyph) => `<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:${HAZ_INK(h)}">${glyph} ${h.toUpperCase()}</div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.byHaz[h].lines}</div><div style="font-size:10.5px;color:var(--muted)">${T.byHaz[h].specimens} specimens${T.byHaz[h].cost ? ' · ' + money(T.byHaz[h].cost) : ''}</div></div>`;
   return `
   ${(projs.length || zones.length) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-    ${projs.length ? filterSel(S.repProject, projs.map(projOpt), 'setRepProject(this.value||null)', 'All projects') : ''}
+    ${projs.length ? filterSel(S.repProject, projs, 'setRepProject(this.value||null)', 'All projects') : ''}
     ${zones.length ? filterSel(S.repZone, zones, 'S.repZone=this.value||null;render()', 'All holes') : ''}
     ${ADMIN() ? (() => { const us = [...new Set(repScopeProject().map(t => t.surveyor || 'Unassigned'))].sort(); return us.length > 1 ? filterSel(S.repUser, us, 'S.repUser=this.value||null;render()', 'Every assessor') : ''; })() : ''}
   </div>` : ''}
@@ -2489,9 +2523,8 @@ function reportView() {
 
   <div class="slab" style="margin:18px 0 8px">Submit — build the report, review it, send it</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${REP_SECS.map(([k, l]) => { const on = S.repSecs[k] !== false; return `<button onclick="toggleSec('${k}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:8px 13px">${on ? '✓ ' : ''}${l}</button>`; }).join('')}</div>
-  ${gaps.length && T.lines ? `<button onclick="openHeaderEditor()" style="width:100%;display:flex;align-items:center;gap:11px;border:1px solid var(--line);background:#fff;border-radius:13px;padding:13px 15px;margin-bottom:10px;text-align:left;cursor:pointer"><span style="width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none"></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:600;color:var(--ink)">Certification header — ${gaps.length} field${gaps.length > 1 ? 's' : ''} missing</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${gaps.join(' · ')}</span></span><span style="color:var(--faint);flex:none">›</span></button>` : ''}
   <button class="btn primary" onclick="submitPackage()" ${T.lines ? '' : 'disabled'}>Review &amp; submit the package</button>
-  <div style="margin-top:7px;font-size:11px;color:var(--faint);text-align:center;line-height:1.5">${(() => { const pend = scoped.filter(t => t.pending).length; const bits = []; if (pend) bits.push(pend + ' not analyzed'); if (T.unpriced) bits.push(T.unpriced + ' unpriced'); if (gaps.length) bits.push('header incomplete'); return bits.length ? 'Ready with gaps: ' + bits.join(' · ') + ' — fix them or submit anyway.' : 'Everything analyzed and signed — review on screen, edit any text, then export.'; })()}</div>
+  <div style="margin-top:7px;font-size:11px;color:var(--faint);text-align:center;line-height:1.5">${(() => { const pend = scoped.filter(t => t.pending).length; const bits = []; if (pend) bits.push(pend + ' not analyzed'); if (T.unpriced) bits.push(T.unpriced + ' unpriced'); return bits.length ? 'Ready with gaps: ' + bits.join(' · ') + ' — fix them or submit anyway.' : 'Everything analyzed and signed — review on screen, edit any text, then export.'; })()}</div>
   <div class="slab" style="margin:18px 0 8px">Deliverables</div>
   <div class="card" style="padding:9px 15px">
     <button class="trow" onclick="printScoped()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Inspection report — print / save as PDF</span><span class="l2">${esc(scopeLabel)} · glance, charts, register, photo journal, certification</span></span><span style="color:var(--faint)">›</span></button>
