@@ -8,17 +8,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v23.2">
+<meta name="version" content="trice-v23.5">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
-<meta property="og:description" content="We design systems that solve complex problems.">
-<meta property="og:image" content="https://trice.live/og.png?v=27">
+<meta property="og:description" content="One system: capture, sync, map, report.">
+<meta property="og:image" content="https://trice.live/og.png?v=28">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
 <meta property="og:url" content="https://trice.live/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://trice.live/og.png?v=27">
-<meta name="description" content="We design systems that solve complex problems.">
+<meta name="twitter:image" content="https://trice.live/og.png?v=28">
+<meta name="description" content="One system: capture, sync, map, report.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -3553,9 +3553,9 @@ function gridExhibitHTML(TS, label) {
     </div>
     <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">03 \u00b7 Asset register \u2014 ${T.lines} line items</div>
     <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden">
-      <tr>${['#','Asset','Hole / zone','Species','DBH','Band','Ht','Qty','IP/OP','Hazard','Failure mode','Cause','Prune','Take-down','Debris','Stump','Line total','Assessor'].map(th).join('')}</tr>
+      <tr data-locked="1">${['#','Asset','Hole / zone','Species','DBH','Band','Ht','Qty','IP/OP','Hazard','Failure mode','Cause','Prune','Take-down','Debris','Stump','Line total','Assessor'].map(th).join('')}</tr>
       ${rows}
-      <tr style="background:${GX_CREAM}">
+      <tr data-locked="1" style="background:${GX_CREAM}">
         <td colspan="7" style="padding:9px 7px;font-size:9.5px;font-weight:800">Total</td>
         <td style="padding:9px 7px;font-size:9.5px;font-weight:800;text-align:right">${T.specimens}</td>
         <td colspan="4"></td>
@@ -3581,6 +3581,19 @@ function gridExhibitHTML(TS, label) {
     </div>
   </div>`;
 }
+/* Review-overlay editing policy: computed content (glance tiles, stat bands, charts,
+   totals) is locked — it is derived from the register and must never be hand-edited.
+   Only line-item rows inside tables are editable; header and totals rows stay locked. */
+function lockPaperEditing() {
+  const p = document.getElementById('reviewPaper'); if (!p) return;
+  p.contentEditable = 'false';
+  p.querySelectorAll('table').forEach(tb => {
+    tb.contentEditable = 'true';
+    tb.querySelectorAll('tr').forEach(tr => {
+      if (tr.dataset.locked === '1' || tr.querySelector('th')) tr.contentEditable = 'false';
+    });
+  });
+}
 function gridExhibitScope() { return sheetSorted(sheetScope()); }
 function openGridExhibit() {
   const TS = gridExhibitScope();
@@ -3595,12 +3608,13 @@ function openGridExhibit() {
     w = document.createElement('div'); w.id = 'reviewWrap';
     document.body.appendChild(w);
   }
-  w.innerHTML = `<div class="bar"><span class="ttl">The grid \u2014 ${esc(label)}<span class="sub">Tap any text to edit. Edits go into this print / PDF only; the register stays untouched.</span></span>
+  w.innerHTML = `<div class="bar"><span class="ttl">The grid \u2014 ${esc(label)}<span class="sub">Line items are editable \u2014 tap a row. Summary figures are computed from the register and locked.</span></span>
     <button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
     <button class="go" onclick="reviewPrint()">Print / save PDF</button>
     <button onclick="closeReview()">Close</button></div>
-    <div class="body"><div class="paper" id="reviewPaper" contenteditable="true" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
+    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
   w.style.display = 'flex';
+  lockPaperEditing();
 }
 
 /* Mobile grid — the same rows as the spreadsheet, readable one-handed.
@@ -3818,7 +3832,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.2</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.5</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4225,12 +4239,13 @@ function openReview() {
   const zs = [...new Set(pool.map(t => t.zone || ''))].filter(Boolean).sort(zoneSort);
   const us = [...new Set(pool.map(t => t.surveyor || 'Unassigned'))].sort();
   const selSt = 'border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:600;color:#17181a';
-  w.innerHTML = `<div class="bar"><span class="ttl">Review the package — tap any text to edit<span class="sub">Filters and edits go into this print / PDF only; the register stays untouched.</span></span>
+  w.innerHTML = `<div class="bar"><span class="ttl">Review the package<span class="sub">Line items in tables are editable. Summary figures are computed from the register and locked. Edits go into this print / PDF only.</span></span>
     <select style="${selSt}" onchange="reviewFilter('zone', this.value)"><option value="">All holes</option>${zs.map(z => `<option ${cur.zone === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select>
     <select style="${selSt}" onchange="reviewFilter('hazard', this.value)"><option value="">All hazards</option>${HAZARDS.map(hh => `<option ${cur.hazard === hh ? 'selected' : ''}>${hh}</option>`).join('')}</select>
     <select style="${selSt}" onchange="reviewFilter('assessor', this.value)"><option value="">Everyone</option>${us.map(u => `<option ${cur.assessor === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>
-    <button onclick="exportScopedXLSX()">Download XLSX</button><button class="go" onclick="reviewPrint()">Print / save PDF</button><button onclick="closeReview()">Close</button></div><div class="body"><div class="paper" id="reviewPaper" contenteditable="true">${document.getElementById('printReport').innerHTML}</div></div>`;
+    <button onclick="exportScopedXLSX()">Download XLSX</button><button class="go" onclick="reviewPrint()">Print / save PDF</button><button onclick="closeReview()">Close</button></div><div class="body"><div class="paper" id="reviewPaper" contenteditable="false">${document.getElementById('printReport').innerHTML}</div></div>`;
   w.style.display = 'flex';
+  lockPaperEditing();
 }
 function reviewPrint() { const p = document.getElementById('reviewPaper'); if (p) document.getElementById('printReport').innerHTML = p.innerHTML; window.print(); }
 function closeReview() { const w = document.getElementById('reviewWrap'); if (w) { w.style.display = 'none'; w.innerHTML = ''; } }
@@ -4506,9 +4521,13 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.2</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.5</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
-      <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
+      <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
+        <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
+        <span style="position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:${SYNC.status === 'ok' && !S.trees.some(t=>t.dirty) ? 'var(--good)' : (navigator.onLine ? 'var(--warn)' : 'var(--bad)')}"></span>
+      </button>
+      ${S.hdrMenu ? hdrMenu() : ''}
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
@@ -4522,6 +4541,7 @@ function render() {
     ${S.projectId ? projectSheet(S.projectId) : ''}
     ${S.backups ? backupsSheet() : ''}
     ${S.showPicker ? projectPicker() : ''}`;
+  if (S.hdrMenu) syncChip();
   if (S.tab === 'sheet') {
     /* The grid always reopens exactly where it was scrolled — across edits, nav
        round-trips, and background sync re-renders. Positions live in S and are
@@ -4543,8 +4563,27 @@ function fabCapture() {
   if (S.tab !== 'survey') { S.tab = 'survey'; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} }
   S.detailId = null; S.editId = null; openCamera();
 }
-function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { if (S.tab === 'sheet' && tab !== 'sheet') { const g = document.getElementById('gridScroll'); if (g) S.gridScrollY = g.scrollTop; const tw = document.getElementById('gridTableScroll'); if (tw) { S.gridTableY = tw.scrollTop; S.gridTableX = tw.scrollLeft; } } S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+/* Mobile header menu — current project, sync, and sign out live here now,
+   keeping the header to just the mark and one button. */
+function hdrMenu() {
+  const assets = S.site ? S.trees.filter(t => siteOfT(t) === S.site).length : 0;
+  const j = S.job || {};
+  const row = (inner, onclick, extra) => `<button onclick="${onclick}" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:13px 16px;text-align:left;border-top:1px solid var(--hair);cursor:pointer;${extra || ''}">${inner}</button>`;
+  return `
+  <div onclick="S.hdrMenu=false;render()" style="position:fixed;inset:0;z-index:58;background:rgba(11,14,18,.18)"></div>
+  <div style="position:absolute;top:calc(100% + 8px);right:12px;z-index:59;width:min(300px, calc(100vw - 24px));background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 44px rgba(16,18,22,.16);overflow:hidden;animation:fadeUp .18s ease both">
+    <div style="padding:14px 16px 12px">
+      <div class="slab">Project</div>
+      ${S.site ? `<div style="font-size:14.5px;font-weight:700;margin-top:4px">${esc(S.site)}</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">${j.propCode ? esc(j.propCode) + ' \u00b7 ' : ''}${assets} asset${assets === 1 ? '' : 's'}</div>` : `<div style="font-size:13.5px;font-weight:600;color:var(--muted);margin-top:4px">No project joined</div>`}
+    </div>
+    ${row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--info)">${S.site ? 'Switch project' : 'Join a project'}</span><span style="color:var(--faint)">\u203a</span>`, "S.hdrMenu=false;S.showPicker=true;render()")}
+    ${row(`<span id="syncTop" style="flex:1;font-size:13px;font-weight:700"></span><span style="font-size:11px;color:var(--faint)">tap to sync</span>`, "manualSync()")}
+    ${row(`<span style="flex:1;font-size:13px;font-weight:700">${esc(S.surveyor || 'No user')}</span><span style="font-size:11px;color:var(--info);font-weight:700">Switch user</span>`, "S.hdrMenu=false;switchUser()")}
+    ${row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--bad)">Sign out</span>`, "S.hdrMenu=false;signOut()")}
+  </div>`;
+}
+function goHome() { S.hdrMenu = false; S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function go(tab) { S.hdrMenu = false; if (S.tab === 'sheet' && tab !== 'sheet') { const g = document.getElementById('gridScroll'); if (g) S.gridScrollY = g.scrollTop; const tw = document.getElementById('gridTableScroll'); if (tw) { S.gridTableY = tw.scrollTop; S.gridTableX = tw.scrollLeft; } } S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Always the newest build ----
    index.html is served no-cache and the service worker is network-first, but this is the

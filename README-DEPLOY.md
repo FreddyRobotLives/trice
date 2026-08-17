@@ -62,7 +62,7 @@ every release (the delivered zips always bump it). Records, drafts, projects
 and the team password live in IndexedDB/localStorage and are never touched.
 
 
-## v23.1 release notes (17 Aug 2026)
+## v23.1-v23.3 release notes (17 Aug 2026)
 This release changes BOTH index.html and netlify/functions/sync.mjs.
 Commit the whole folder to FreddyRobotLives/trice and let Netlify build.
 Never drag-and-drop — it silently discards the functions folder.
@@ -75,6 +75,6 @@ Sync function is now v12.1 (subcontractors map). Devices refuse to clear
 queued subcontractor edits until the server confirms 12.1 — if the Team >
 Subcontractors edits seem to re-send, the function has not redeployed yet.
 
-Share image: og.png replaced; og:image is cache-busted (?v=27). After
+Share image: og.png replaced; og:image is cache-busted (?v=28). After
 deploy, run Facebook Sharing Debugger "Scrape Again" and LinkedIn Post
 Inspector once on https://trice.live so cached previews refresh.
