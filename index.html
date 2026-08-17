@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v11.6">
+<meta name="version" content="trice-v11.7">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -269,7 +269,15 @@ const S = {
   usersMeta: [],
   admin: localStorage.getItem('trice_admin') === '1',
   projects: (() => { try { return JSON.parse(localStorage.getItem('trice_projects') || '[]'); } catch (e) { return []; } })(),
-  projectParents: (() => { try { return JSON.parse(localStorage.getItem('trice_parents') || '{}'); } catch (e) { return {}; } })(),
+  projectParents2: (() => {
+    try {
+      const v2 = JSON.parse(localStorage.getItem('trice_parents2') || 'null');
+      if (v2) return v2;
+      const v1 = JSON.parse(localStorage.getItem('trice_parents') || '{}');
+      const o = {}; for (const [c, p] of Object.entries(v1)) o[c] = { p, at: 1 };
+      return o;
+    } catch (e) { return {}; }
+  })(),
   readBusy: false,
   trees: [], seq: 1,
   draft: null,
@@ -565,6 +573,8 @@ async function reconcile(mode) {
     const r = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ op:'manifest' }) });
     if (!r.ok) throw new Error('http ' + r.status);
     const m = await r.json();
+    if (!Array.isArray(m.ids)) { SYNC.fnStale = true; return { stale: true }; }
+    SYNC.fnStale = false;
     const server = new Map(m.ids || []);
     const serverDel = new Set(m.deletes || []);
     const tombSet = new Set(tombs());
@@ -603,6 +613,7 @@ async function verifyTeamData() {
   toast('Verifying against the server…');
   const res = await reconcile('manual');
   if (!res) { toast('Could not reach the server — try again with signal'); return; }
+  if (res.stale) { toast('The server is running an old sync function — commit netlify/functions/sync.mjs to GitHub and let Netlify redeploy, then verify again'); render(); return; }
   const dirtyN = S.trees.filter(t => t.dirty).length;
   if (dirtyN) { try { await syncNow(); } catch (e) {} }
   const localN = S.trees.length;
@@ -617,7 +628,7 @@ async function syncNow(){
   if(!navigator.onLine){ SYNC.status='offline'; syncChip(); return; }
   try{
     const hadDirty = S.trees.filter(t=>t.dirty).length;
-    const { lastResponse, failed } = await pushDirtyBatched({ since: Math.max(0, SYNC.last - 120000), deletes: tombs(), projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' });
+    const { lastResponse, failed } = await pushDirtyBatched({ since: Math.max(0, SYNC.last - 120000), deletes: tombs(), projects: S.projects, parentsLWW: S.projectParents2, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' });
     if (!lastResponse) throw new Error('all pushes failed');
     if (failed.length) toast(failed.length + ' record(s) could not reach the server: ' + failed.slice(0,3).join(', ') + (failed.length>3?'…':'') + ' — will retry');
     else if (hadDirty) SYNC.lastPush = Date.now();
@@ -628,7 +639,9 @@ async function syncNow(){
     else if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) { await applyRemoteReset(j.resetAt); }
     mergeRemote(j.trees, j.deletes);
     S.reviveNext = false;
-    if (j.projectParents) { S.projectParents = j.projectParents; try { localStorage.setItem('trice_parents', JSON.stringify(j.projectParents)); } catch (e) {} }
+    let parCh = false;
+    if (j.projectParents2) parCh = mergeParents(j.projectParents2);
+    else if (j.projectParents) { for (const [c, p] of Object.entries(j.projectParents)) { if (!S.projectParents2[c]) { S.projectParents2[c] = { p, at: 1 }; parCh = true; } } if (parCh) persistParents(); }
     let projChanged = false;
     if (j.deletedProjects && j.deletedProjects.length) {
       const before = S.projects.length;
@@ -640,7 +653,7 @@ async function syncNow(){
       const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
       if (add.length) { S.projects.push(...add); projChanged = true; }
     }
-    if (projChanged) {
+    if (projChanged || parCh) {
       try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {}
       const ae = document.activeElement;
       if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render();
@@ -668,9 +681,10 @@ async function syncNow(){
     SYNC.status='ok'; SYNC.lastOk=Date.now();
     if (typeof page.assets === 'number') {
       SYNC.serverAssets = page.assets;
+      SYNC.fnStale = !page.v;
       /* Belt and braces: if this phone and the server disagree on the record
          count after a clean cycle, verify against the server id list. */
-      if (!page.more && !failed.length && page.assets !== S.trees.length &&
+      if (!page.more && !failed.length && page.assets !== S.trees.length && !SYNC.fnStale &&
           Date.now() - (SYNC.lastReconcile || 0) > 90000 && !SYNC.reconciling) {
         reconcile('auto').then(res => { if (res && (res.pulled || res.repushed)) { render(); } }).catch(()=>{});
       }
@@ -1619,48 +1633,57 @@ function allProjects() {
 
 
 /* ---------------- Main / sub-projects ---------------- */
-const parentOf = name => (S.projectParents || {})[name] || null;
-const subsOf = name => Object.entries(S.projectParents || {}).filter(([c, pa]) => pa === name).map(([c]) => c);
+/* ---------------- Project hierarchy — local-first ----------------
+   Filing a project under another is data, not a request. It applies on this
+   phone the instant you tap, rides along with every sync (newest change wins,
+   like tree records), and needs no reply from the server to take effect.
+   Works offline; converges on every device within a sync cycle. */
+const parentOf = name => { const e = (S.projectParents2 || {})[name]; return (e && e.p) || null; };
+const subsOf = name => Object.keys(S.projectParents2 || {}).filter(c => parentOf(c) === name);
 function isUnder(a, b) { let c = parentOf(a), g = 0; while (c && g++ < 8) { if (c === b) return true; c = parentOf(c); } return false; }
 function projMatches(site, sel) { if (!sel) return true; if (site === sel) return true; return isUnder(site, sel); }
 function projDepth(name) { let d = 0, c = parentOf(name), g = 0; while (c && g++ < 8) { d++; c = parentOf(c); } return d; }
 function projScope(name) {
-  const all = [...new Set([...(S.projects || []), ...Object.keys(S.projectParents || {})])];
+  const all = [...new Set([...(S.projects || []), ...Object.keys(S.projectParents2 || {})])];
   return [name, ...all.filter(x => x !== name && isUnder(x, name))];
 }
-async function setProjectParent(child, parent) {
-  try {
-    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ since: Date.now(), push: [], deletes: [], setParent: { child, parent }, projects: S.projects, user: S.surveyor || '' }) });
-    if (r.status === 409) { const j = await r.json(); toast(j.reason || 'The server refused that move'); return false; }
-    if (!r.ok) throw new Error('http ' + r.status);
-    const j = await r.json();
-    if (j.projectParents) { S.projectParents = j.projectParents; try { localStorage.setItem('trice_parents', JSON.stringify(j.projectParents)); } catch (e) {} }
-    const applied = parent ? (S.projectParents || {})[child] === parent : !(S.projectParents || {})[child];
-    if (!applied) { toast('The server did not apply that move — pull all team data and try again'); return false; }
-    return true;
-  } catch (e) { toast('Could not reach the server — try again with signal'); return false; }
+function persistParents() { try { localStorage.setItem('trice_parents2', JSON.stringify(S.projectParents2)); } catch (e) {} }
+function setParentLocal(child, parent) {
+  if (parent && (parent === child || isUnder(parent, child))) { toast("Can't file a project under its own sub-project"); return false; }
+  S.projectParents2[child] = { p: parent || null, at: Date.now() };
+  persistParents(); queueSync();
+  toast(parent ? `"${child}" filed under "${parent}"` : `"${child}" moved to top level`);
+  return true;
 }
-async function toggleSub(child) {
+function mergeParents(remote) {
+  if (!remote) return false;
+  let ch = false;
+  for (const [c, e] of Object.entries(remote)) {
+    if (!e) continue;
+    const cur = S.projectParents2[c];
+    if (!cur || (e.at || 0) > (cur.at || 0)) { S.projectParents2[c] = { p: e.p || null, at: e.at || 0 }; ch = true; }
+  }
+  if (ch) persistParents();
+  return ch;
+}
+function toggleSub(child) {
   const main = S.subsFor; if (!main) return;
   const cur = parentOf(child);
-  const ok = await setProjectParent(child, cur === main ? null : main);
-  if (ok) render();
+  if (setParentLocal(child, cur === main ? null : main)) render();
 }
 function subsSheet(main) {
-  const others = allProjects().filter(p => p !== main && !subsOf(p).length);
-  const k = main.replace(/'/g, "\\'");
+  const others = allProjects().filter(p => p !== main && !isUnder(main, p) && p !== parentOf(main));
   return `
   <div class="sheet-scrim" onclick="S.subsFor=null;render()"></div>
   <div class="sheet">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <div><div class="slab" style="color:var(--info);font-weight:700">Sub-projects of</div><div style="font-size:16px;font-weight:700;margin-top:2px">${esc(main)}</div><div style="font-size:11.5px;color:var(--muted)">Check every location that belongs under this main project. Reports and counts roll up automatically.</div></div>
+      <div><div class="slab" style="color:var(--info);font-weight:700">Sub-projects of</div><div style="font-size:16px;font-weight:700;margin-top:2px">${esc(main)}</div><div style="font-size:11.5px;color:var(--muted)">Tap every location that belongs under this project. Applies instantly, syncs to the team automatically. Reports and counts roll up through every level.</div></div>
       <button onclick="S.subsFor=null;render()" style="border:0;background:none;font-size:22px;line-height:1;color:var(--muted);width:44px;height:44px;flex:none">×</button>
     </div>
-    ${others.length ? others.map(o => { const ok2 = o.replace(/'/g, "\\'"); const on = parentOf(o) === main; const foreign = parentOf(o) && parentOf(o) !== main; return `
-    <button onclick="toggleSub('${esc(ok2)}')" style="display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;padding:13px 0;border-top:1px solid var(--hair);text-align:left;color:var(--ink)" ${foreign ? 'disabled' : ''}>
+    ${others.length ? others.map(o => { const ok2 = o.replace(/'/g, "\\'"); const on = parentOf(o) === main; const elsewhere = parentOf(o) && parentOf(o) !== main; return `
+    <button onclick="toggleSub('${esc(ok2)}')" style="display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;padding:13px 0;border-top:1px solid var(--hair);text-align:left;color:var(--ink)">
       <span style="width:22px;height:22px;border-radius:7px;flex:none;border:2px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--accent)' : '#fff'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800">${on ? '✓' : ''}</span>
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:600;${foreign ? 'color:var(--faint)' : ''}">${esc(o)}</span>${foreign ? `<span style="display:block;font-size:11px;color:var(--faint)">Already under ${esc(parentOf(o))}</span>` : ''}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:600">${esc(o)}</span>${elsewhere ? `<span style="display:block;font-size:11px;color:var(--faint)">Now under ${esc(parentOf(o))} — tapping moves it here</span>` : ''}</span>
     </button>`; }).join('') : '<div style="padding:14px 0;font-size:12.5px;color:var(--muted)">No other projects yet.</div>'}
   </div>`;
 }
@@ -1760,14 +1783,27 @@ function projectsCard() {
 /* ---------------- Project picker — selection first, management behind Edit ---------------- */
 function pickerRows() {
   const projs = allProjects();
+  if (S.moveFor) {
+    const child = S.moveFor;
+    const dests = projs.filter(p => p !== child && !isUnder(p, child) && p !== parentOf(child));
+    window.__DEST = dests;
+    return `
+    <div style="padding:12px 0 4px;font-size:12.5px;color:var(--muted)">Where does <b>${esc(child)}</b> belong?</div>
+    <button onclick="moveTo(-1)" style="display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;padding:14px 0;border-top:1px solid var(--hair);text-align:left;color:var(--ink)"><span style="font-size:13.5px;font-weight:700">Top level</span><span style="font-size:11px;color:var(--faint)">&nbsp;— not under anything</span></button>
+    ${dests.map((d, i) => `
+    <button onclick="moveTo(${i})" style="display:flex;align-items:center;gap:11px;width:100%;background:none;border:0;padding:14px 0 14px ${Math.min(projDepth(d), 3) * 22}px;border-top:1px solid var(--hair);text-align:left;color:var(--ink)">
+      <span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Under ${esc(d)}</span>
+    </button>`).join('')}
+    <button onclick="S.moveFor=null;render()" style="display:block;width:100%;border:0;background:none;padding:15px 0;border-top:1px solid var(--hair);font-size:13px;font-weight:700;color:var(--muted);text-align:center">Cancel</button>`;
+  }
   const q = (S.pickerQ || '').toLowerCase().trim();
   const kidsIn = p => projs.filter(x => x !== p && parentOf(x) === p);
   const ordered = [];
-  const addRow = (p, d) => { ordered.push([p, d]); kidsIn(p).forEach(k => addRow(k, Math.min(d + 1, 3))); };
+  const addRow = (p, d) => { if (ordered.some(([x]) => x === p)) return; ordered.push([p, d]); kidsIn(p).forEach(k => addRow(k, Math.min(d + 1, 3))); };
   projs.filter(p => { const pa = parentOf(p); return !pa || !projs.includes(pa); }).forEach(p => addRow(p, 0));
+  projs.filter(p => !ordered.some(([x]) => x === p)).forEach(p => addRow(p, 0));
   const list = q ? ordered.filter(([p]) => p.toLowerCase().includes(q)) : ordered;
   window.__PICK = list.map(([p]) => p);
-  window.__ALLP = projs;
   if (!list.length) return `<div style="padding:22px 0;text-align:center;font-size:12.5px;color:var(--faint)">${q ? 'No project matches.' : 'No projects yet — create the first below.'}</div>`;
   return list.map(([pj, depth], i) => {
     const isSub = depth > 0 || !!parentOf(pj);
@@ -1786,26 +1822,24 @@ function pickerRows() {
       </button>
       ${S.pickerEdit ? `
       <span style="display:inline-flex;gap:7px;align-items:center;flex:none">
-        <select onchange="pickMove(${i}, this.value)" style="border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:11.5px;color:var(--ink);max-width:128px">
-          <option value="">File under…</option>
-          ${parentOf(pj) ? '<option value="top">Top level</option>' : ''}
-          ${projs.map((mn, mi) => (mn === pj || parentOf(pj) === mn || isUnder(mn, pj)) ? '' : `<option value="${mi}">${esc(mn)}</option>`).join('')}
-        </select>
+        <button onclick="moveStart(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-size:11.5px;font-weight:700;color:var(--info)">Move</button>
         ${canDelete ? `<button onclick="pickDelete(${i})" style="border:0;background:none;color:var(--bad);font-size:12px;font-weight:700;padding:8px 4px">Delete</button>` : ''}
       </span>` : ''}
     </div>`;
   }).join('');
 }
+function moveStart(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; S.moveFor = nm; render(); }
+function moveTo(i) {
+  const child = S.moveFor; if (!child) return;
+  const parent = i < 0 ? null : (window.__DEST || [])[i];
+  if (i >= 0 && !parent) return;
+  setParentLocal(child, parent);
+  S.moveFor = null;
+  render();
+}
 function pickJoin(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; selectProject(nm); S.showPicker = false; render(); }
 function pickDelete(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; deleteProject(nm); }
-async function pickMove(i, val) {
-  const child = (window.__PICK || [])[i]; if (!child || val === '') return;
-  const parent = val === 'top' ? null : (window.__ALLP || [])[parseInt(val, 10)];
-  if (val !== 'top' && !parent) return;
-  const ok = await setProjectParent(child, parent);
-  if (ok) { toast(parent ? `"${child}" filed under "${parent}"` : `"${child}" moved to top level`); render(); }
-  else render();
-}
+
 function projectPicker() {
   return `
   <div class="sheet-scrim" onclick="S.showPicker=false;render()"></div>
@@ -2452,7 +2486,7 @@ function reportView() {
   <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Data</span><button id="syncChip" onclick="syncDiag()" style="font-size:10px;font-weight:700;border:0;background:none;padding:0;cursor:pointer" title="Tap to test team sync"></button></div>
   <div class="card" style="padding:9px 15px">
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
-    <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${(typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : ''}</span><span class="l2">This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — checks every record id against the server and repairs both ways. Nothing is deleted.</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${SYNC.fnStale ? ' <span class="chip bad" style="margin-left:4px">server function out of date</span>' : ((typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : '')}</span><span class="l2">${SYNC.fnStale ? 'The site is serving an old netlify/functions/sync.mjs — commit the new one to GitHub and let Netlify redeploy. Records are safe on each phone meanwhile.' : `This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — checks every record id against the server and repairs both ways. Nothing is deleted.`}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${needsBackup() ? ` <span class="chip bad" style="margin-left:4px">${unbackedCount()} not backed up</span>` : ''}</span><span class="l2">${needsBackup() ? 'Do this before the phone leaves the site' : (lastBackupAt() ? `Everything, photos included · last backup ${fmtWhen(lastBackupAt())}` : 'Everything, photos included, as one file')}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="forceRefreshDevice()"><span class="mid"><span class="l1">Force refresh this device</span><span class="l2">Clears cached app &amp; local copies, re-pulls everything. Unsynced work is pushed first, never lost.</span></span><span style="color:var(--faint)">&#8250;</span></button>
@@ -2508,7 +2542,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v11.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v11.7</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3075,7 +3109,32 @@ function migrate(t) {
 </script>
 <script>
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('/sw.js').catch(function(){});
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(function(reg){
+    /* Ask for a newer build now, every 20 minutes, and every time the app
+       returns to the foreground — field phones stay open for hours. */
+    try { reg.update(); } catch(e){}
+    setInterval(function(){ try { reg.update(); } catch(e){} }, 20*60*1000);
+    document.addEventListener('visibilitychange', function(){
+      if (document.visibilityState === 'visible') { try { reg.update(); } catch(e){} }
+    });
+  }).catch(function(){});
+  /* When a new version installs, reload once so it takes effect immediately —
+     but never mid-capture or mid-typing, and never in a loop. */
+  var __reloaded = false;
+  function busyNow(){
+    var ae = document.activeElement;
+    if (ae && /input|textarea|select/i.test(ae.tagName)) return true;
+    var vids = document.querySelectorAll('video');
+    for (var i = 0; i < vids.length; i++) { if (vids[i].srcObject) return true; }
+    return false;
+  }
+  function applyUpdate(){
+    if (__reloaded) return;
+    if (busyNow()) { setTimeout(applyUpdate, 30000); return; }
+    __reloaded = true;
+    location.reload();
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', applyUpdate);
 }
 </script>
 </body>
