@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v21.4">
+<meta name="version" content="trice-v21.5">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -60,8 +60,8 @@ body{overflow-x:hidden}
 .logo{width:34px;height:34px;border-radius:9px;flex:none;background:var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3.5px}
 .logo span{height:2.5px;background:#fff;border-radius:1px;display:block}
 .logo span:nth-child(1){width:9px}.logo span:nth-child(2){width:13px}.logo span:nth-child(3){width:17px}
-.hdr .t1{font-size:16px;font-weight:700;letter-spacing:.06em;line-height:1.15}
-.hdr .t2{font-size:11px;color:var(--muted)}
+.hdr .t1{font-size:15px;font-weight:800;letter-spacing:.28em;line-height:1.15;text-transform:uppercase}
+.hdr .t2{font-size:9px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;font-weight:600;margin-top:2px}
 .hdr .site{margin-left:auto;text-align:right;min-width:0}
 .hdr .site .s1{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
 .hdr .site .s2{font-size:10.5px;color:var(--muted)}
@@ -143,6 +143,10 @@ body{overflow-x:hidden}
 .trow:disabled{opacity:1}
 .trow:disabled .l1,.trow:disabled .l2{color:#c2beb3}
 .trow .hs{font-size:16px;font-weight:700;flex:none;text-align:right;min-width:32px}
+.trow .l2 em{font-style:italic;color:var(--muted)}
+.trow .l3{display:block;font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.hz{flex:none;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;text-align:right}
+.hz.bad{color:var(--bad)}.hz.warn{color:var(--warn-ink)}.hz.good{color:var(--good)}
 
 /* Photo zoom overlay */
 .zoom{position:fixed;inset:0;z-index:80;background:#000;display:flex;flex-direction:column}
@@ -224,6 +228,10 @@ input,select,textarea{border-radius:11px}
 </style>
 </head>
 <body>
+<!-- Netlify Forms registration — the build bot reads this at deploy time. Do not remove. -->
+<form name="trice-intake" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+  <input type="text" name="name"><input type="text" name="company"><textarea name="problem"></textarea><input name="bot-field">
+</form>
 <div id="app"></div>
 <div id="printReport"></div>
 <script>
@@ -2242,14 +2250,18 @@ function discardDraft() { if (!S.draft || confirm('Discard this capture?')) { S.
 /* ---- Rows ---- */
 function rowHTML(t) {
   const a = t.ai || {};
+  const haz = t.hazard || 'Moderate';
+  const tag = haz === 'High Hazard' ? '<span class="hz bad">High</span>' : (haz === 'Cleared' ? '<span class="hz good">Cleared</span>' : '<span class="hz warn">Moderate</span>');
+  const dbh = t.dbhIn ? t.dbhIn + ' in' : '';
   return `
   <button class="trow" onclick="openDetail('${t.id}')">
     <img class="thumb" src="${t.photo}" alt="">
     <span class="mid">
-      <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''} <span class="mono" style="font-weight:600;font-size:11px;color:var(--muted)">${t.id}</span></span>
-      <span class="l2">${esc(t.cause || '')}${t.zone ? ' · ' + esc(t.zone) : ''}${t.ip === 'OP' ? ' · OP' : ' · IP'}${lineTotal(t) ? ' · ' + money(lineTotal(t)) : ''}</span>
+      <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
+      ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
+      <span class="l3"><span class="mono">${t.id}</span>${dbh ? ' · ' + dbh : ''}${t.zone ? ' · ' + esc(t.zone) : ''}${t.ip === 'OP' ? ' · OP' : ''}${lineTotal(t) ? ' · ' + money(lineTotal(t)) : ''}</span>
     </span>
-    ${hazChipHTML(t.hazard || 'Moderate')}
+    <span style="flex:none;display:flex;align-items:center;gap:9px">${tag}<span style="color:var(--faint);font-size:16px">›</span></span>
   </button>`;
 }
 
@@ -3493,7 +3505,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.4</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.5</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4053,7 +4065,27 @@ function emptyState(t, b) {
 const GATE_HASH = 1630778633; /* djb2 of the WTR team password */
 const gateOk = () => { try { return localStorage.getItem('trice_gate') === String(GATE_HASH); } catch (e) { return true; } };
 function gateHash(str) { let h = 5381; for (const c of str) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0; return h; }
-function landStep(st) { S.landStep = st; render(); const e = document.getElementById('gatePw'); if (e) setTimeout(() => e.focus(), 60); }
+function landStep(st) { S.landStep = st; render(); const e = document.getElementById('gatePw'); if (e) setTimeout(() => e.focus(), 60); const n = document.getElementById('inName'); if (n) setTimeout(() => n.focus(), 60); }
+/* Get Started intake — posts to Netlify Forms (email notification goes to stelcomm@protonmail.com,
+   set once in Netlify → Forms → Notifications). Offline or if forms are off, falls back to a
+   pre-filled email draft to the same address. */
+async function intakeSend() {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const name = g('inName').trim(), company = g('inCompany').trim(), problem = g('inProblem').trim();
+  if (!name || !problem) { toast(!name ? 'Add your name' : 'Tell us what you are trying to solve'); return; }
+  const btn = document.getElementById('inSend'); if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  const body = new URLSearchParams({ 'form-name': 'trice-intake', name, company, problem }).toString();
+  let ok = false;
+  try {
+    const r = await fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    ok = r.ok;
+  } catch (e) { ok = false; }
+  if (!ok) {
+    const mail = `mailto:stelcomm@protonmail.com?subject=${encodeURIComponent('Trice intake — ' + name + (company ? ' (' + company + ')' : ''))}&body=${encodeURIComponent('Name: ' + name + '\nCompany: ' + company + '\n\nProblem to solve:\n' + problem)}`;
+    location.href = mail;
+  }
+  S.landStep = 'sent'; render();
+}
 function gateTry() {
   const el = document.getElementById('gatePw'); const v = (el && el.value || '').trim();
   if (gateHash(v) === GATE_HASH) { try { localStorage.setItem('trice_gate', String(GATE_HASH)); } catch (e) {} S.landStep = null; toast('Welcome to the WTR field module'); render(); }
@@ -4067,6 +4099,29 @@ const LAND_MTNS = `<svg viewBox="0 0 400 150" style="width:100%;display:block" p
 </svg>`;
 function gateView() {
   const back = to => `<button onclick="landStep(${to ? `'${to}'` : 'null'})" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);left:14px;border:0;background:none;font-size:22px;color:var(--ink);padding:8px;cursor:pointer" aria-label="Back">‹</button>`;
+  if (S.landStep === 'intake') return `<div class="view" style="position:relative">
+    ${back(null)}
+    <div style="max-width:420px;margin:0 auto;padding-top:76px;padding-bottom:24px">
+      <div style="font-size:30px;font-weight:700;letter-spacing:-.01em">Get Started</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:8px;line-height:1.55">Tell us a bit about your work. We'll reach out within one business day.</div>
+      <div class="card" style="margin-top:26px;padding:16px">
+        <div class="field"><label>Your name</label><input id="inName" placeholder="Alex Morgan" autocomplete="name"></div>
+        <div class="field" style="margin-top:14px"><label>Company</label><input id="inCompany" placeholder="Company or crew" autocomplete="organization"></div>
+        <div class="field" style="margin-top:14px"><label>What problem are you trying to solve?</label><textarea id="inProblem" style="min-height:110px" placeholder="Storm documentation, canopy inventory, insurance reporting…"></textarea></div>
+      </div>
+      <button id="inSend" class="btn primary" style="margin-top:18px" onclick="intakeSend()">Continue</button>
+      <div style="text-align:center;margin-top:14px;font-size:12px;color:var(--faint)">Already on a team? <a href="#" onclick="landStep('company');return false" style="font-weight:700;color:var(--ink)">Team Access</a></div>
+    </div>
+  </div>`;
+  if (S.landStep === 'sent') return `<div class="view" style="position:relative;display:flex;flex-direction:column">
+    <div style="max-width:380px;margin:auto;width:100%;text-align:center;padding:40px 0">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--good-bg);display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:28px;color:var(--good)">✓</div>
+      <div style="font-size:24px;font-weight:700;margin-top:22px">Thanks — we got it.</div>
+      <div style="font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.65">Your note is on its way. We'll follow up shortly to set your team up on Trice.</div>
+      <button class="btn ghost" style="margin-top:30px" onclick="landStep('company')">🏢&nbsp; Team Access</button>
+      <button class="btn ghost" style="margin-top:10px;border:0" onclick="landStep(null)">Back to start</button>
+    </div>
+  </div>`;
   if (S.landStep === 'company') return `<div class="view" style="position:relative">
     ${back(null)}
     <div style="max-width:420px;margin:0 auto;padding-top:76px">
@@ -4107,7 +4162,7 @@ function gateView() {
     </div>
     <div style="flex:none;margin-top:22px">${LAND_MTNS}</div>
     <div style="flex:none;padding:6px 22px calc(env(safe-area-inset-bottom,0px) + 8px);max-width:420px;margin:0 auto;width:100%;box-sizing:border-box">
-      <button class="btn primary" onclick="landStep('company')">Get Started</button>
+      <button class="btn primary" onclick="landStep('intake')">Get Started</button>
       <button class="btn ghost" style="margin-top:10px" onclick="landStep('company')">🏢&nbsp; Team Access</button>
       <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--faint)">Work better. Track smarter. Protect what matters.</div>
     </div>
@@ -4129,7 +4184,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v21.4</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v21.5</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
