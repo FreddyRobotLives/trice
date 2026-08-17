@@ -114,9 +114,9 @@ body{overflow-x:hidden}
 .mapctl{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
 .mapctl button{border:0;border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 4px 14px -6px rgba(8,12,18,.4);font-size:11.5px;font-weight:700;padding:8px 12px;color:var(--ink)}
 .mapctl button.on{background:var(--ink);color:#fff}
-.projpin{width:52px;height:52px;border-radius:50%;background:var(--ink);border:2.5px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
-.projpin>span:first-child{font-size:15px;font-weight:800;letter-spacing:.03em;line-height:1}
-.projpin .projn{font-size:9px;font-weight:700;color:rgba(255,255,255,.75);margin-top:2px;line-height:1}
+.projpin{width:40px;height:40px;border-radius:50%;background:var(--ink);border:2px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
+.projpin>span:first-child{font-size:12px;font-weight:800;letter-spacing:.02em;line-height:1}
+.projpin .projn{font-size:8px;font-weight:700;color:rgba(255,255,255,.75);margin-top:1.5px;line-height:1}
 .pin2{position:relative;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(8,12,18,.6),0 4px 14px rgba(8,12,18,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
 .pin2 .qty{position:absolute;right:-7px;top:-7px;min-width:17px;height:17px;border-radius:999px;background:#16181d;color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff}
 .leaflet-popup-content-wrapper{border-radius:12px;box-shadow:0 10px 30px -14px rgba(8,12,18,.4)}
@@ -2331,7 +2331,7 @@ function projInitials(name) {
 }
 function projBadgeIcon(name, info) {
   const ring = info.worst === 2 ? 'var(--bad)' : (info.worst === 1 ? 'var(--warn)' : 'var(--good)');
-  return L.divIcon({ className: '', html: `<div class="projpin" style="box-shadow:0 0 0 3.5px ${ring},0 5px 16px rgba(8,12,18,.45)"><span>${esc(projInitials(name))}</span><span class="projn">${info.n}</span></div>`, iconSize: [52, 52], iconAnchor: [26, 26] });
+  return L.divIcon({ className: '', html: `<div class="projpin" style="box-shadow:0 0 0 3px ${ring},0 4px 12px rgba(8,12,18,.45)"><span>${esc(projInitials(name))}</span><span class="projn">${info.n}</span></div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
 }
 function mountMap() {
   const el = document.getElementById('map'); if (!el || typeof L === 'undefined') return;
@@ -2351,13 +2351,45 @@ function mountMap() {
       if (w > g.worst) g.worst = w;
     }
     const bounds = [];
+    const badges = [];
     for (const [name, g] of Object.entries(groups)) {
       const at = [g.lat / g.n, g.lng / g.n];
-      const nm = name.replace(/'/g, "\\'");
-      L.marker(at, { icon: projBadgeIcon(name, g) }).addTo(leafletMap).on('click', () => setMapProject(name)).bindTooltip(name, { direction: 'top', offset: [0, -30] });
+      const m = L.marker(at, { icon: projBadgeIcon(name, g), zIndexOffset: 400 }).addTo(leafletMap).on('click', () => setMapProject(name)).bindTooltip(name, { direction: 'top', offset: [0, -24] });
+      badges.push({ m, at });
       bounds.push(at);
     }
+    /* Neighboring projects share the same few pixels at wide zoom — fan their
+       badges out in a ring so every one stays visible and tappable. Positions
+       are recomputed from the true centers on every zoom, so zooming in lets
+       badges settle back onto their real locations. */
+    const spreadBadges = () => {
+      if (!leafletMap) return;
+      const pts = badges.map(b => ({ b, p: leafletMap.latLngToContainerPoint(L.latLng(b.at[0], b.at[1])), grp: -1 }));
+      const R = 46;
+      let gi = 0;
+      for (const a of pts) {
+        if (a.grp >= 0) continue;
+        a.grp = gi;
+        for (const c of pts) { if (c.grp < 0 && Math.hypot(c.p.x - a.p.x, c.p.y - a.p.y) < R) c.grp = gi; }
+        gi++;
+      }
+      for (let g2 = 0; g2 < gi; g2++) {
+        const grp = pts.filter(x => x.grp === g2);
+        if (grp.length === 1) { grp[0].b.m.setLatLng(grp[0].b.at); continue; }
+        const cx = grp.reduce((s, x) => s + x.p.x, 0) / grp.length;
+        const cy = grp.reduce((s, x) => s + x.p.y, 0) / grp.length;
+        const rad = 26 + grp.length * 5;
+        grp.sort((x, y) => x.p.x - y.p.x || x.p.y - y.p.y);
+        grp.forEach((x, i2) => {
+          const ang = (2 * Math.PI * i2) / grp.length - Math.PI / 2;
+          const np = L.point(cx + rad * Math.cos(ang), cy + rad * Math.sin(ang));
+          x.b.m.setLatLng(leafletMap.containerPointToLatLng(np));
+        });
+      }
+    };
     leafletMap.fitBounds(bounds, { padding: [56, 56], maxZoom: 15 });
+    leafletMap.whenReady(() => setTimeout(spreadBadges, 60));
+    leafletMap.on('zoomend', spreadBadges);
   } else if (withGps.length) {
     const bounds = [];
     for (const t of withGps) {
