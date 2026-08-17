@@ -8,17 +8,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v22.6">
-<meta property="og:title" content="Trice — field data. Clear decisions.">
-<meta property="og:description" content="Photograph a tree. AI writes the row. Species, hazard, GPS, pricing. Live map, live grid, and a carrier-ready exhibit from one walk.">
-<meta property="og:image" content="https://trice.live/og.png?v=23">
+<meta name="version" content="trice-v23.2">
+<meta property="og:title" content="Trice — Field data. Clear decisions.">
+<meta property="og:description" content="We design systems that solve complex problems.">
+<meta property="og:image" content="https://trice.live/og.png?v=27">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
 <meta property="og:url" content="https://trice.live/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://trice.live/og.png?v=23">
-<meta name="description" content="AI tree assessment with GPS photo proof — every tree, on the record.">
+<meta name="twitter:image" content="https://trice.live/og.png?v=27">
+<meta name="description" content="We design systems that solve complex problems.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -115,7 +115,7 @@ body{overflow-x:hidden}
 .shutter{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;padding:0}
 .shutter span{width:56px;height:56px;border-radius:50%;background:#fff;display:block;transition:transform .1s}
 .shutter:active span{transform:scale(.86)}
-.camchip{background:rgba(11,14,18,.6);border-radius:999px;padding:6px 12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
+.camchip{background:rgba(11,14,18,.6);color:#fff;border-radius:999px;padding:6px 12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
 .camchip .liv{width:6px;height:6px;border-radius:50%;background:#7ee2a8;animation:adpulse 1.6s infinite}
 
 /* Map */
@@ -2393,11 +2393,7 @@ function backFromEdit() {
   if (S.editFrom === 'sheet') {
     S.editFrom = null; S.detailId = null; S.tab = 'sheet';
     try { localStorage.setItem('trice_tab', 'sheet'); } catch (e) {}
-    render();
-    setTimeout(() => {
-      const g = document.getElementById('gridScroll'); if (g) g.scrollTop = S.gridScrollY || 0;
-      const tw = document.getElementById('gridTableScroll'); if (tw) { tw.scrollTop = S.gridTableY || 0; tw.scrollLeft = S.gridTableX || 0; }
-    }, 30);
+    render(); /* render() itself restores the stored grid scroll */
     return;
   }
   render();
@@ -3822,7 +3818,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4510,7 +4506,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.6</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.2</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
@@ -4526,6 +4522,15 @@ function render() {
     ${S.projectId ? projectSheet(S.projectId) : ''}
     ${S.backups ? backupsSheet() : ''}
     ${S.showPicker ? projectPicker() : ''}`;
+  if (S.tab === 'sheet') {
+    /* The grid always reopens exactly where it was scrolled — across edits, nav
+       round-trips, and background sync re-renders. Positions live in S and are
+       tracked continuously, then re-applied right after every render. */
+    const g = document.getElementById('gridScroll');
+    if (g) { g.scrollTop = S.gridScrollY || 0; g.onscroll = () => { S.gridScrollY = g.scrollTop; }; }
+    const tw = document.getElementById('gridTableScroll');
+    if (tw) { tw.scrollTop = S.gridTableY || 0; tw.scrollLeft = S.gridTableX || 0; tw.onscroll = () => { S.gridTableY = tw.scrollTop; S.gridTableX = tw.scrollLeft; }; }
+  }
   if (S.tab === 'map' && !S.zoomSrc) requestAnimationFrame(mountMap);
 }
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
@@ -4539,7 +4544,7 @@ function fabCapture() {
   S.detailId = null; S.editId = null; openCamera();
 }
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function go(tab) { if (S.tab === 'sheet' && tab !== 'sheet') { const g = document.getElementById('gridScroll'); if (g) S.gridScrollY = g.scrollTop; const tw = document.getElementById('gridTableScroll'); if (tw) { S.gridTableY = tw.scrollTop; S.gridTableX = tw.scrollLeft; } } S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Always the newest build ----
    index.html is served no-cache and the service worker is network-first, but this is the
