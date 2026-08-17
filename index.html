@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v22.0">
+<meta name="version" content="trice-v22.2">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -200,7 +200,7 @@ input,select,textarea{border-radius:11px}
 }
 </style>
 <style>
-.railtop,.railfoot{display:none}
+.railtop,.railfoot,.railout{display:none}
 @media(min-width:1100px){
   body{background:#f2f2ef}
   #app{max-width:none;flex-direction:row;border:0 !important}
@@ -215,7 +215,7 @@ input,select,textarea{border-radius:11px}
   .railtop{display:block;margin:0 0 72px}
   .railmark{font-size:21px;font-weight:800;letter-spacing:.34em;color:#101214}
   .railsub{margin-top:10px;font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:#b3b5b8;font-weight:600}
-  .railfoot{display:flex;align-items:center;gap:9px;margin-top:auto;padding-top:26px;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9b9ea2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .railfoot{display:flex;align-items:center;gap:9px;margin-top:0;padding-top:14px;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9b9ea2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .raildot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none;box-shadow:0 0 0 4px rgba(47,125,85,.12)}
   .view{padding:76px 88px 140px;background:transparent}
   .view>*{max-width:1120px;margin-left:auto !important;margin-right:auto !important}
@@ -224,6 +224,9 @@ input,select,textarea{border-radius:11px}
   .card{border-color:rgba(18,20,24,.05);border-radius:18px;box-shadow:0 1px 2px rgba(16,18,22,.03),0 18px 44px rgba(16,18,22,.06)}
   .slab{letter-spacing:.22em}
   .btn{max-width:460px;margin-left:auto;margin-right:auto}
+  .sheet{top:50%;bottom:auto;translate:0 -50%;max-width:560px;border-radius:22px;max-height:82vh}
+  .railout{display:block;margin-top:auto;border:0;background:none;text-align:left;padding:12px 0;font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:#b3b5b8;font-weight:700;cursor:pointer}
+  .railout:hover{color:var(--bad)}
 }
 </style>
 </head>
@@ -2000,7 +2003,7 @@ function homeGlance() {
     <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="slab">Remediation pricing</span><span style="font-size:13px;font-weight:700">${money(T.total)}</span></div>
     <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> carry an amber AI prediction (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
     ${ADMIN() ? `<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
-      ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : '⚡ Predict pricing'}</button>` : ''}
+      ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : (preds ? '↻ Re-run predictions' : '⚡ Predict pricing')}</button>` : ''}
       <button class="btn ghost" style="flex:1;min-width:130px;padding:11px" onclick="go('sheet')">Open the grid</button>
     </div>` : `<button class="btn ghost" style="margin-top:11px;padding:11px" onclick="go('sheet')">Open the live grid</button>`}
   </div>` : ''}
@@ -3272,7 +3275,7 @@ function sheetView() {
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       ${ADMIN() ? `
-      <button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
+      <button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `${preds ? '↻ Re-run predictions' : '⚡ Predict pricing'}${unpriced ? ' · ' + unpriced : ''}`}</button>
       ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
       <span style="flex:1"></span>
       <button onclick="S.gridFull=true;render()" style="${pill}" title="The full spreadsheet — every column, sortable">⛶ Full grid</button>
@@ -3323,7 +3326,7 @@ function sheetView() {
       <span class="slab" style="flex:none">The grid · ${esc(label)}</span>
       <span style="font-size:11px;color:var(--muted);font-weight:600;flex:none">${body.length} rows · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span>${preds ? ` · <span style="color:#b8842a;font-weight:700">≈${money(T.predTotal)} predicted</span>` : (unpriced ? ` · ${unpriced} unpriced` : '')}</span>
       <span style="flex:1"></span>
-      ${ADMIN() ? `<button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
+      ${ADMIN() ? `<button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `${preds ? '↻ Re-run predictions' : '⚡ Predict pricing'}${unpriced ? ' · ' + unpriced : ''}`}</button>
       ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : ''}
       <button onclick="S.gridFull=false;render()" style="${pill}">✕ Close</button>
     </div>
@@ -3354,7 +3357,7 @@ function gridHero(TS, label) {
     </div>
     <div style="display:flex;gap:8px;padding:14px 18px 16px;flex-wrap:wrap">
       <button class="btn primary" style="flex:2;min-width:170px" onclick="openGridExhibit()">Preview &amp; export PDF</button>
-      <button class="btn ghost" style="flex:1;min-width:110px" onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">XLSX</button>
+      <button class="btn ghost" style="flex:1;min-width:110px" onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
     </div>
   </div>`;
 }
@@ -3367,7 +3370,7 @@ function gridHero(TS, label) {
    appear — unpriced and predicted lines print as TBD, the way an honest exhibit reads. */
 const GX_NAVY = '#1b2733', GX_CREAM = '#f3f1ec', GX_ACCENT = '#c8452c';
 const GX_HAZ = h => h === 'High Hazard' ? ['#b34b48', '\u25b2', 'HIGH HAZARD'] : (h === 'Cleared' ? ['#2f7d55', '\u25a0', 'CLEARED'] : ['#b8842a', '\u25cf', 'MODERATE']);
-const gxMoney = v => v > 0 ? money(v) : '<span style="color:#b8842a;font-weight:700;font-size:9px;letter-spacing:.04em">TBD</span>';
+const gxMoney = (v, pv) => v > 0 ? money(v) : (pv > 0 ? `<span style="color:#b8842a;font-weight:700;font-family:ui-monospace,Menlo,monospace">\u2248${money(pv)}</span>` : '<span style="color:#b8842a;font-weight:700;font-size:9px;letter-spacing:.04em">TBD</span>');
 function gridExhibitHTML(TS, label) {
   const j = S.job || {};
   const T = totals(TS);
@@ -3376,7 +3379,7 @@ function gridExhibitHTML(TS, label) {
   const causeTop = counts(TS.map(t => t.cause))[0];
   const specByName = {}; for (const t of TS) { const s = (t.ai && t.ai.species) || 'Pending analysis'; specByName[s] = (specByName[s] || 0) + (t.qty || 1); }
   const species = Object.entries(specByName).sort((a, b) => b[1] - a[1]);
-  const zones = {}; for (const t of TS) { const z = t.zone || 'No zone'; const o = zones[z] = zones[z] || { spec: 0, cost: 0 }; o.spec += (t.qty || 1); o.cost += lineTotal(t) || 0; }
+  const zones = {}; for (const t of TS) { const z = t.zone || 'No zone'; const o = zones[z] = zones[z] || { spec: 0, cost: 0, pred: 0 }; o.spec += (t.qty || 1); o.cost += lineTotal(t) || 0; if (!lineTotal(t) && hasPred(t)) o.pred += predTotal(t) || 0; }
   const zoneKeys = Object.keys(zones).sort(zoneSort);
   const fails = {}; for (const t of TS) for (const f of (t.failures || [])) fails[f] = (fails[f] || 0) + 1;
   const failTop = Object.entries(fails).sort((a, b) => b[1] - a[1]);
@@ -3385,6 +3388,7 @@ function gridExhibitHTML(TS, label) {
   const gpsN = TS.filter(t => typeof t.lat === 'number').length;
   const priced = TS.filter(t => lineTotal(t) > 0).length;
   const anyPriced = T.total > 0;
+  const predSum = TS.reduce((s, t) => s + ((!lineTotal(t) && hasPred(t)) ? (predTotal(t) || 0) : 0), 0);
   const assessors = [...new Set(TS.map(t => t.surveyor).filter(Boolean))];
   const idSlug = (label === 'All projects' ? 'TRICE' : label.replace(/[^A-Za-z0-9]+/g, '').slice(0, 10).toUpperCase() || 'TRICE') + '-' + new Date().getFullYear();
   const K = 'font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#98948a;font-weight:700';
@@ -3402,6 +3406,7 @@ function gridExhibitHTML(TS, label) {
     const a = t.ai || {};
     const hz = GX_HAZ(t.hazard || 'Moderate');
     const lt = lineTotal(t);
+    const p = (!lt && t.pred) ? t.pred : {};
     return `<tr style="background:${i % 2 ? '#faf9f5' : '#fff'}">
       ${td(i + 1, 'color:#a8a49a;font-size:8.5px')}
       ${td(`<span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span>`)}
@@ -3415,11 +3420,11 @@ function gridExhibitHTML(TS, label) {
       ${td(`<span style="color:${hz[0]};font-weight:800;font-size:8.5px;letter-spacing:.05em;white-space:nowrap">${hz[1]} ${hz[2]}</span>`)}
       ${td(esc((t.failures || []).join(' | ') || '\u2014'))}
       ${td(esc(t.cause || '\u2014'))}
-      ${td(gxMoney(t.prune), 'text-align:right')}
-      ${td(gxMoney(t.removal), 'text-align:right')}
-      ${td(gxMoney(t.disposal), 'text-align:right')}
-      ${td(gxMoney(t.stump), 'text-align:right')}
-      ${td(lt > 0 ? `<strong style="font-family:ui-monospace,Menlo,monospace">${money(lt)}</strong>` : gxMoney(0), 'text-align:right')}
+      ${td(gxMoney(t.prune, p.prune), 'text-align:right')}
+      ${td(gxMoney(t.removal, p.removal), 'text-align:right')}
+      ${td(gxMoney(t.disposal, p.disposal), 'text-align:right')}
+      ${td(gxMoney(t.stump, p.stump), 'text-align:right')}
+      ${td(lt > 0 ? `<strong style="font-family:ui-monospace,Menlo,monospace">${money(lt)}</strong>` : gxMoney(0, hasPred(t) ? predTotal(t) : 0), 'text-align:right')}
       ${td(esc((t.surveyor || '\u2014').split(/\s+/)[0]))}
     </tr>`;
   }).join('');
@@ -3437,7 +3442,7 @@ function gridExhibitHTML(TS, label) {
     <div style="background:${GX_NAVY};border-radius:13px;padding:15px 18px;display:flex;gap:22px;flex-wrap:wrap;color:#fff;page-break-inside:avoid">
       ${[['Assessment ID', `<span style="font-family:ui-monospace,Menlo,monospace">${idSlug}</span>`],
          ['Line items', `${T.lines} \u00b7 ${T.specimens} specimens`],
-         ['Remediation', anyPriced ? money(T.total) + (T.unpriced ? ` <span style="color:#e8b64c;font-size:10px">\u00b7 ${T.unpriced} TBD</span>` : '') : '<span style="color:#e8b64c">To be determined</span>'],
+         ['Remediation', anyPriced ? money(T.total) + (predSum ? ` <span style="color:#e8b64c;font-size:10px">+ \u2248${money(predSum)} predicted</span>` : (T.unpriced ? ` <span style="color:#e8b64c;font-size:10px">\u00b7 ${T.unpriced} TBD</span>` : '')) : (predSum ? `<span style="color:#e8b64c">\u2248${money(predSum)} AI predicted</span>` : '<span style="color:#e8b64c">To be determined</span>')],
          ['High hazard', `${T.byHaz['High Hazard'].lines} items \u00b7 ${T.byHaz['High Hazard'].specimens} specimens`],
          ['Cause of loss', causeTop ? esc(causeTop[0]) + ` \u2014 ${causeTop[1]} of ${T.lines}` : '\u2014']]
         .map(kv => `<div><div style="font-size:7.5px;letter-spacing:.13em;text-transform:uppercase;color:#8fa0ae;font-weight:700">${kv[0]}</div><div style="font-size:12.5px;font-weight:700;margin-top:3px">${kv[1]}</div></div>`).join('')}
@@ -3448,14 +3453,14 @@ function gridExhibitHTML(TS, label) {
       ${tile('Specimens', T.specimens, `${T.byIP.IP.lines} IP \u00b7 ${T.byIP.OP.lines} OP line items`)}
       ${tile('High hazard', T.byHaz['High Hazard'].lines, `${T.byHaz['High Hazard'].specimens} specimens \u00b7 ${T.specimens ? Math.round(T.byHaz['High Hazard'].specimens / T.specimens * 100) : 0}% of register`)}
       ${tile('Total DBH', dbhKnown ? Math.round(dbhTotal).toLocaleString() + ' in' : '\u2014', dbhKnown ? `${dbhKnown} of ${T.lines} rows sized` : 'no DBH recorded yet')}
-      ${tile('Remediation', anyPriced ? money(T.total) : '<span style="color:#b8842a;font-size:15px">TBD</span>', anyPriced ? `${priced} of ${T.lines} lines priced` : 'prune \u00b7 take-down \u00b7 debris \u00b7 stump')}
+      ${tile('Remediation', anyPriced ? money(T.total) : (predSum ? `<span style="color:#b8842a">\u2248${money(predSum)}</span>` : '<span style="color:#b8842a;font-size:15px">TBD</span>'), anyPriced ? `${priced} of ${T.lines} lines priced${predSum ? ` \u00b7 \u2248${money(predSum)} predicted awaits review` : ''}` : (predSum ? 'AI predicted \u2014 awaiting review, not accepted' : 'prune \u00b7 take-down \u00b7 debris \u00b7 stump'))}
     </div>
     <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin-top:12px">${['High Hazard','Moderate','Cleared'].map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${GX_HAZ(h)[0]}"></div>`).join('')}</div>
     <div style="display:flex;gap:14px;margin-top:6px;font-size:8.5px;color:#86837b;font-weight:600">${['High Hazard','Moderate','Cleared'].map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${GX_HAZ(h)[0]};margin-right:4px"></span>${h} \u00b7 ${T.byHaz[h].specimens} specimens</span>`).join('')}</div>
     <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">02 \u00b7 Damage profile</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${panel('Specimens by hole / zone', 'Where the volume is \u2014 the crew-sequencing read.', zoneKeys.map(z => bar(z, zones[z].spec, zMax, zones[z].spec, GX_NAVY)).join(''))}
-      ${panel('Remediation by hole / zone', anyPriced ? 'Accepted pricing only \u2014 predictions never print.' : 'To be determined \u2014 this panel populates as the cost columns fill in.', anyPriced ? (zoneKeys.filter(z => zones[z].cost).sort((a, b) => zones[b].cost - zones[a].cost).map(z => bar(z, zones[z].cost, zCostMax, money(zones[z].cost), GX_ACCENT)).join('') || '<div style="font-size:9.5px;color:#a8a49a">No priced lines in scope.</div>') : zoneKeys.map(z => bar(z, 0.02, 1, '<span style="color:#b8842a">TBD</span>', '#e7e4dc')).join(''))}
+      ${panel('Remediation by hole / zone', (anyPriced || predSum) ? 'Black bars are accepted pricing; amber \u2248 bars are AI predictions awaiting review.' : 'To be determined \u2014 this panel populates as the cost columns fill in.', (() => { const eMax = Math.max(1, ...zoneKeys.map(z => Math.max(zones[z].cost, zones[z].pred))); if (!anyPriced && !predSum) return zoneKeys.map(z => bar(z, 0.02, 1, '<span style="color:#b8842a">TBD</span>', '#e7e4dc')).join(''); return zoneKeys.filter(z => zones[z].cost || zones[z].pred).sort((a, b) => (zones[b].cost + zones[b].pred) - (zones[a].cost + zones[a].pred)).map(z => zones[z].cost ? bar(z, zones[z].cost, eMax, money(zones[z].cost), GX_ACCENT) : bar(z, zones[z].pred, eMax, `<span style="color:#b8842a">\u2248${money(zones[z].pred)}</span>`, '#e0b45c')).join(''); })())}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       ${panel('Specimens by species', species.length + ' species recorded' + (species.length && T.specimens ? ` \u00b7 ${esc(species[0][0])} alone is ${Math.round(species[0][1] / T.specimens * 100)}% of the damage.` : '.'), species.slice(0, 7).map(sp => bar(sp[0], sp[1], spMax, sp[1], GX_NAVY)).join(''))}
@@ -3473,16 +3478,16 @@ function gridExhibitHTML(TS, label) {
         <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.removal ? money(T.removal) : '\u2014'}</td>
         <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.disposal ? money(T.disposal) : '\u2014'}</td>
         <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.stump ? money(T.stump) : '\u2014'}</td>
-        <td style="padding:9px 7px;text-align:right;font-size:10px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.total ? money(T.total) : '<span style="color:#b8842a">TBD</span>'}</td>
+        <td style="padding:9px 7px;text-align:right;font-size:10px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.total ? money(T.total) + (predSum ? ` <span style="color:#b8842a;font-size:8px">+\u2248${money(predSum)}</span>` : '') : (predSum ? `<span style="color:#b8842a">\u2248${money(predSum)}</span>` : '<span style="color:#b8842a">TBD</span>')}</td>
         <td></td>
       </tr>
     </table>
-    ${T.unpriced || TS.some(hasPred) ? `<div style="margin-top:7px;font-size:8.5px;color:#86837b">TBD marks a line not yet priced. AI price predictions never appear on this exhibit \u2014 only accepted pricing prints.</div>` : ''}
+    ${T.unpriced || TS.some(hasPred) ? `<div style="margin-top:7px;font-size:8.5px;color:#86837b">Black figures are accepted pricing. Amber \u2248 figures are AI price predictions awaiting review \u2014 clearly marked, never blended into accepted totals. TBD marks a line with no price and no prediction yet.</div>` : ''}
     <div style="margin-top:16px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 16px;page-break-inside:avoid">
       <div style="font-size:11.5px;font-weight:800">Data quality</div>
       <div style="font-size:9.5px;color:#5c584f;margin-top:5px;line-height:1.7">
         ${gpsN} of ${T.lines} rows carry GPS captured at the trunk \u00b7 every row carries a device timestamp and a photograph bound to the record \u00b7
-        ${dbhKnown} of ${T.lines} rows carry DBH \u00b7 ${priced} of ${T.lines} lines priced${assessors.length ? ` \u00b7 assessed by ${assessors.map(esc).join(', ')}` : ''}.
+        ${dbhKnown} of ${T.lines} rows carry DBH \u00b7 ${priced} of ${T.lines} lines priced${predSum ? ` \u00b7 ${TS.filter(t => !lineTotal(t) && hasPred(t)).length} lines carry an AI prediction (\u2248${money(predSum)}) awaiting review` : ''}${assessors.length ? ` \u00b7 assessed by ${assessors.map(esc).join(', ')}` : ''}.
       </div>
     </div>
     <div style="margin-top:14px;padding-top:9px;border-top:1px solid #e7e4dc;font-size:8px;color:#a8a49a;line-height:1.6">
@@ -3506,7 +3511,7 @@ function openGridExhibit() {
     document.body.appendChild(w);
   }
   w.innerHTML = `<div class="bar"><span class="ttl">The grid \u2014 ${esc(label)}<span class="sub">Tap any text to edit. Edits go into this print / PDF only; the register stays untouched.</span></span>
-    <button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">XLSX</button>
+    <button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
     <button class="go" onclick="reviewPrint()">Print / save PDF</button>
     <button onclick="closeReview()">Close</button></div>
     <div class="body"><div class="paper" id="reviewPaper" contenteditable="true" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
@@ -3728,7 +3733,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.0</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4139,7 +4144,7 @@ function openReview() {
     <select style="${selSt}" onchange="reviewFilter('zone', this.value)"><option value="">All holes</option>${zs.map(z => `<option ${cur.zone === z ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select>
     <select style="${selSt}" onchange="reviewFilter('hazard', this.value)"><option value="">All hazards</option>${HAZARDS.map(hh => `<option ${cur.hazard === hh ? 'selected' : ''}>${hh}</option>`).join('')}</select>
     <select style="${selSt}" onchange="reviewFilter('assessor', this.value)"><option value="">Everyone</option>${us.map(u => `<option ${cur.assessor === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>
-    <button onclick="exportScopedXLSX()">XLSX</button><button class="go" onclick="reviewPrint()">Print / save PDF</button><button onclick="closeReview()">Close</button></div><div class="body"><div class="paper" id="reviewPaper" contenteditable="true">${document.getElementById('printReport').innerHTML}</div></div>`;
+    <button onclick="exportScopedXLSX()">Download XLSX</button><button class="go" onclick="reviewPrint()">Print / save PDF</button><button onclick="closeReview()">Close</button></div><div class="body"><div class="paper" id="reviewPaper" contenteditable="true">${document.getElementById('printReport').innerHTML}</div></div>`;
   w.style.display = 'flex';
 }
 function reviewPrint() { const p = document.getElementById('reviewPaper'); if (p) document.getElementById('printReport').innerHTML = p.innerHTML; window.print(); }
@@ -4416,14 +4421,14 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.0</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.2</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
       ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
-      : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
+      : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button><div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
     ${S.camOpen ? camView() : ''}
