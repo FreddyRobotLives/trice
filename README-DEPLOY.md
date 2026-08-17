@@ -36,3 +36,14 @@ Report → Data → Verify team data on any two phones. Same "This phone / Serve
 - No Safari Private mode on crew phones.
 - Add to Home Screen on every crew phone.
 - ANTHROPIC_API_KEY lives only in Netlify env vars.
+
+
+## v21 — 17 Aug 2026
+- Prune added as a fourth cost column (Prune / Take-down / Debris / Stump) across grid, edit, detail, XLSX and report. Old records untouched; V5 CSV unchanged.
+- SHEETS: full-screen grid. Search, hazard chips, column sort, arrow-key cell navigation. Summary & exports in a slide-over.
+- AI pricing predictions: calibrated on the rate card, Amy's ten priced rows and the Lexington 2017 schedule. Amber until accepted; excluded from all totals and exports; accepted lines stamped "Priced via AI prediction".
+- Report: cost-composition bars per hole, species and failure-mode panels, 4-line money table, computed register totals row, auto "Findings and open items", relabeled photo-journal pricing.
+- Redesign: landing screen, Home dashboard (glance / pricing / sync-offline cards), bottom nav with center Capture button, navy primary buttons.
+- PWA install metadata refreshed (theme color, apple-touch-icon). SW cache v22 — phones pick the build up on next online load.
+
+Deploy: commit these files to FreddyRobotLives/trice, push, let Netlify build trice.live. NEVER drag-and-drop (it drops netlify/functions).

@@ -3,8 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v20.3">
+<meta name="theme-color" content="#f3f1ec">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Trice">
+<meta name="version" content="trice-v21.1">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -25,7 +29,7 @@
 :root{
   --ink:#17181a; --body:#403d37; --muted:#86837b; --faint:#a8a49a; --label:#98948a;
   --accent:#c8452c; --bg:#f3f1ec; --card:#fff; --line:#e7e4dc; --soft:#f7f5f0; --hair:#efece5;
-  --good:#2f7d55; --good-bg:#eaf3ec; --info:#2f5573; --info-bg:#ebf0f2;
+  --good:#2f7d55; --good-bg:#eaf3ec; --info:#2f5573; --info-bg:#ebf0f2; --navy:#2e4a5e;
   --warn:#b8842a; --warn-ink:#8a6118; --warn-bg:#f7f0dd; --bad:#b34b48; --bad-bg:#faeeec;
 }
 html,body{height:100%}
@@ -63,6 +67,7 @@ body{overflow-x:hidden}
 .hdr .site .s2{font-size:10.5px;color:var(--muted)}
 
 .view{flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 86px);-webkit-overflow-scrolling:touch}
+.view.sheetfull{padding:0 0 calc(env(safe-area-inset-bottom,0px) + 86px)!important;overflow:hidden;display:flex;flex-direction:column;background:var(--bg)}
 .view::-webkit-scrollbar{width:0}
 .slab{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--label);font-weight:700}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;min-width:0;overflow-wrap:break-word}
@@ -75,7 +80,7 @@ body{overflow-x:hidden}
 .chip.info{color:var(--info);background:var(--info-bg)}
 .btn{border:0;border-radius:13px;padding:13px;font-size:14px;font-weight:600;letter-spacing:.01em;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s,transform .06s}
 .btn:active{transform:scale(.985)}
-.btn.primary{background:var(--accent);color:#fff}
+.btn.primary{background:var(--navy);color:#fff}
 .btn.dark{background:var(--ink);color:#fff}
 .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
 .btn:disabled{opacity:.5;cursor:default}
@@ -96,6 +101,10 @@ body{overflow-x:hidden}
 .nav .ic{width:22px;height:22px;display:block}
 .nav .ic path,.nav .ic circle,.nav .ic rect{stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .nav button.on .ic path,.nav button.on .ic circle,.nav button.on .ic rect{stroke:var(--accent)}
+.nav .fab{flex:none;width:56px;height:56px;margin:-22px 6px 0;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(46,74,94,.38),0 0 0 5px var(--bg);border:0;padding:0}
+.nav .fab svg{width:26px;height:26px}
+.nav .fab svg path{stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round}
+.nav .fab:active{transform:scale(.95)}
 
 /* Live camera */
 .cam{position:fixed;inset:0;z-index:90;background:#000;display:flex;flex-direction:column}
@@ -203,6 +212,8 @@ input,select,textarea{border-radius:11px}
   .raildot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none;box-shadow:0 0 0 4px rgba(47,125,85,.12)}
   .view{padding:76px 88px 140px;background:transparent}
   .view>*{max-width:1120px;margin-left:auto !important;margin-right:auto !important}
+  .view.sheetfull{padding:0!important;background:var(--bg)}
+  .view.sheetfull>*{max-width:none;margin-left:0 !important;margin-right:0 !important}
   .card{border-color:rgba(18,20,24,.05);border-radius:18px;box-shadow:0 1px 2px rgba(16,18,22,.03),0 18px 44px rgba(16,18,22,.06)}
   .slab{letter-spacing:.22em}
   .btn{max-width:460px;margin-left:auto;margin-right:auto}
@@ -240,7 +251,10 @@ const HFOV = 64;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => { n = parseFloat(n); return isFinite(n) ? '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'; };
 const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
-const lineTotal = t => num(t.removal) + num(t.disposal) + num(t.stump);
+const lineTotal = t => num(t.prune) + num(t.removal) + num(t.disposal) + num(t.stump);
+/* Predicted line total — what the line WOULD price at if the amber prediction were accepted. */
+const predTotal = t => { const p = t.pred || {}; return num(t.prune ?? p.prune) + num(t.removal ?? p.removal) + num(t.disposal ?? p.disposal) + num(t.stump ?? p.stump); };
+const hasPred = t => !!(t.pred && (t.pred.prune != null || t.pred.removal != null || t.pred.disposal != null || t.pred.stump != null));
 const fmtWhen = ts => { const d = new Date(ts); const mo = d.toLocaleString('en-US',{month:'short'}); let h = d.getHours(), ap = h >= 12 ? 'pm':'am'; h = h % 12 || 12; return `${mo} ${d.getDate()} · ${h}:${String(d.getMinutes()).padStart(2,'0')}${ap}`; };
 const isoWhen = ts => { const d = new Date(ts); const p = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const fmtCoord = (n, dp=5) => (typeof n === 'number' && isFinite(n)) ? n.toFixed(dp) : '—';
@@ -1297,7 +1311,7 @@ async function logDraft() {
       qty: r.qty || 1, hazard: r.hazard, cause: r.cause, failures: r.failures || [],
       ip: r.ip || 'IP', mgd: r.mgd || 'No', notes: r.notes || '',
       dbhIn: a.dbh_in ?? null, heightFt: a.height_ft ?? null,
-      removal: null, disposalMethod: '', disposal: null, stumpMethod: '', stump: null,
+      prune: null, removal: null, disposalMethod: '', disposal: null, stumpMethod: '', stump: null,
       ai: r.ai, aiOriginal: null, pending: !r.ai,
       site: S.site, surveyor: S.surveyor, logged: Date.now(),
     };
@@ -1412,7 +1426,7 @@ async function importPhotos(input) {
         bearing: null, dist: null, camLat: meta.lat ?? null, camLng: meta.lng ?? null, acc: null, heading: null,
         when: meta.when || f.lastModified || Date.now(), zone: '', locDetails: '',
         qty: 1, hazard: 'Moderate', cause: '', failures: [], ip: 'IP', mgd: 'No', notes: '',
-        dbhIn: null, heightFt: null, removal: null, disposalMethod: '', disposal: null, stumpMethod: '', stump: null,
+        dbhIn: null, heightFt: null, prune: null, removal: null, disposalMethod: '', disposal: null, stumpMethod: '', stump: null,
         ai: null, aiOriginal: null, pending: true, imported: true,
         site: S.site, surveyor: S.surveyor, logged: Date.now(), updated: Date.now(), dirty: true,
       };
@@ -1471,9 +1485,11 @@ async function saveEdit(id) {
   t.dbhIn = num(g('dbh')) || null; t.heightFt = num(g('height')) || null;
   t.zone = normZone(g('zone')); t.locDetails = g('locdet');
   t.ip = g('ip') || 'IP'; t.mgd = g('mgd') || 'No';
+  t.prune = g('prune') === '' ? null : num(g('prune'));
   t.removal = g('removal') === '' ? null : num(g('removal'));
   t.disposalMethod = g('dispmethod'); t.disposal = g('disposal') === '' ? null : num(g('disposal'));
   t.stumpMethod = g('stumpmethod'); t.stump = g('stump') === '' ? null : num(g('stump'));
+  if (t.pred && (t.prune != null || t.removal != null || t.disposal != null || t.stump != null)) { t.priceSource = t.priceSource || 'Manual over prediction'; delete t.pred; }
   t.notes = g('notes');
   t.pending = false;
   t.reviewed = true; t.overrideBy = S.surveyor || 'Assessor'; t.overrideAt = Date.now(); markDirty(t);
@@ -1520,20 +1536,21 @@ async function importJSON(input) {
 
 /* ---------------- Totals (mirrors the V5 Summary tab) ---------------- */
 function totals(src) {
-  const T = { lines: src.length, specimens: 0, removal: 0, disposal: 0, stump: 0, total: 0,
+  const T = { lines: src.length, specimens: 0, prune: 0, removal: 0, disposal: 0, stump: 0, total: 0, predicted: 0, predTotal: 0,
     byHaz: {}, byIP: { IP: { lines: 0, specimens: 0, cost: 0 }, OP: { lines: 0, specimens: 0, cost: 0 } }, byBand: {}, byZone: {}, missingPhoto: 0, unpriced: 0 };
   for (const h of HAZARDS) T.byHaz[h] = { lines: 0, specimens: 0, cost: 0 };
   for (const b of DBH_BANDS) T.byBand[b] = { lines: 0, specimens: 0 };
   for (const t of src) {
     const q = t.qty || 1, lt = lineTotal(t);
-    T.specimens += q; T.removal += num(t.removal); T.disposal += num(t.disposal); T.stump += num(t.stump); T.total += lt;
+    T.specimens += q; T.prune += num(t.prune); T.removal += num(t.removal); T.disposal += num(t.disposal); T.stump += num(t.stump); T.total += lt;
+    if (hasPred(t)) { T.predicted++; T.predTotal += predTotal(t) - lt; }
     if (T.byHaz[t.hazard]) { T.byHaz[t.hazard].lines++; T.byHaz[t.hazard].specimens += q; T.byHaz[t.hazard].cost += lt; }
     const ip = t.ip === 'OP' ? 'OP' : 'IP';
     T.byIP[ip].lines++; T.byIP[ip].specimens += q; T.byIP[ip].cost += lt;
     const b = DBH_BAND(t.dbhIn); if (b && T.byBand[b]) { T.byBand[b].lines++; T.byBand[b].specimens += q; }
     const z = t.zone || '(no zone)'; T.byZone[z] = T.byZone[z] || { lines: 0, specimens: 0, cost: 0 };
     T.byZone[z].lines++; T.byZone[z].specimens += q; T.byZone[z].cost += lt;
-    if (t.removal == null && t.disposal == null && t.stump == null) T.unpriced++;
+    if (t.prune == null && t.removal == null && t.disposal == null && t.stump == null) T.unpriced++;
   }
   return T;
 }
@@ -1579,7 +1596,8 @@ Write 2-3 tight paragraphs, plain prose, no headers, no bullets, no markdown. Le
 'use strict';
 /* ================= Views ================= */
 const ICONS = {
-  survey: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8.5c0-1.1.9-2 2-2h1.6l1.2-1.8c.2-.3.5-.5.9-.5h4.6c.4 0 .7.2.9.5l1.2 1.8H18c1.1 0 2 .9 2 2V17c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V8.5z"/><circle cx="12" cy="12.5" r="3.2"/></svg>',
+  survey: '<svg class="ic" viewBox="0 0 24 24"><path d="M4.5 11 12 4.5 19.5 11"/><path d="M6.5 9.5V19h11V9.5"/><path d="M10 19v-5h4v5"/></svg>',
+  capture: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8.5c0-1.1.9-2 2-2h1.6l1.2-1.8c.2-.3.5-.5.9-.5h4.6c.4 0 .7.2.9.5l1.2 1.8H18c1.1 0 2 .9 2 2V17c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V8.5z"/><circle cx="12" cy="12.5" r="3.2"/></svg>',
   map: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 4.5 4 6.5v13l5-2 6 2 5-2v-13l-5 2-6-2z"/><path d="M9 4.5v13M15 6.5v13"/></svg>',
   trees: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3.5 6.5 11h2.5L5.5 16.5h13L15 11h2.5L12 3.5z"/><path d="M12 16.5v4"/></svg>',
   sheet: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2"/><path d="M4 9.5h16M9.5 4.5v15M4 14.5h16"/></svg>',
@@ -1928,14 +1946,87 @@ async function refreshProjects() {
   render();
 }
 function nameCard() {
+  const us = knownUsers();
+  if (!S.landGo && !us.length && !S.surveyor) {
+    /* First screen on a fresh phone — the landing. */
+    return `
+  <div style="min-height:calc(100vh - 200px);display:flex;flex-direction:column;justify-content:center;text-align:center;padding:10px 6px">
+    <div style="display:flex;justify-content:center"><div class="logo" style="width:64px;height:64px;border-radius:16px;gap:5px"><span style="height:3.5px;width:16px"></span><span style="height:3.5px;width:24px"></span><span style="height:3.5px;width:32px"></span></div></div>
+    <div style="font-size:34px;font-weight:800;letter-spacing:.32em;margin-top:22px;color:var(--ink)">TRICE</div>
+    <div style="font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-top:6px">WTR field module</div>
+    <div style="font-size:23px;font-weight:700;line-height:1.3;margin-top:34px;letter-spacing:-.01em">Field data.<br>Clear decisions.</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:10px;line-height:1.6">Assess. Document. Act.<br>All your fieldwork, in one place.</div>
+    <div style="margin-top:38px;max-width:340px;margin-left:auto;margin-right:auto;width:100%">
+      <button class="btn primary" onclick="S.landGo=true;render()">Get started</button>
+    </div>
+    <div style="margin-top:26px;font-size:10.5px;color:var(--faint)">Work better. Track smarter. Protect what matters.</div>
+  </div>`;
+  }
   return `
-  <div class="card" style="padding:26px 18px;text-align:center">
-    <div style="display:flex;justify-content:center;margin-bottom:12px"><div class="logo" style="width:44px;height:44px"><span></span><span></span><span></span></div></div>
-    <div style="font-size:17px;font-weight:700">Who's assessing?</div>
-    <div style="font-size:12.5px;color:var(--muted);margin-top:4px">Pick your profile — your work follows you to any phone or desktop. Projects come next.</div>
-    ${(() => { const us = knownUsers(); return us.length ? `<div style="margin-top:14px;text-align:left;border:1px solid var(--hair);border-radius:13px;overflow:hidden">${us.map(u => { const k = u.replace(/'/g, "\\'"); const mine = S.trees.filter(t => t.surveyor === u).sort((a, b) => (b.when || 0) - (a.when || 0)); const last = mine[0]; return `<button class="trow" style="padding-left:14px;padding-right:14px" onclick="selectUser('${esc(k)}')"><span style="width:30px;height:30px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex:none">${esc(u.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span><span class="mid"><span class="l1">${esc(u)}</span><span class="l2">${mine.length ? `${mine.length} record${mine.length > 1 ? 's' : ''}${last && siteOfT(last) ? ' · last at ' + esc(siteOfT(last)) : ''}` : 'No records yet'}</span></span><span class="chip info">That's me ›</span></button>`; }).join('')}</div>` : ''; })()}
-    <div class="field" style="margin-top:14px;text-align:left"><label>${knownUsers().length ? 'Or add a new name' : 'Your name'}</label><input id="obName" placeholder="Amy Cushman" value="${esc(S.surveyor)}" autocomplete="name"></div>
-    <button class="btn primary" style="margin-top:14px" onclick="saveName()">Continue</button>
+  <div style="max-width:420px;margin:0 auto">
+    <div style="text-align:center;padding:14px 0 4px">
+      <div style="display:flex;justify-content:center"><div class="logo" style="width:46px;height:46px;border-radius:12px"><span></span><span></span><span></span></div></div>
+      <div style="font-size:17px;font-weight:800;letter-spacing:.26em;margin-top:12px">TRICE</div>
+    </div>
+    <div class="card" style="padding:24px 18px;margin-top:12px">
+      <div style="font-size:17px;font-weight:700">Who's assessing?</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:4px">Pick your profile — your work follows you to any phone or desktop, and your name signs every record.</div>
+      ${us.length ? `<div style="margin-top:14px;text-align:left;border:1px solid var(--hair);border-radius:13px;overflow:hidden">${us.map(u => { const k = u.replace(/'/g, "\\'"); const mine = S.trees.filter(t => t.surveyor === u).sort((a, b) => (b.when || 0) - (a.when || 0)); const last = mine[0]; return `<button class="trow" style="padding-left:14px;padding-right:14px" onclick="selectUser('${esc(k)}')"><span style="width:30px;height:30px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex:none">${esc(u.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span><span class="mid"><span class="l1">${esc(u)}</span><span class="l2">${mine.length ? `${mine.length} record${mine.length > 1 ? 's' : ''}${last && siteOfT(last) ? ' · last at ' + esc(siteOfT(last)) : ''}` : 'No records yet'}</span></span><span class="chip info">That's me ›</span></button>`; }).join('')}</div>` : ''}
+      <div class="field" style="margin-top:14px;text-align:left"><label>${us.length ? 'Or add a new name' : 'Your name'}</label><input id="obName" placeholder="Amy Cushman" value="${esc(S.surveyor)}" autocomplete="name"></div>
+      <button class="btn primary" style="margin-top:14px" onclick="saveName()">Continue</button>
+    </div>
+  </div>`;
+}
+/* ---------------- Home dashboard (v21) ---------------- */
+function homeGlance() {
+  const src = S.trees.filter(visT);
+  if (!src.length) return '';
+  const T = totals(src);
+  const preds = src.filter(hasPred).length;
+  const j = S.job || {};
+  const hz = ['High Hazard','Moderate','Cleared'], hcol = { 'High Hazard':'var(--bad)','Moderate':'var(--warn)','Cleared':'var(--good)' };
+  const link = (fn, l) => `<button onclick="${fn}" style="border:0;background:none;padding:0;font-size:12px;font-weight:700;color:var(--info);cursor:pointer">${l} ›</button>`;
+  return `
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span class="slab">Assessment at a glance${S.site ? ' · ' + esc(S.site) : ''}</span><span class="chip info" style="font-size:9.5px">${esc(j.assessType || 'Routine Canopy Inventory')}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px">
+      <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">${T.lines}</div><div style="font-size:11px;color:var(--muted)">Line items</div></div>
+      <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">${T.specimens}</div><div style="font-size:11px;color:var(--muted)">Specimens · ${T.byIP.IP.lines} IP / ${T.byIP.OP.lines} OP</div></div>
+      <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">${money(T.total)}</div><div style="font-size:11px;color:var(--muted)">Remediation priced</div></div>
+      <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em;color:${T.unpriced ? 'var(--warn)' : 'var(--good)'}">${T.unpriced}</div><div style="font-size:11px;color:var(--muted)">Lines unpriced</div></div>
+    </div>
+    <div style="display:flex;height:9px;border-radius:999px;overflow:hidden;margin-top:13px">${hz.map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${hcol[h]}"></div>`).join('')}</div>
+    <div style="display:flex;gap:12px;margin-top:8px;font-size:10.5px;color:var(--muted);flex-wrap:wrap">${hz.map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${hcol[h]};margin-right:4px"></span><strong style="color:var(--ink)">${T.byHaz[h].specimens}</strong> ${h}</span>`).join('')}</div>
+    <div style="display:flex;gap:16px;margin-top:13px;padding-top:11px;border-top:1px solid var(--hair);flex-wrap:wrap">${link("go('trees')",'Register')}${link("go('sheet')",'Live grid')}${link("go('map')",'Map')}${link("go('report')",'Report')}</div>
+  </div>
+  ${T.unpriced || preds ? `
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="slab">Remediation pricing</span><span style="font-size:13px;font-weight:700">${money(T.total)}</span></div>
+    <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> carry an amber AI prediction (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
+    ${ADMIN() ? `<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+      ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : '⚡ Predict pricing'}</button>` : ''}
+      ${preds ? `<button class="btn primary" style="flex:1;min-width:150px;padding:11px" onclick="acceptAllPreds()">✓ Accept all ${preds}</button>` : ''}
+      <button class="btn ghost" style="flex:1;min-width:130px;padding:11px" onclick="go('sheet')">Open the grid</button>
+    </div>` : `<button class="btn ghost" style="margin-top:11px;padding:11px" onclick="go('sheet')">Open the live grid</button>`}
+  </div>` : ''}
+  ${homeSyncCard()}`;
+}
+function homeSyncCard() {
+  const dirty = S.trees.filter(t => t.dirty).length;
+  const online = navigator.onLine;
+  const ok = online && !dirty;
+  const dot = c => `<span style="width:9px;height:9px;border-radius:50%;background:${c};flex:none;box-shadow:0 0 0 4px ${c}22"></span>`;
+  return `
+  <div class="card" style="margin-bottom:14px;padding:13px 16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${ok ? dot('var(--good)') : (online ? dot('var(--warn)') : dot('var(--bad)'))}
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:13px;font-weight:700">${online ? (dirty ? dirty + ' record' + (dirty > 1 ? 's' : '') + ' waiting to sync' : 'All changes synced') : 'You are working offline'}</span>
+        <span style="display:block;font-size:11px;color:var(--muted)">${online ? (SYNC.last ? 'Last sync ' + fmtWhen(SYNC.last) : 'Team sync is live') : (dirty ? dirty + ' record' + (dirty > 1 ? 's exist' : ' exists') + ' only on this phone — they push the moment signal returns' : 'Everything captured keeps working; changes sync when connection is restored')}</span>
+      </span>
+      ${online ? `<button onclick="syncNow();toast('Syncing…')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--ink);flex:none">Sync now</button>` : `<button onclick="go('trees')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--ink);flex:none">Offline data</button>`}
+    </div>
+    ${!online && typeof exportJSON === 'function' ? `<div style="margin-top:9px;font-size:10.5px;color:var(--faint);line-height:1.45">Never use Safari Private mode in the field — it destroys local storage when the session ends. If leaving signal for long, Report → Back up assessment writes a file copy.</div>` : ''}
   </div>`;
 }
 function projectsCard() {
@@ -2073,6 +2164,7 @@ function surveyView() {
       <button onclick="promptRename()" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)"><span style="display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.surveyor)}</span><span style="display:block;font-size:11.5px;color:var(--muted)">Signs every record · tap to rename</span></button>
       <button onclick="switchUser()" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--info);flex:none">Switch user</button>
     </div>
+    ${homeGlance()}
     ${projectsCard()}
     <div class="card" style="text-align:center;padding:30px 18px 26px;margin-top:16px">
       <div style="display:flex;justify-content:center;margin-bottom:6px">${gpsChip()}</div>
@@ -2284,7 +2376,7 @@ function openEdit(id) { S.detailId = id; S.editId = id; S.tab = 'trees'; S.zoomS
 function detailView(t) {
   const a = t.ai || {};
   if (S.editId === t.id) return editView(t);
-  const fin = (t.removal != null || t.disposal != null || t.stump != null);
+  const fin = (t.prune != null || t.removal != null || t.disposal != null || t.stump != null);
   return `
   <button onclick="S.detailId=null;render()" style="border:0;background:none;color:var(--info);font-weight:600;font-size:13px;padding:0;margin-bottom:10px">‹ Register</button>
   <div style="border:1px solid var(--hair);border-radius:16px;overflow:hidden;background:#fff">
@@ -2311,10 +2403,12 @@ function detailView(t) {
   <div class="card" style="margin-top:12px">
     <div style="display:flex;justify-content:space-between;align-items:center"><span class="slab">Remediation pricing</span><span style="font-size:13px;font-weight:700">${fin ? money(lineTotal(t)) : '<span style="color:var(--faint)">unpriced</span>'}</span></div>
     ${fin ? `<div style="margin-top:9px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--body)">
-      ${t.removal != null ? `<div style="display:flex;justify-content:space-between"><span>Removal</span><span class="mono">${money(t.removal)}</span></div>` : ''}
-      ${t.disposal != null ? `<div style="display:flex;justify-content:space-between"><span>Disposal${t.disposalMethod ? ' · ' + esc(t.disposalMethod) : ''}</span><span class="mono">${money(t.disposal)}</span></div>` : ''}
+      ${t.prune != null ? `<div style="display:flex;justify-content:space-between"><span>Prune / repair</span><span class="mono">${money(t.prune)}</span></div>` : ''}
+      ${t.removal != null ? `<div style="display:flex;justify-content:space-between"><span>Take-down</span><span class="mono">${money(t.removal)}</span></div>` : ''}
+      ${t.disposal != null ? `<div style="display:flex;justify-content:space-between"><span>Debris${t.disposalMethod ? ' · ' + esc(t.disposalMethod) : ''}</span><span class="mono">${money(t.disposal)}</span></div>` : ''}
       ${t.stump != null ? `<div style="display:flex;justify-content:space-between"><span>Stump${t.stumpMethod ? ' · ' + esc(t.stumpMethod) : ''}</span><span class="mono">${money(t.stump)}</span></div>` : ''}
-    </div>` : `<div style="margin-top:6px;font-size:11.5px;color:var(--faint)">Price it in Edit — removal, disposal and stump, extended for the line. Use $0, never “negligible”.</div>`}
+      ${t.priceSource ? `<div style="font-size:10.5px;color:var(--faint)">Priced via ${esc(t.priceSource)}</div>` : ''}
+    </div>` : hasPred(t) ? `<div style="margin-top:9px;padding:9px 12px;border-radius:10px;background:var(--warn-bg);border:1px solid #eadfc2;font-size:12px;color:#7a5a1d;line-height:1.5"><strong>AI predicted ${money(predTotal(t))}</strong> — ${[t.pred.prune!=null?'prune '+money(t.pred.prune):'',t.pred.removal!=null?'take-down '+money(t.pred.removal):'',t.pred.disposal!=null?'debris '+money(t.pred.disposal):'',t.pred.stump!=null?'stump '+money(t.pred.stump):''].filter(Boolean).join(' · ')}. Not on the record until accepted.<button class="btn dark" style="margin-top:8px;padding:9px" onclick="acceptPred('${esc(t.id)}')">✓ Accept prediction as the price</button></div>` : `<div style="margin-top:6px;font-size:11.5px;color:var(--faint)">Price it in Edit — prune, take-down, debris and stump, extended for the line. Use $0, never “negligible”. Or run Predict pricing from the Sheets tab.</div>`}
   </div>
   <div style="margin-top:12px;display:flex;gap:8px">
     <button class="btn ghost" onclick="S.editId='${t.id}';render()">Edit / override</button>
@@ -2360,10 +2454,12 @@ function editView(t) {
       <div class="field" style="margin-top:10px"><label>MGD</label><select id="ed_mgd"><option ${t.mgd !== 'Yes' ? 'selected':''}>No</option><option ${t.mgd === 'Yes' ? 'selected':''}>Yes</option></select></div>
     </div>
     <div class="slab" style="margin:16px 0 2px">Remediation pricing — extended for the line, $0 not “negligible”</div>
-    ${f('removal','Removal ($)', t.removal, '0', 'number')}
+    ${hasPred(t) ? `<div style="margin-top:8px;padding:9px 12px;border-radius:10px;background:var(--warn-bg);border:1px solid #eadfc2;font-size:11.5px;color:#7a5a1d;line-height:1.5"><strong>AI prediction on this line:</strong> ${[t.pred.prune!=null?'prune '+money(t.pred.prune):'',t.pred.removal!=null?'take-down '+money(t.pred.removal):'',t.pred.disposal!=null?'debris '+money(t.pred.disposal):'',t.pred.stump!=null?'stump '+money(t.pred.stump):''].filter(Boolean).join(' · ')}${t.pred.basis?'<br>'+esc(t.pred.basis):''}<br>Typing any price below makes it real and retires the prediction.</div>` : ''}
+    ${f('prune','Prune / repair ($)', t.prune, hasPred(t) && t.pred.prune != null ? String(t.pred.prune) : '0', 'number')}
+    ${f('removal','Take-down ($)', t.removal, hasPred(t) && t.pred.removal != null ? String(t.pred.removal) : '0', 'number')}
     <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:10px">
-      <div class="field" style="margin-top:10px"><label>Disposal method</label><select id="ed_dispmethod">${DISPOSALS.map(m => `<option ${t.disposalMethod === m ? 'selected':''}>${m}</option>`).join('')}</select></div>
-      ${f('disposal','Disposal ($)', t.disposal, '0', 'number')}
+      <div class="field" style="margin-top:10px"><label>Debris method</label><select id="ed_dispmethod">${DISPOSALS.map(m => `<option ${t.disposalMethod === m ? 'selected':''}>${m}</option>`).join('')}</select></div>
+      ${f('disposal','Debris ($)', t.disposal, hasPred(t) && t.pred.disposal != null ? String(t.pred.disposal) : '0', 'number')}
     </div>
     <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:10px">
       <div class="field" style="margin-top:10px"><label>Stump method</label><select id="ed_stumpmethod">${STUMPS.map(m => `<option ${t.stumpMethod === m ? 'selected':''}>${m}</option>`).join('')}</select></div>
@@ -2950,107 +3046,287 @@ function teamEmp() {
   </div>`;
 }
 
-/* Admin desktop: the Sheet becomes directly editable — every change is a
+/* Admin desktop: the Sheets grid is directly editable — every change is a
    normal record edit that syncs to the whole team like any capture. */
 const SHEET_EDIT = {
   'Project': { kind: 'proj' }, 'Hole / zone': { f: 'zone' }, 'Qty': { f: 'qty', num: 1 },
   'DBH (in)': { f: 'dbhIn', num: 1 }, 'Height (ft)': { f: 'heightFt', num: 1 },
   'Hazard': { kind: 'sel', f: 'hazard', opts: ['High Hazard', 'Moderate', 'Cleared'] },
   'Cause of loss': { f: 'cause' }, 'IP/OP': { kind: 'sel', f: 'ip', opts: ['IP', 'OP'] },
-  'Removal ($)': { f: 'removal', num: 1 }, 'Disposal ($)': { f: 'disposal', num: 1 },
-  'Stump ($)': { f: 'stump', num: 1 },
+  'Prune ($)': { f: 'prune', num: 1, cost: 1 }, 'Take-down ($)': { f: 'removal', num: 1, cost: 1 },
+  'Debris ($)': { f: 'disposal', num: 1, cost: 1 }, 'Stump ($)': { f: 'stump', num: 1, cost: 1 },
   'Assessor': { kind: 'assessor', f: 'surveyor' }, 'Notes': { f: 'notes' }
 };
-const SH_INP = 'border:1px solid var(--line);border-radius:7px;padding:5px 7px;font-size:11px;background:#fff;font-family:inherit;color:var(--ink)';
-function shCell(id, col, val) {
+const SH_INP = 'border:1px solid var(--line);border-radius:7px;padding:6px 7px;font-size:11.5px;background:#fff;font-family:inherit;color:var(--ink)';
+const SH_PRED = 'border:1px solid #d9b558;border-radius:7px;padding:6px 7px;font-size:11.5px;background:#fdf6e3;font-family:inherit;color:#7a5a1d;font-weight:700';
+function shCell(id, col, val, t) {
   const ed = SHEET_EDIT[col];
   const k = id.replace(/'/g, "\\'");
-  if (!ed) return `<span onclick="openEdit('${esc(k)}')" style="cursor:pointer">${esc(String(val))}</span>`;
-  if (ed.kind === 'proj') {
-    const cur = (S.trees.find(t => t.id === id) || {}); const site = siteOfT(cur);
-    return `<select onchange="shEdit('${esc(k)}','site',this.value)" style="${SH_INP};max-width:200px">${allProjects().map(p => `<option ${p === site ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>`;
+  t = t || S.trees.find(x => x.id === id) || {};
+  const admin = ADMIN();
+  if (col === 'Pricing') {
+    if (hasPred(t)) return `<span style="display:inline-flex;gap:5px;align-items:center"><span class="chip" style="background:#fdf6e3;color:#7a5a1d;border:1px solid #eadfc2;padding:4px 8px;font-size:9.5px;font-weight:700">AI ≈ ${money(predTotal(t))}</span>${admin ? `<button onclick="event.stopPropagation();acceptPred('${esc(k)}')" title="Accept the prediction as the price" style="border:0;background:var(--ink);color:#fff;border-radius:7px;padding:5px 9px;font-size:10px;font-weight:700;cursor:pointer">✓</button><button onclick="event.stopPropagation();clearPred('${esc(k)}')" title="Clear this prediction" style="border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 7px;font-size:10px;cursor:pointer">✕</button>` : ''}</span>`;
+    if (lineTotal(t) > 0 || t.prune != null || t.removal != null || t.disposal != null || t.stump != null) return `<span class="chip" style="background:#eaf5ee;color:#2f7d55;padding:4px 8px;font-size:9.5px;font-weight:700">${t.priceSource === 'AI prediction' ? 'AI ✓ accepted' : 'Priced'}</span>`;
+    return `<span style="color:var(--faint);font-size:10px">—</span>`;
   }
-  if (ed.kind === 'sel') return `<select onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${SH_INP}">${ed.opts.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  if (ed && ed.cost) {
+    const real = t[ed.f], pv = (t.pred || {})[ed.f];
+    if (!admin) return real != null ? `<span class="mono">${esc(String(real))}</span>` : (pv != null ? `<span class="mono" style="color:#b8842a" title="AI prediction — not yet accepted">≈${esc(String(pv))}</span>` : '');
+    const predMode = real == null && pv != null;
+    return `<input value="${real != null ? esc(String(real)) : (predMode ? esc(String(pv)) : '')}" type="number" step="any" data-pred="${predMode ? 1 : 0}" title="${predMode ? 'AI prediction — edit or Tab away to accept this number, ✓ accepts the whole line' : ''}" onkeydown="gridKey(event)" onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${predMode ? SH_PRED : SH_INP};width:76px">`;
+  }
+  if (col === 'Line total ($)') {
+    const lt = lineTotal(t);
+    if (lt > 0) return `<span class="mono" style="font-weight:700">${money(lt)}</span>`;
+    if (hasPred(t)) return `<span class="mono" style="font-weight:700;color:#b8842a" title="Predicted — not yet accepted">≈${money(predTotal(t))}</span>`;
+    return `<span style="color:var(--faint)">—</span>`;
+  }
+  if (!admin || !ed) return `<span ${admin ? '' : `onclick="openEdit('${esc(k)}')" style="cursor:pointer"`}>${esc(String(val ?? ''))}</span>`;
+  if (ed.kind === 'proj') {
+    const site = siteOfT(t);
+    return `<select onchange="shEdit('${esc(k)}','site',this.value)" onkeydown="gridKey(event)" style="${SH_INP};max-width:200px">${allProjects().map(p => `<option ${p === site ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>`;
+  }
+  if (ed.kind === 'sel') return `<select onchange="shEdit('${esc(k)}','${ed.f}',this.value)" onkeydown="gridKey(event)" style="${SH_INP}">${ed.opts.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   if (ed.kind === 'assessor') {
     const names = [...new Set([...Object.values(S.emp).filter(e => e && e.active !== false).map(e => e.name), String(val)].filter(Boolean))].sort();
-    return `<select onchange="shEdit('${esc(k)}','surveyor',this.value)" style="${SH_INP};max-width:130px">${names.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    return `<select onchange="shEdit('${esc(k)}','surveyor',this.value)" onkeydown="gridKey(event)" style="${SH_INP};max-width:130px">${names.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   }
-  return `<input value="${esc(String(val ?? ''))}" ${ed.num ? 'type="number" step="any"' : ''} onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${SH_INP};width:${ed.num ? '68px' : (col === 'Notes' ? '190px' : '96px')}">`;
+  return `<input value="${esc(String(val ?? ''))}" ${ed.num ? 'type="number" step="any"' : ''} onkeydown="gridKey(event)" onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${SH_INP};width:${ed.num ? '68px' : (col === 'Notes' ? '190px' : '96px')}">`;
 }
 function shEdit(id, field, val) {
   const t = S.trees.find(x => x.id === id); if (!t) return;
   if (field === 'zone') val = normZone(val);
-  if (['qty', 'dbhIn', 'heightFt', 'removal', 'disposal', 'stump'].includes(field)) { const n = parseFloat(val); val = isFinite(n) ? n : null; if (field === 'qty') val = Math.max(1, Math.round(n) || 1); }
+  if (['qty', 'dbhIn', 'heightFt', 'prune', 'removal', 'disposal', 'stump'].includes(field)) { const n = parseFloat(val); val = isFinite(n) ? n : null; if (field === 'qty') val = Math.max(1, Math.round(n) || 1); }
   if (field === 'site') { t.site = val; }
   else t[field] = val;
+  if (t.pred && ['prune', 'removal', 'disposal', 'stump'].includes(field)) {
+    delete t.pred[field];
+    if (val != null && (t.pred.by === 'AI' || t.pred.by === 'Rate card')) t.priceSource = t.priceSource || (t.pred.by === 'AI' ? 'AI prediction' : 'Rate-card prediction');
+    if (!hasPred(t)) delete t.pred;
+  }
   markDirty(t);
   try { DB.putTree(stripRuntime(t)); } catch (e) {}
   toast('Saved — syncing to the team');
 }
-/* ---- Sheet data (restored) ---- */
+/* Arrow keys / Enter walk the grid like a spreadsheet. */
+function gridKey(e) {
+  const kmap = { Enter: 1, ArrowDown: 1, ArrowUp: -1 };
+  if (!(e.key in kmap)) return;
+  const td = e.target.closest('td'); if (!td) return;
+  e.preventDefault();
+  const tr = td.closest('tr'), ci = [...tr.children].indexOf(td);
+  const next = kmap[e.key] > 0 ? tr.nextElementSibling : tr.previousElementSibling;
+  if (!next || !next.children[ci]) return;
+  const f = next.children[ci].querySelector('input,select');
+  if (f) { f.focus(); if (f.select) f.select(); next.children[ci].scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+}
+
+/* ---------------- AI pricing predictions ----------------
+   Calibrated from three real sources, in this order of authority:
+   1. Amy Cushman's rate card (crew $150/hr, debris $30/cu yd, stump $150/hr, $5,000/specimen sublimit)
+   2. Amy's ten priced Burnham rows (implied hours: prune ≈ DBH/4 h, removal ≈ DBH×0.95 h; prune debris 2–3 yd, removal debris ≈ DBH×0.75 yd)
+   3. The Lexington 2017 Exhibit-A unit prices (per-specimen medians by DBH band)
+   Predictions land in t.pred — amber, never on the record until accepted or edited. */
+const RATE = { crew: 150, debrisYd: 30, stumpHr: 150, sublimit: 5000 };
+const LEX_SCHEDULE = 'Lexington 2017 per-specimen medians — prune: 12-18" $450, 18-24" $900, 24-36" $1000; take-down: 6-12" $1000, 12-18" $1600, 18-24" $2200, 24-36" $3600, 36+" $4200; debris: $150-350; stump: 6-12" $150, 12-18" $300, 18-24" $450, 36+" $800.';
+function predictRow(t) {
+  const dbh = num(t.dbhIn) || 18, q = Math.max(1, t.qty || 1);
+  const haz = t.hazard || 'Moderate';
+  if (haz === 'Cleared') return null;
+  const r10 = v => Math.max(0, Math.round(v / 10) * 10);
+  const p = { prune: null, removal: null, disposal: null, stump: null };
+  if (haz === 'High Hazard') {
+    p.removal = r10(Math.max(6, Math.round(dbh * 0.95)) * RATE.crew) * q;
+    p.disposal = r10(Math.max(4, Math.round(dbh * 0.75)) * RATE.debrisYd) * q;
+    p.stump = r10(Math.max(1, Math.round(dbh / 8)) * RATE.stumpHr) * q;
+    p.basis = `Take-down · ${dbh}" × ${q} · ~${Math.max(6, Math.round(dbh * 0.95))} hrs @ $${RATE.crew}, ~${Math.max(4, Math.round(dbh * 0.75))} yd @ $${RATE.debrisYd} — rate card + Amy's priced rows`;
+  } else {
+    p.prune = r10(Math.min(12, Math.max(2, Math.round(dbh / 4))) * RATE.crew) * q;
+    p.disposal = r10((dbh > 24 ? 3 : 2) * RATE.debrisYd) * q;
+    p.basis = `Prune / repair · ${dbh}" × ${q} · ~${Math.min(12, Math.max(2, Math.round(dbh / 4)))} hrs @ $${RATE.crew} — rate card + Amy's priced rows`;
+  }
+  return p;
+}
+async function callClaudeBig(prompt, maxTok) {
+  const resp = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_tokens: maxTok || 3600, messages: [{ role: 'user', content: prompt }] }) });
+  if (!resp.ok) throw new Error('AI ' + resp.status);
+  return (await readClaudeText(resp)).trim();
+}
+async function aiPredictBatch(rows, priced) {
+  const prompt = `You are the pricing arborist for WTR Group finishing a storm-damage claim register. Predict remediation pricing for each unpriced line item below. Dollars are EXTENDED FOR THE LINE (unit price × qty).
+Rules, in order of authority:
+1. Rate card: crew $${RATE.crew}/man-hour, debris $${RATE.debrisYd}/cu yd, stump $${RATE.stumpHr}/hr. Policy debris sublimit $${RATE.sublimit} per specimen.
+2. Hours implied by the already-priced rows on THIS job (match their level, they are the ground truth): ${JSON.stringify(priced)}
+3. Precedent schedule: ${LEX_SCHEDULE}
+4. High Hazard = take-down + debris + stump, no prune. Moderate = prune + debris only. Never price a Cleared row.
+5. Andy prices near the $${RATE.sublimit}/specimen cap — go high on small removals to offset the big ones, but never exceed what the rate card can defend.
+6. Round to $10. Use null where a column does not apply.
+Rows to price: ${JSON.stringify(rows)}
+Reply with ONLY a JSON array, no markdown, no prose: [{"id":"...","prune":null,"takedown":2550,"debris":210,"stump":300,"basis":"one short line: hours × rate reasoning"}]`;
+  const txt = await callClaudeBig(prompt, 3800);
+  const clean = txt.replace(/```json|```/g, '').trim();
+  const arr = JSON.parse(clean.slice(clean.indexOf('['), clean.lastIndexOf(']') + 1));
+  const map = {};
+  for (const r of arr) if (r && r.id) map[r.id] = r;
+  return map;
+}
+async function predictPricing() {
+  if (S.predBusy) return;
+  const scope = sheetScope().filter(t => t.hazard !== 'Cleared' && t.prune == null && t.removal == null && t.disposal == null && t.stump == null);
+  if (!scope.length) { toast('Every line in scope already carries a price or is Cleared'); return; }
+  S.predBusy = true; render();
+  const priced = S.trees.filter(t => lineTotal(t) > 0).slice(0, 40).map(t => ({ species: (t.ai || {}).species, dbh: t.dbhIn, qty: t.qty || 1, hazard: t.hazard, prune: t.prune, takedown: t.removal, debris: t.disposal, stump: t.stump }));
+  let aiMap = {}, aiOk = false;
+  if (navigator.onLine) {
+    try {
+      const compact = scope.map(t => ({ id: t.id, species: (t.ai || {}).species || '', dbh: t.dbhIn, qty: t.qty || 1, hazard: t.hazard, failures: (t.failures || []).join('|'), health: (t.ai || {}).health }));
+      for (let i = 0; i < compact.length; i += 35) {
+        const m = await aiPredictBatch(compact.slice(i, i + 35), priced);
+        Object.assign(aiMap, m); aiOk = true;
+        toast(`Predicting… ${Math.min(i + 35, compact.length)} of ${compact.length}`);
+      }
+    } catch (e) { aiOk = Object.keys(aiMap).length > 0; }
+  }
+  let n = 0, ai = 0;
+  const numOr = (v, d) => (v == null || !isFinite(+v)) ? d : Math.max(0, Math.round(+v));
+  for (const t of scope) {
+    const d = predictRow(t); if (!d) continue;
+    const m = aiMap[t.id];
+    t.pred = m
+      ? { prune: numOr(m.prune, d.prune), removal: numOr(m.takedown, d.removal), disposal: numOr(m.debris, d.disposal), stump: numOr(m.stump, d.stump), basis: m.basis ? String(m.basis).slice(0, 220) : d.basis, by: 'AI', at: Date.now() }
+      : { prune: d.prune, removal: d.removal, disposal: d.disposal, stump: d.stump, basis: d.basis, by: 'Rate card', at: Date.now() };
+    if (m) ai++; n++;
+    markDirty(t); try { DB.putTree(stripRuntime(t)); } catch (e) {}
+  }
+  S.predBusy = false;
+  toast(n ? `${n} lines predicted${ai ? ` — ${ai} by AI` : ' from the rate card' + (navigator.onLine ? ' (AI unavailable)' : ' (offline)')}. Amber until accepted or edited.` : 'Nothing to predict');
+  render();
+}
+function applyPred(t) {
+  const p = t.pred; if (!p) return false;
+  if (p.prune != null && t.prune == null) t.prune = p.prune;
+  if (p.removal != null && t.removal == null) t.removal = p.removal;
+  if (p.disposal != null && t.disposal == null) t.disposal = p.disposal;
+  if (p.stump != null && t.stump == null) t.stump = p.stump;
+  t.priceSource = p.by === 'AI' ? 'AI prediction' : 'Rate-card prediction';
+  t.priceBasis = p.basis || ''; delete t.pred;
+  markDirty(t); try { DB.putTree(stripRuntime(t)); } catch (e) {}
+  return true;
+}
+function acceptPred(id) { const t = S.trees.find(x => x.id === id); if (!t || !hasPred(t)) return; applyPred(t); toast(`${id} priced ${money(lineTotal(t))} — syncing`); render(); }
+function clearPred(id) { const t = S.trees.find(x => x.id === id); if (!t || !t.pred) return; delete t.pred; markDirty(t); try { DB.putTree(stripRuntime(t)); } catch (e) {} render(); }
+function acceptAllPreds() { const sc = sheetScope().filter(hasPred); if (!sc.length) return; let n = 0; for (const t of sc) if (applyPred(t)) n++; toast(`${n} lines priced from predictions — syncing to the team`); render(); }
+function clearAllPreds() { const sc = sheetScope().filter(t => t.pred); for (const t of sc) { delete t.pred; markDirty(t); try { DB.putTree(stripRuntime(t)); } catch (e) {} } toast('Predictions cleared — nothing was written to prices'); render(); }
+
+/* ---- Sheets data ---- */
 function setSheetProject(p) { S.sheetProject = p; render(); }
 function sheetScope() { const vis = S.trees.filter(visT); if (!S.sheetProject) return vis; return vis.filter(t => projMatches(siteOfT(t), S.sheetProject)); }
 function sheetRows(src) {
-  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
+  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Band','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Pricing','Prune ($)','Take-down ($)','Debris method','Debris ($)','Stump method','Stump ($)','Line total ($)','Assessor','Notes'];
   const rows = [head];
-  for (const t of src) { const a = t.ai || {}; rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
+  for (const t of src) { const a = t.ai || {}; const pstate = hasPred(t) ? 'AI predicted ≈' + predTotal(t) : (lineTotal(t) > 0 || t.prune != null || t.removal != null || t.disposal != null || t.stump != null ? (t.priceSource === 'AI prediction' ? 'AI accepted' : 'Priced') : ''); rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', pstate, t.prune ?? '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
   return rows;
 }
 async function copyForSheets() {
-  const rows = sheetRows(sheetScope());
+  const rows = sheetRows(sheetSorted(sheetScope()));
   const tsv = rows.map(r => r.map(c => String(c ?? '').replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
   try { await navigator.clipboard.writeText(tsv); toast('Copied — paste straight into Google Sheets'); }
   catch (e) { toast('Copy blocked by the browser — use Export CSV instead'); }
 }
+function sheetSorted(src) {
+  let out = src.slice().sort((a, b) => a.id < b.id ? -1 : 1);
+  if (S.sheetHaz) out = out.filter(t => (t.hazard || '') === S.sheetHaz);
+  if (S.sheetQ) { const q = S.sheetQ.toLowerCase(); out = out.filter(t => { const a = t.ai || {}; return [t.id, t.zone, a.species, a.latin, t.cause, t.notes, t.locDetails, t.surveyor, siteOfT(t)].join(' ').toLowerCase().includes(q); }); }
+  return out;
+}
+function sheetSortRows(head, body) {
+  const s = S.sheetSort; if (!s || s.c == null) return body;
+  const c = s.c;
+  return body.slice().sort((a, b) => {
+    const av = a[c], bv = b[c];
+    const an = parseFloat(String(av).replace(/[^0-9.\-]/g, '')), bn = parseFloat(String(bv).replace(/[^0-9.\-]/g, ''));
+    let r;
+    if (isFinite(an) && isFinite(bn)) r = an - bn;
+    else r = String(av ?? '').localeCompare(String(bv ?? ''));
+    return r * s.d;
+  });
+}
+function sheetSort(ci) { const s = S.sheetSort || {}; S.sheetSort = (s.c === ci) ? (s.d === 1 ? { c: ci, d: -1 } : {}) : { c: ci, d: 1 }; render(); }
 function sheetView() {
   const projs = topProjects();
   if (S.sheetProject && !projs.includes(S.sheetProject)) S.sheetProject = null;
-  const src = sheetScope().slice().sort((a, b) => a.id < b.id ? -1 : 1);
+  const src = sheetSorted(sheetScope());
   const label = S.sheetProject || 'All projects';
-  const T = totals(src);
+  const scopeAll = sheetScope();
+  const T = totals(scopeAll);
   const rows = sheetRows(src);
-  const head = rows[0], body = rows.slice(1);
-  const hz = ['High Hazard','Moderate','Cleared'], cols = { 'High Hazard': 'var(--bad)', 'Moderate': 'var(--warn)', 'Cleared': 'var(--good)' };
-  const zones = Object.entries(T.byZone || {}).filter(z => z[1].cost).sort((x, y) => y[1].cost - x[1].cost).slice(0, 5);
-  const zmax = Math.max(1, ...zones.map(z => z[1].cost));
-  const bmax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
+  const head = rows[0], body = sheetSortRows(head, rows.slice(1));
+  const preds = scopeAll.filter(hasPred).length;
+  const unpriced = T.unpriced;
+  const hz = ['High Hazard', 'Moderate', 'Cleared'], hcol = { 'High Hazard': 'var(--bad)', 'Moderate': 'var(--warn)', 'Cleared': 'var(--good)' };
+  const pill = 'border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-size:11.5px;font-weight:700;color:var(--ink);cursor:pointer;flex:none;white-space:nowrap';
   return `
-  ${projs.length ? `<div style="margin-bottom:12px">${filterSel(S.sheetProject, projs, 'setSheetProject(this.value||null)', 'All projects')}</div>` : ''}
-  <div class="slab" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Live sheet · ${esc(label)}</span><span style="font-size:10px;font-weight:700;color:var(--good);letter-spacing:.06em">● LIVE</span></div>
-  <div class="card">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
-      <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.lines}</div><div style="font-size:10.5px;color:var(--muted)">Rows</div></div>
-      <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.specimens}</div><div style="font-size:10.5px;color:var(--muted)">Specimens</div></div>
-      <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${money(T.total)}</div><div style="font-size:10.5px;color:var(--muted)">Priced</div></div>
+  <div style="flex:none;display:flex;flex-direction:column;gap:9px;padding:12px 14px 10px;border-bottom:1px solid var(--line);background:#fff">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="slab" style="flex:none">Sheets · live grid</span>
+      ${projs.length ? filterSel(S.sheetProject, projs, 'setSheetProject(this.value||null)', 'All projects') : ''}
+      <input value="${esc(S.sheetQ || '')}" placeholder="Search ID, species, hole, notes…" oninput="S.sheetQ=this.value;clearTimeout(S._shq);S._shq=setTimeout(render,250)" style="${SH_INP};flex:1;min-width:150px;border-radius:999px;padding:8px 13px">
+      <span style="flex:none;display:inline-flex;gap:5px">${hz.map(h => `<button onclick="S.sheetHaz=S.sheetHaz==='${h}'?null:'${h}';render()" style="${pill};${S.sheetHaz === h ? `background:${hcol[h]};color:#fff;border-color:transparent` : ''};padding:8px 11px" title="${h} only">${h === 'High Hazard' ? '▲' : h === 'Moderate' ? '●' : '■'}</button>`).join('')}</span>
+      <span style="font-size:11px;color:var(--muted);flex:none;font-weight:600">${body.length} of ${T.lines} rows · ${T.specimens} specimens · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span> priced${preds ? ` · <span style="color:#b8842a;font-weight:700">≈${money(T.predTotal)} predicted</span>` : (unpriced ? ` · ${unpriced} unpriced` : '')}</span>
     </div>
-    <div style="display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:13px">${hz.map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${cols[h]}"></div>`).join('')}</div>
-    <div style="display:flex;gap:11px;margin-top:7px;font-size:10px;color:var(--muted);flex-wrap:wrap">${hz.map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${cols[h]};margin-right:4px"></span>${h} · ${T.byHaz[h].specimens}</span>`).join('')}</div>
-    ${zones.length ? `<div class="slab" style="margin-top:14px">Remediation by hole / zone</div>${zones.map(([z, v]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="width:86px;font-size:10px;color:var(--muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(z)}</div><div style="flex:1;height:10px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.max(3, Math.round(v.cost / zmax * 100))}%;background:var(--accent)"></div></div><div class="mono" style="width:64px;font-size:10px;font-weight:700;flex:none">${money(v.cost)}</div></div>`).join('')}` : ''}
-    <div class="slab" style="margin-top:14px">Size distribution · DBH</div>
-    <div style="display:flex;gap:6px;height:64px;margin-top:8px;align-items:flex-end">${DBH_BANDS.map(b => `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px"><div style="font-size:9px;font-weight:700;color:var(--muted)">${T.byBand[b].specimens || ''}</div><div style="width:60%;height:${Math.max(2, Math.round(T.byBand[b].specimens / bmax * 40))}px;background:var(--ink);border-radius:3px 3px 0 0"></div><div style="font-size:8px;color:var(--faint);white-space:nowrap">${b}</div></div>`).join('')}</div>
-  </div>
-  <div class="card" style="margin-top:10px;padding:9px 15px">
-    <button class="trow" onclick="exportXLSX(sheetScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export XLSX</span><span class="l2">${esc(label)} · opens in Excel &amp; Google Sheets</span></span><span style="color:var(--faint)">›</span></button>
-    <button class="trow" onclick="exportCSV(sheetScope())" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export CSV — V5 field data</span><span class="l2">Exact V5 column order A–X</span></span><span style="color:var(--faint)">›</span></button>
-    <button class="trow" onclick="copyForSheets()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Copy for Google Sheets</span><span class="l2">Copies the whole grid — paste into a Sheet, columns intact</span></span><span style="color:var(--faint)">›</span></button>
-  </div>
-  <div style="margin:14px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px" ><span class="slab">The grid · one row per line item</span><span style="display:inline-flex;gap:12px;align-items:baseline"><span style="font-size:11px;color:var(--faint)">Tap a row to edit any field</span>${body.length ? `<button onclick="S.sheetFull=true;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;color:var(--ink)">⤢ Full screen</button>` : ''}</span></div>
-  ${body.length ? gridTable(head, body, '58vh') : `<div class="card" style="text-align:center;padding:26px 16px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">No rows yet</div><div style="font-size:12px;color:var(--faint);margin-top:4px">Every capture writes a row here the moment it's logged — this is the spreadsheet, living.</div></div>`}
-  ${S.sheetFull && body.length ? `
-  <div style="position:fixed;inset:0;z-index:120;background:var(--bg);display:flex;flex-direction:column">
-    <div style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 12px) 18px 12px;border-bottom:1px solid var(--line);background:#fff">
-      <span class="slab" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">The grid · ${esc(label)} · ${body.length} row${body.length > 1 ? 's' : ''}</span>
-      ${ADMIN() ? '<span style="font-size:11px;color:var(--faint);flex:none">Every cell edits live</span>' : '<span style="font-size:11px;color:var(--faint);flex:none">Tap a row to edit</span>'}
-      <button onclick="S.sheetFull=false;render()" style="flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700">✕ Close&nbsp;·&nbsp;Esc</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      ${ADMIN() ? `
+      <button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
+      ${preds ? `<button onclick="acceptAllPreds()" style="${pill};background:var(--good);color:#fff;border-color:transparent">✓ Accept all ${preds}</button><button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
+      <span style="flex:1"></span>
+      <button onclick="S.sheetSummary=!S.sheetSummary;render()" style="${pill}">${S.sheetSummary ? '✕ Close summary' : '☰ Summary & exports'}</button>
     </div>
-    <div style="flex:1;min-height:0;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 14px)">${gridTable(head, body, '100%')}</div>
+    ${preds && ADMIN() ? `<div style="font-size:10.5px;color:#7a5a1d;background:var(--warn-bg);border:1px solid #eadfc2;border-radius:9px;padding:7px 11px;line-height:1.45"><strong>Amber numbers are predictions</strong> — calibrated on Amy's rate card, her ten priced rows and the Lexington 2017 schedule. Nothing hits the record until you edit a cell or hit ✓. Hover any amber cell for the basis.</div>` : ''}
+  </div>
+  <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px)">
+    ${body.length ? gridTable(head, body, src) : `<div class="card" style="text-align:center;padding:26px 16px;margin-top:8px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">${S.sheetQ || S.sheetHaz ? 'Nothing matches the filter' : 'No rows yet'}</div><div style="font-size:12px;color:var(--faint);margin-top:4px">${S.sheetQ || S.sheetHaz ? 'Clear the search or the hazard chip above.' : "Every capture writes a row here the moment it's logged — this is the spreadsheet, living."}</div></div>`}
+  </div>
+  ${S.sheetSummary ? `
+  <div onclick="if(event.target===this){S.sheetSummary=false;render()}" style="position:fixed;inset:0;z-index:130;background:rgba(22,24,29,.45);display:flex;justify-content:flex-end">
+    <div style="width:min(420px,94vw);height:100%;background:var(--bg);overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 16px);box-shadow:-12px 0 40px rgba(0,0,0,.18)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span class="slab">Summary & exports · ${esc(label)}</span><button onclick="S.sheetSummary=false;render()" style="${pill}">✕</button></div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
+          <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.lines}</div><div style="font-size:10.5px;color:var(--muted)">Rows</div></div>
+          <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.specimens}</div><div style="font-size:10.5px;color:var(--muted)">Specimens</div></div>
+          <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${money(T.total)}</div><div style="font-size:10.5px;color:var(--muted)">Priced</div></div>
+        </div>
+        <div style="display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:13px">${hz.map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${hcol[h]}"></div>`).join('')}</div>
+        <div style="display:flex;gap:11px;margin-top:7px;font-size:10px;color:var(--muted);flex-wrap:wrap">${hz.map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${hcol[h]};margin-right:4px"></span>${h} · ${T.byHaz[h].specimens}</span>`).join('')}</div>
+        <div class="slab" style="margin-top:14px">Where the money is</div>
+        <div style="margin-top:8px;font-size:12px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between"><span>Prune / repair</span><span class="mono">${money(T.prune)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Take-down</span><span class="mono">${money(T.removal)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Debris removal</span><span class="mono">${money(T.disposal)}</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Stump removal</span><span class="mono">${money(T.stump)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--hair);padding-top:5px"><span>Total remediation</span><span class="mono">${money(T.total)}</span></div>
+          ${T.predTotal ? `<div style="display:flex;justify-content:space-between;color:#b8842a;font-weight:700"><span>+ predicted, unaccepted</span><span class="mono">≈${money(T.predTotal)}</span></div>` : ''}
+          ${T.unpriced ? `<div style="font-size:10.5px;color:var(--faint)">${T.unpriced} line${T.unpriced > 1 ? 's' : ''} still unpriced.</div>` : ''}
+        </div>
+        <div class="slab" style="margin-top:14px">Size distribution · DBH</div>
+        <div style="display:flex;gap:6px;height:64px;margin-top:8px;align-items:flex-end">${DBH_BANDS.map(b => { const bm = Math.max(1, ...DBH_BANDS.map(x => T.byBand[x].specimens)); return `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px"><div style="font-size:9px;font-weight:700;color:var(--muted)">${T.byBand[b].specimens || ''}</div><div style="width:60%;height:${Math.max(2, Math.round(T.byBand[b].specimens / bm * 40))}px;background:var(--ink);border-radius:3px 3px 0 0"></div><div style="font-size:8px;color:var(--faint);white-space:nowrap">${b}</div></div>`; }).join('')}</div>
+      </div>
+      <div class="card" style="margin-top:10px;padding:9px 15px">
+        <button class="trow" onclick="exportXLSX(sheetSorted(sheetScope()), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export XLSX — carrier workbook</span><span class="l2">${esc(label)} · Prune / Take-down / Debris / Stump columns · opens in Excel & Google Sheets</span></span><span style="color:var(--faint)">›</span></button>
+        <button class="trow" onclick="exportCSV(sheetScope())" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export CSV — V5 field data</span><span class="l2">Exact V5 column order A–X</span></span><span style="color:var(--faint)">›</span></button>
+        <button class="trow" onclick="copyForSheets()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Copy for Google Sheets</span><span class="l2">Copies the whole grid — paste into a Sheet, columns intact</span></span><span style="color:var(--faint)">›</span></button>
+      </div>
+      <div style="margin-top:10px;font-size:10.5px;color:var(--faint);line-height:1.5">Predictions never leave the app in exports — only accepted prices export. The Pricing column labels each line so nothing predicted can pass as priced.</div>
+    </div>
   </div>` : ''}`;
 }
-function gridTable(head, body, maxH) {
-  return `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;${maxH === '100%' ? 'height:100%' : 'max-height:' + maxH};-webkit-overflow-scrolling:touch">
+function gridTable(head, body, src) {
+  const byId = {}; for (const t of (src || [])) byId[t.id] = t;
+  const s = S.sheetSort || {};
+  return `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
-      <tr>${head.map((h, ci) => `<th style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:8px 10px;white-space:nowrap">${esc(h)}</th>`).join('')}</tr>
-      ${body.map((r, ri) => `<tr ${ADMIN() ? '' : `onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer"`}>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && SHEET_EDIT[head[ci]] ? '3px 6px' : '7px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${ri % 2 ? '#faf9f5' : '#fff'};color:var(--body)">${ADMIN() ? shCell(String(r[0]), head[ci], c) : esc(String(c))}</td>`).join('')}</tr>`).join('')}
+      <tr>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
+      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr ${ADMIN() ? '' : `onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer"`}>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
     </table>
   </div>`;
 }
@@ -3058,7 +3334,7 @@ function gridTable(head, body, maxH) {
 /* ---- Report tab ---- */
 function setRepProject(p) { S.repProject = p; S.repZone = null; S.repUser = null; render(); }
 function setRepUser(u) { S.repUser = (S.repUser === u) ? null : u; render(); }
-const REP_SECS = [['charts','Charts'],['read','The read'],['money','Money summary'],['byhole','By-hole rollup'],['register','Asset register'],['photos','Photo journal'],['cert','Certification']];
+const REP_SECS = [['charts','Charts'],['read','The read'],['money','Money summary'],['byhole','By-hole rollup'],['register','Asset register'],['photos','Photo journal'],['findings','Findings & open items'],['cert','Certification']];
 function toggleSec(k) { S.repSecs[k] = S.repSecs[k] === false; try { localStorage.setItem('trice_repsecs', JSON.stringify(S.repSecs)); } catch (e) {} render(); }
 function toggleViz(k) { S.repViz[k] = !S.repViz[k]; try { localStorage.setItem('trice_repviz', JSON.stringify(S.repViz)); } catch (e) {} render(); }
 function vizCard(scoped, T) {
@@ -3218,7 +3494,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v20</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.1</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3249,12 +3525,12 @@ function exportXLSX(list, label) {
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
   const j = S.job || {};
   const imgUrl = t => t.photoKey ? location.origin + '/api/sync?img=' + encodeURIComponent(t.photoKey) : '';
-  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Removal ($)','Disposal ($)','Stump ($)','Line total ($)','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at','Photo','Photo URL']];
+  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Observed','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at','Photo','Photo URL']];
   for (const t of SRC) { const a = t.ai || {};
-    reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'', '', imgUrl(t)]);
+    reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', a.description||'', a.health ?? '', a.action||'', t.prune ?? '', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.priceSource || (lineTotal(t) ? 'Manual' : ''), t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'', '', imgUrl(t)]);
   }
   const highs=SRC.filter(t=>t.hazard==='High Hazard').length, mods=SRC.filter(t=>t.hazard==='Moderate').length, clr=SRC.filter(t=>t.hazard==='Cleared').length;
-  const sum = [['Trice — Tree assessment'],[''],['Site', S.site||''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor||''],['ISA cert #', j.assessorCert||''],['Carrier', j.carrier||''],['Claim', j.claim||''],['Event', j.stormName||''],['Date of loss', j.dateOfLoss||''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],['Remediation priced ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],[''],['Photos', 'The Photo column shows each image in-cell in Excel 365 and Google Sheets. The Photo URL column opens the image in any browser and works in every Excel version.']];
+  const sum = [['Trice — Tree assessment'],[''],['Site', S.site||''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor||''],['ISA cert #', j.assessorCert||''],['Carrier', j.carrier||''],['Claim', j.claim||''],['Event', j.stormName||''],['Date of loss', j.dateOfLoss||''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],[''],['Prune / repair ($)', SRC.reduce((s,t)=>s+num(t.prune),0)],['Take-down ($)', SRC.reduce((s,t)=>s+num(t.removal),0)],['Debris removal ($)', SRC.reduce((s,t)=>s+num(t.disposal),0)],['Stump removal ($)', SRC.reduce((s,t)=>s+num(t.stump),0)],['Total remediation ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],['Unpriced lines', SRC.filter(t=>t.prune==null&&t.removal==null&&t.disposal==null&&t.stump==null).length],[''],['Photos', 'The Photo column shows each image in-cell in Excel 365 and Google Sheets. The Photo URL column opens the image in any browser and works in every Excel version.']];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sum), 'Summary');
   const ws = XLSX.utils.aoa_to_sheet(reg);
@@ -3446,9 +3722,21 @@ function printReport(scope) {
     ${sec('charts') ? (() => {
       const hz = ['High Hazard','Moderate','Cleared'], cols = { 'High Hazard': '#b34b48', 'Moderate': '#b8842a', 'Cleared': '#2f7d55' };
       const stack = hz.map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${cols[h]}"></div>`).join('');
-      const zones = Object.entries(T.byZone).sort((a, b) => b[1].cost - a[1].cost).slice(0, 6);
-      const zmax = Math.max(1, ...zones.map(z => z[1].cost));
-      const zbars = zones.filter(z => z[1].cost).map(([z, v]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="width:104px;font-size:9.5px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(z)}</div><div style="flex:1;height:12px;background:#f2f1ec;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.max(3, Math.round(v.cost / zmax * 100))}%;background:#c8452c"></div></div><div style="width:58px;font-size:9.5px;font-weight:700;font-family:ui-monospace,Menlo,monospace;flex:none">${money(v.cost)}</div></div>`).join('');
+      /* Cost composition per zone — prune / take-down / debris / stump stacked, the chart the Lexington exhibit had and this beats: live, from the register. */
+      const CKEYS = [['prune', '#2f6fb8', 'Prune / repair'], ['removal', '#c8452c', 'Take-down'], ['disposal', '#2f7d55', 'Debris'], ['stump', '#5b4a9e', 'Stump']];
+      const zComp = {};
+      for (const t of TS) { const z = t.zone || 'No zone'; zComp[z] = zComp[z] || { prune: 0, removal: 0, disposal: 0, stump: 0, tot: 0 }; for (const [k] of CKEYS) zComp[z][k] += num(t[k]); zComp[z].tot += lineTotal(t); }
+      const zones = Object.entries(zComp).filter(z => z[1].tot).sort((a, b) => zoneSort(a[0], b[0])).slice(0, 18);
+      const zmax = Math.max(1, ...zones.map(z => z[1].tot));
+      const zbars = zones.map(([z, v]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="width:104px;font-size:9.5px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(z)}</div><div style="flex:1;height:13px;background:#f2f1ec;border-radius:3px;overflow:hidden;display:flex">${CKEYS.map(([k, c]) => v[k] ? `<div style="width:${Math.max(1, v[k] / zmax * 100)}%;background:${c}" title="${money(v[k])}"></div>` : '').join('')}</div><div style="width:58px;font-size:9.5px;font-weight:700;font-family:ui-monospace,Menlo,monospace;flex:none">${money(v.tot)}</div></div>`).join('') + (zones.length ? `<div style="display:flex;gap:10px;margin-top:8px;font-size:9px;color:#555;flex-wrap:wrap">${CKEYS.map(([k, c, l]) => `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:4px"></span>${l} · ${money(T[k === 'prune' ? 'prune' : k])}</span>`).join('')}</div>` : '');
+      const spMap = {}; for (const t of TS) { const s = (t.ai || {}).species || 'Pending'; spMap[s] = (spMap[s] || 0) + (t.qty || 1); }
+      const spTop = Object.entries(spMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const spMax = Math.max(1, ...spTop.map(s => s[1]));
+      const spBars = spTop.map(([s, n]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="width:118px;font-size:9.5px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(s)}</div><div style="flex:1;height:11px;background:#f2f1ec;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(n / spMax * 100))}%;background:#16181d"></div></div><div style="width:26px;font-size:9.5px;font-weight:700;flex:none">${n}</div></div>`).join('');
+      const fmMap = {}; for (const t of TS) for (const f of (t.failures || [])) fmMap[f] = (fmMap[f] || 0) + 1;
+      const fmTop = Object.entries(fmMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const fmMax = Math.max(1, ...fmTop.map(f => f[1]));
+      const fmBars = fmTop.map(([f, n]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="width:118px;font-size:9.5px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(f)}</div><div style="flex:1;height:11px;background:#f2f1ec;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(n / fmMax * 100))}%;background:#2f7d55"></div></div><div style="width:26px;font-size:9.5px;font-weight:700;flex:none">${n}</div></div>`).join('');
       const bmax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
       const bcols = DBH_BANDS.map(b => `<div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px"><div style="font-size:9px;font-weight:700;color:#555">${T.byBand[b].specimens || ''}</div><div style="width:64%;height:${Math.max(2, Math.round(T.byBand[b].specimens / bmax * 52))}px;background:#16181d;border-radius:3px 3px 0 0"></div><div style="font-size:8px;color:#999;white-space:nowrap">${b}</div></div>`).join('');
       return `<div style="display:flex;gap:12px;margin-top:14px;page-break-inside:avoid">
@@ -3460,27 +3748,47 @@ function printReport(scope) {
         <div style="display:flex;gap:6px;height:82px;margin-top:8px">${bcols}</div>
       </div>
       <div style="flex:1;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Remediation by zone</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Remediation cost by hole / zone — composition</div>
         ${zbars || '<div style="font-size:10px;color:#999;margin-top:9px">No priced lines yet.</div>'}
         <div style="margin-top:13px;border-top:1px solid #eee;padding-top:9px;display:flex;justify-content:space-between;font-size:10px"><span style="color:#555">In-play / out-of-play</span><span style="font-weight:700">${T.byIP.IP.lines} / ${T.byIP.OP.lines}</span></div>
         <div style="margin-top:5px;display:flex;justify-content:space-between;font-size:10px"><span style="color:#555">Unpriced lines</span><span style="font-weight:700;color:${T.unpriced ? '#b8842a' : '#2f7d55'}">${T.unpriced}</span></div>
         <div style="margin-top:5px;display:flex;justify-content:space-between;font-size:10px"><span style="color:#555">Assessment total</span><span style="font-weight:700;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</span></div>
       </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:12px;page-break-inside:avoid">
+      <div style="flex:1;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Specimens by species — top ${spTop.length}</div>
+        ${spBars || '<div style="font-size:10px;color:#999;margin-top:9px">No species on record yet.</div>'}
+      </div>
+      <div style="flex:1;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Mechanical failure mode — line items</div>
+        ${fmBars || '<div style="font-size:10px;color:#999;margin-top:9px">No failure modes recorded.</div>'}
+      </div>
     </div>`;
     })() : ''}
     ${sec('read') && S.execRead ? `<div style="margin-top:14px;padding:12px 14px;border:1px solid #ddd;border-left:3px solid #c8452c;border-radius:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#777;font-weight:700;margin-bottom:6px">The read</div><div style="font-size:11.5px;line-height:1.6;white-space:pre-wrap">${esc(S.execRead)}</div></div>` : ''}
     ${sec('money') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Where the money is</div>
-    <table><tr><td>Removal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td></tr><tr><td>Disposal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td></tr><tr><td>Stump</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td></tr><tr><td style="font-weight:700">Assessment total</td><td style="text-align:right;font-weight:700;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr></table>
-    ${T.unpriced ? `<div style="margin-top:6px;font-size:10.5px;color:#b8842a">${T.unpriced} line item${T.unpriced>1?'s are':' is'} not yet priced — totals above reflect priced lines only.</div>` : ''}` : ''}
+    <table>
+      <tr><td>Prune / repair <span style="color:#999">(${TS.filter(t=>t.prune!=null).length} lines)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td></tr>
+      <tr><td>Take-down <span style="color:#999">(${TS.filter(t=>t.removal!=null).length} lines)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td></tr>
+      <tr><td>Debris removal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td></tr>
+      <tr><td>Stump removal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td></tr>
+      <tr><td style="font-weight:700">Total remediation</td><td style="text-align:right;font-weight:700;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
+      ${T.specimens && T.total ? `<tr><td style="color:#555">Mean per specimen <span style="color:#999">(policy debris sublimit $5,000 / specimen)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;color:#555">${money(Math.round(T.total / T.specimens))}</td></tr>` : ''}
+    </table>
+    ${T.predicted ? `<div style="margin-top:6px;font-size:10.5px;color:#b8842a">${T.predicted} line${T.predicted>1?'s carry':' carries'} an unaccepted AI prediction (≈${money(T.predTotal)}) — predictions are excluded from every figure above.</div>` : ''}
+    ${T.unpriced ? `<div style="margin-top:4px;font-size:10.5px;color:#b8842a">${T.unpriced} line item${T.unpriced>1?'s are':' is'} not yet priced — totals above reflect priced lines only.</div>` : ''}` : ''}
     ${sec('byhole') && byHole ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">By hole / zone — one walk, every hole on the record</div>
     <table><tr><th>Hole / zone</th><th>Line items</th><th>Specimens</th><th>High hazard</th><th>Unpriced</th><th style="text-align:right">Remediation</th></tr>
-    ${zGroups.map(z => { const rows = TS.filter(t => zKey(t) === z); const spec = rows.reduce((s, t) => s + (t.qty || 1), 0); const hi = rows.filter(t => t.hazard === 'High Hazard').length; const unp = rows.filter(t => t.removal == null && t.disposal == null && t.stump == null).length; const cost = rows.reduce((s, t) => s + (lineTotal(t) || 0), 0); return `<tr><td style="font-weight:700">${esc(z)}</td><td>${rows.length}</td><td>${spec}</td><td style="color:${hi ? '#b34b48' : '#333'};font-weight:${hi ? 700 : 400}">${hi || '—'}</td><td>${unp || '—'}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${cost ? money(cost) : '—'}</td></tr>`; }).join('')}
+    ${zGroups.map(z => { const rows = TS.filter(t => zKey(t) === z); const spec = rows.reduce((s, t) => s + (t.qty || 1), 0); const hi = rows.filter(t => t.hazard === 'High Hazard').length; const unp = rows.filter(t => t.prune == null && t.removal == null && t.disposal == null && t.stump == null).length; const cost = rows.reduce((s, t) => s + (lineTotal(t) || 0), 0); return `<tr><td style="font-weight:700">${esc(z)}</td><td>${rows.length}</td><td>${spec}</td><td style="color:${hi ? '#b34b48' : '#333'};font-weight:${hi ? 700 : 400}">${hi || '—'}</td><td>${unp || '—'}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${cost ? money(cost) : '—'}</td></tr>`; }).join('')}
     </table>` : ''}
     ${sec('register') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Asset register</div>
     <table>
-      <tr><th>ID</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Cause of loss</th><th>Location</th><th style="text-align:right">Line total</th></tr>
-      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="10" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; return (sk != null ? `<tr><td colspan="11" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc(t.cause||'')}</td><td>${esc(t.locDetails||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${lineTotal(t) ? money(lineTotal(t)) : '—'}</td></tr>`; }).join('') + sub; }).join('')}
+      <tr><th>ID</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Failure mode</th><th style="text-align:right">Prune</th><th style="text-align:right">Take-down</th><th style="text-align:right">Debris</th><th style="text-align:right">Stump</th><th style="text-align:right">Line total</th></tr>
+      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="13" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="14" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
+      <tr><td colspan="9" style="font-weight:700;background:#16181d;color:#fff">TOTAL — ${TS.length} line items · ${T.specimens} specimens</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
     </table>
+    <div style="margin-top:5px;font-size:9.5px;color:#888">The totals row is computed from every line above, not from a filtered view. ≈ marks an unaccepted AI prediction — never included in any total.</div>
     ` : ''}${sec('photos') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Photo journal — every asset, on the record</div>
     ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => (sk ? `<div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(sk)}</div>` : '') + TS.filter(t => !sk || (multiSite ? groupKey(t) === sk : zKey(t) === sk)).map(t => { const a = t.ai||{}; return `
       <div class="ptree">
@@ -3491,14 +3799,37 @@ function printReport(scope) {
           <div style="color:#555;font-size:11px;margin-top:2px"><strong>Failure:</strong> ${esc((t.failures||[]).join(', ') || '—')} · <strong>Cause:</strong> ${esc(t.cause||'—')}</div>
           ${a.description ? `<div style="color:#555;font-size:11px;margin-top:2px"><strong>Observed:</strong> ${esc(a.description)}</div>` : ''}
           <div style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#555;margin-top:2px">${typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) + ' · ' : ''}${isoWhen(t.when)}${t.posMethod === 'adjusted' ? ' · position verified on imagery' : ''}${t.imported ? ' · imported photo' : ''}</div>
-          ${lineTotal(t) ? `<div style="font-size:11px;margin-top:3px"><strong>Remediation ${money(lineTotal(t))}</strong>${t.removal != null ? ' · removal ' + money(t.removal) : ''}${t.disposal != null ? ' · disposal ' + money(t.disposal) + (t.disposalMethod ? ' (' + esc(t.disposalMethod) + ')' : '') : ''}${t.stump != null ? ' · stump ' + money(t.stump) + (t.stumpMethod ? ' (' + esc(t.stumpMethod) + ')' : '') : ''}</div>` : ''}
+          ${lineTotal(t) ? `<div style="font-size:11px;margin-top:3px"><strong>Remediation ${money(lineTotal(t))}</strong>${t.prune != null ? ' · prune ' + money(t.prune) : ''}${t.removal != null ? ' · take-down ' + money(t.removal) : ''}${t.disposal != null ? ' · debris ' + money(t.disposal) + (t.disposalMethod ? ' (' + esc(t.disposalMethod) + ')' : '') : ''}${t.stump != null ? ' · stump ' + money(t.stump) + (t.stumpMethod ? ' (' + esc(t.stumpMethod) + ')' : '') : ''}${t.priceSource ? ' · priced via ' + esc(t.priceSource) : ''}</div>` : ''}
           ${a.action ? `<div style="margin-top:5px;padding:6px 10px;border-radius:8px;background:${t.hazard==='High Hazard'?'#fbeeed':(t.hazard==='Moderate'?'#f8f0dd':'#eaf5ee')}"><strong>Recommended:</strong> ${esc(a.action)}</div>` : ''}
           ${t.notes ? `<div style="margin-top:4px;font-size:10.5px;color:#555"><strong>Arborist notes:</strong> ${esc(t.notes)}</div>` : ''}
           ${t.reviewed ? `<div style="margin-top:4px;font-size:10px;color:#2f7d55;font-weight:700">✓ Arborist override — ${esc(t.overrideBy||'')} · ${t.overrideAt ? isoWhen(t.overrideAt) : ''} (original AI assessment retained on the record)</div>` : ''}
           ${t.hazard === 'Cleared' && t.clearedAt ? `<div style="margin-top:3px;font-size:10px;color:#2f7d55;font-weight:700">■ Cleared ${isoWhen(t.clearedAt)}${t.clearedBy ? ' · ' + esc(t.clearedBy) : ''}</div>` : ''}
         </div>
       </div>`; }).join('')).join('')}
-    ` : ''}${sec('cert') ? `<div style="margin-top:18px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Certification block</div>
+    ` : ''}${sec('findings') ? (() => {
+      /* Everything that must be resolved before this leaves the office — computed from the register, never typed. */
+      const F = [];
+      const add = (lvl, title, body) => F.push({ lvl, title, body });
+      const unp = TS.filter(t => t.prune == null && t.removal == null && t.disposal == null && t.stump == null);
+      if (unp.length) add('TODAY', `${unp.length} of ${TS.length} lines carry no price`, `Prune, take-down, debris and stump are empty on ${unp.length} rows. Run Predict pricing on the Sheets tab, review the amber numbers against the rate card, then accept or overwrite line by line.`);
+      if (T.predicted) add('HIGH', `${T.predicted} lines carry an unaccepted AI prediction (≈${money(T.predTotal)})`, `Predictions are amber, excluded from every total, and never export as prices. Accept or clear each one before this is issued.`);
+      const pend = TS.filter(t => t.pending);
+      if (pend.length) add('HIGH', `${pend.length} lines not yet analyzed`, `Photo, GPS and timestamp are on record; species, health and recommendation are pending. Open each and run the analysis.`);
+      const noGps = TS.filter(t => typeof t.lat !== 'number');
+      if (noGps.length) add('HIGH', `${noGps.length} lines carry no coordinate`, `A carrier cannot independently verify a tree without a pin. Place these on satellite from the Map tab.`);
+      const noFail = TS.filter(t => t.hazard && t.hazard !== 'Cleared' && !(t.failures || []).length);
+      if (noFail.length) add('MEDIUM', `${noFail.length} lines have a hazard rating but no failure mode`, `A rating without a recorded mechanism is harder to defend. Set the failure mode on each.`);
+      const unrev = TS.filter(t => !t.reviewed);
+      if (unrev.length) add('MEDIUM', `${unrev.length} of ${TS.length} lines are unreviewed`, `A claim exhibit should not leave the office unreviewed. The lead assessor walks the register before it is issued; every override is signed and dated with the original AI read retained.`);
+      const gapFields = certGaps();
+      if (gapFields.length) add('HIGH', `Certification block is incomplete — ${gapFields.length} required field${gapFields.length > 1 ? 's' : ''}`, `Missing: ${gapFields.join(', ')}. An unsigned assessment is a field note, not evidence.`);
+      const aiPriced = TS.filter(t => t.priceSource === 'AI prediction').length;
+      if (aiPriced) add('NOTE', `${aiPriced} lines were priced from accepted AI predictions`, `Each is marked "Priced via AI prediction" in the workbook export, calibrated on the rate card, this job's own priced rows and the Lexington 2017 schedule. The arborist's acceptance is the pricing decision of record.`);
+      if (!F.length) add('CLEAR', 'Nothing open', 'Every line is analyzed, located, priced and reviewed, and the certification block is complete.');
+      const LC = { TODAY: '#c8452c', HIGH: '#b34b48', MEDIUM: '#b8842a', NOTE: '#2f6fb8', CLEAR: '#2f7d55' };
+      return `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Findings and open items — computed from the register, not typed</div>
+      ${F.map(f => `<div style="margin-top:9px;padding:9px 12px;border-left:3px solid ${LC[f.lvl] || '#999'};background:#faf9f5;border-radius:0 8px 8px 0;page-break-inside:avoid"><span style="font-size:9px;font-weight:700;letter-spacing:.08em;color:${LC[f.lvl] || '#999'}">${f.lvl}</span> <strong style="font-size:11px">· ${esc(f.title)}</strong><div style="font-size:10.5px;color:#555;margin-top:2px;line-height:1.5">${esc(f.body)}</div></div>`).join('')}`;
+    })() : ''}${sec('cert') ? `<div style="margin-top:18px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Certification block</div>
     <div style="font-size:10.5px;color:#555;margin-top:6px">An unsigned assessment is a field note, not evidence.</div>
     <table>
       <tr><td style="width:40%;font-weight:700">Lead assessor</td><td>${na(S.surveyor)}</td></tr>
@@ -3548,7 +3879,7 @@ function printSubScope() {
           ${t.locDetails ? `<div style="color:#555;font-size:11px;margin-top:2px">${esc(t.locDetails)}</div>` : ''}
           <div style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#555;margin-top:2px">${typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) + ' · ' : ''}${isoWhen(t.when)}</div>
           ${a.action ? `<div style="margin-top:5px;padding:6px 10px;border-radius:8px;background:${t.hazard === 'High Hazard' ? '#fbeeed' : '#f8f0dd'}"><strong>Work:</strong> ${esc(a.action)}</div>` : ''}
-          <div style="margin-top:5px;font-size:10.5px;color:#333;border-top:1px dashed #ccc;padding-top:4px">Sub price: removal $________ · disposal $________ · stump $________</div>
+          <div style="margin-top:5px;font-size:10.5px;color:#333;border-top:1px dashed #ccc;padding-top:4px">Sub price: prune $________ · take-down $________ · debris $________ · stump $________</div>
         </div>
       </div>`; }).join('')}`).join('')}
     <div style="margin-top:16px;font-size:9.5px;color:#888;border-top:1px solid #ddd;padding-top:8px">Scope reflects conditions photographed at the coordinates and times shown. Not a purchase order. Generated by Trice × WTR on ${new Date().toLocaleString()}.</div>`;
@@ -3716,7 +4047,36 @@ function camView() {
 function emptyState(t, b) {
   return `<div style="text-align:center;padding:52px 16px;background:#fff;border:1px dashed #ddd9cf;border-radius:16px"><div style="font-size:16px;font-weight:600;color:#5c584f">${esc(t)}</div><div style="font-size:13px;color:var(--faint);margin-top:5px;max-width:300px;margin-left:auto;margin-right:auto">${esc(b)}</div></div>`;
 }
+/* ---------------- Team gate (v21.1) ----------------
+   One shared team password, checked on-device and remembered per device.
+   This is an access gate, not authentication — the app is a public file. */
+const GATE_HASH = 1630778633; /* djb2 of the WTR team password */
+const gateOk = () => { try { return localStorage.getItem('trice_gate') === String(GATE_HASH); } catch (e) { return true; } };
+function gateHash(str) { let h = 5381; for (const c of str) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0; return h; }
+function gateTry() {
+  const el = document.getElementById('gatePw'); const v = (el && el.value || '').trim();
+  if (gateHash(v) === GATE_HASH) { try { localStorage.setItem('trice_gate', String(GATE_HASH)); } catch (e) {} toast('Welcome to the WTR field module'); render(); }
+  else { toast('That password is not right — check with Andy or Cc'); if (el) { el.value = ''; el.focus(); } }
+}
+function gateView() {
+  return `<div class="view" style="display:flex;flex-direction:column;justify-content:center">
+    <div style="max-width:360px;margin:0 auto;width:100%;text-align:center;padding:10px 6px">
+      <div style="display:flex;justify-content:center"><div class="logo" style="width:56px;height:56px;border-radius:14px;gap:4.5px"><span style="height:3px;width:14px"></span><span style="height:3px;width:21px"></span><span style="height:3px;width:28px"></span></div></div>
+      <div style="font-size:15px;font-weight:800;letter-spacing:.22em;margin-top:18px">WTR FIELD MODULE</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:8px">Enter the team password to continue.</div>
+      <div class="field" style="margin-top:22px;text-align:left"><label>Password</label>
+        <div style="position:relative">
+          <input id="gatePw" type="${S.gateShow ? 'text' : 'password'}" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')gateTry()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 44px 12px 13px;background:#fff;color:var(--ink);font-size:15px">
+          <button onclick="S.gateShow=!S.gateShow;const v=document.getElementById('gatePw').value;render();const e=document.getElementById('gatePw');e.value=v;e.focus()" title="Show / hide" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;font-size:15px;color:var(--faint);padding:8px;cursor:pointer">${S.gateShow ? '🙈' : '👁'}</button>
+        </div>
+      </div>
+      <button class="btn primary" style="margin-top:16px" onclick="gateTry()">Continue</button>
+      <div style="margin-top:16px;font-size:11px;color:var(--faint)">One entry per device — this phone stays signed in.<br>Forgot it? Ask Andy or Cc.</div>
+    </div>
+  </div>`;
+}
 function render() {
+  if (!gateOk()) { document.getElementById('app').innerHTML = gateView(); const e = document.getElementById('gatePw'); if (e) setTimeout(() => e.focus(), 50); return; }
   if (S.draft) queueDraftSave();
   const app = document.getElementById('app');
   let body = '';
@@ -3731,12 +4091,14 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v20</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v21.1</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
-    <div class="view">${body}</div>
-    <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${navBtn('survey','Survey')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheet')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
+    <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
+    <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
+      ? `${navBtn('survey','Home')}<button onclick="fabCapture()" style="position:relative">${ICONS.capture}<span>Capture</span></button>${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheets')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
+      : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('trees','Register')}${navBtn('report','Report')}`}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
     ${S.camOpen ? camView() : ''}
@@ -3751,8 +4113,14 @@ const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900
 try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => render()); } catch (e) { window.addEventListener('resize', () => { clearTimeout(window.__rzT); window.__rzT = setTimeout(render, 200); }); }
 const ADMIN = () => S.admin && IS_DESKTOP();
 function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && S.tab === 'team') S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
+function fabCapture() {
+  if (!S.surveyor) { go('survey'); toast('Pick your name first'); return; }
+  if (!S.site) { go('survey'); toast('Join a project first — every capture files under it'); return; }
+  if (S.tab !== 'survey') { S.tab = 'survey'; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} }
+  S.detailId = null; S.editId = null; openCamera();
+}
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { S.tab = tab; S.sheetFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function go(tab) { S.tab = tab; S.sheetSummary = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Boot (migrates v2/v3 records) ---- */
 function migrate(t) {
