@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v15">
+<meta name="version" content="trice-v17">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -270,6 +270,13 @@ const S = {
   repSecs: (() => { try { return JSON.parse(localStorage.getItem('trice_repsecs') || '{}'); } catch (e) { return {}; } })(),
   repViz: (() => { try { return JSON.parse(localStorage.getItem('trice_repviz') || '{"hazmix":true,"zone":true}'); } catch (e) { return { hazmix: true, zone: true }; } })(),
   usersMeta: [],
+  emp: (() => { try { return JSON.parse(localStorage.getItem('trice_emp') || '{}'); } catch (e) { return {}; } })(),
+  assign: (() => { try { return JSON.parse(localStorage.getItem('trice_assign') || '{}'); } catch (e) { return {}; } })(),
+  hoursMap: (() => { try { return JSON.parse(localStorage.getItem('trice_hours') || '{}'); } catch (e) { return {}; } })(),
+  empDirty: {}, assignDirty: {}, hoursDirty: {},
+  deletedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_delproj') || '[]'); } catch (e) { return []; } })(),
+  archivedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_archproj') || '[]'); } catch (e) { return []; } })(),
+  teamWeek: 0,
   admin: localStorage.getItem('trice_admin') === '1',
   projects: (() => { try { return JSON.parse(localStorage.getItem('trice_projects') || '[]'); } catch (e) { return []; } })(),
   projectParents2: (() => {
@@ -533,7 +540,7 @@ async function putDirty() {
   dirty = S.trees.filter(t => t.dirty);
   const failed = [];
   let i = 0;
-  const baseMeta = { parentsLWW: S.projectParents2, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
+  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
   let metaSent = false;
   while (i < dirty.length || !metaSent) {
     const recs = [], photos = {};
@@ -549,7 +556,7 @@ async function putDirty() {
       if (needPhoto) photos[t.id] = { at: t.photoAt, data: t.photo };
       sz += mlen + plen; i++;
     }
-    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [] } : baseMeta);
+    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {} } : baseMeta);
     metaSent = true;
     try {
       const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -557,6 +564,9 @@ async function putDirty() {
       const j = await r.json();
       if (!j.v) { SYNC.fnStale = true; throw new Error('old server function'); }
       SYNC.fnStale = false;
+      if (body.empLWW && Object.keys(body.empLWW).length) S.empDirty = {};
+      if (body.assignLWW && Object.keys(body.assignLWW).length) S.assignDirty = {};
+      if (body.hoursLWW && Object.keys(body.hoursLWW).length) S.hoursDirty = {};
       const okIds = new Set(j.saved || []);
       const okPh = new Set(j.savedPhotos || []);
       for (const m of recs) {
@@ -631,16 +641,38 @@ function applyListMeta(j) {
   if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) return applyRemoteReset(j.resetAt).then(() => true);
   return Promise.resolve(false);
 }
+function mergeLWW(localMap, remote, dirtyMap) {
+  if (!remote) return false;
+  let ch = false;
+  for (const [k, e] of Object.entries(remote)) {
+    if (!e || dirtyMap[k]) continue;
+    const cur = localMap[k];
+    if (!cur || (e.at || 0) > (cur.at || 0)) { localMap[k] = e; ch = true; }
+  }
+  return ch;
+}
 function applySharedMeta(j) {
   let parCh = false;
   if (j.projectParents2) parCh = mergeParents(j.projectParents2);
+  let teamCh = false;
+  if (mergeLWW(S.emp, j.usersMeta && !Array.isArray(j.usersMeta) ? j.usersMeta : null, S.empDirty)) teamCh = true;
+  if (Array.isArray(j.usersMeta)) { for (const u of j.usersMeta) { if (u && u.name && !S.emp[u.name] && !S.empDirty[u.name]) { S.emp[u.name] = Object.assign({ active: true, at: 0 }, u); teamCh = true; } else if (u && u.name && S.emp[u.name] && !S.empDirty[u.name]) { S.emp[u.name].lastSeen = u.lastSeen || S.emp[u.name].lastSeen; } } }
+  if (mergeLWW(S.assign, j.assign, S.assignDirty)) teamCh = true;
+  if (mergeLWW(S.hoursMap, j.hours, S.hoursDirty)) teamCh = true;
+  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
   let projChanged = false;
-  if (j.deletedProjects && j.deletedProjects.length) {
+  if (Array.isArray(j.deletedProjects)) {
     const before = S.projects.length;
     S.projects = S.projects.filter(x => !j.deletedProjects.includes(x));
-    if (S.joined && j.deletedProjects.includes(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
-    projChanged = S.projects.length !== before;
+    if (String(S.deletedProjects) !== String(j.deletedProjects)) { S.deletedProjects = j.deletedProjects; try { localStorage.setItem('trice_delproj', JSON.stringify(j.deletedProjects)); } catch (e) {} projChanged = true; }
+    projChanged = projChanged || S.projects.length !== before;
   }
+  if (Array.isArray(j.archivedProjects) && String(S.archivedProjects) !== String(j.archivedProjects)) {
+    S.archivedProjects = j.archivedProjects;
+    try { localStorage.setItem('trice_archproj', JSON.stringify(j.archivedProjects)); } catch (e) {}
+    projChanged = true;
+  }
+  if (S.joined && projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
   if (Array.isArray(j.projects)) {
     const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
     if (add.length) { S.projects.push(...add); projChanged = true; }
@@ -1510,6 +1542,7 @@ const ICONS = {
   trees: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3.5 6.5 11h2.5L5.5 16.5h13L15 11h2.5L12 3.5z"/><path d="M12 16.5v4"/></svg>',
   sheet: '<svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="15" rx="2"/><path d="M4 9.5h16M9.5 4.5v15M4 14.5h16"/></svg>',
   report: '<svg class="ic" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5"/></svg>',
+  team: '<svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3 2.8-4.7 5.5-4.7S13.9 16 14.5 19"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M15.5 14.6c2.6.2 4.3 1.7 5 4.4"/></svg>',
 };
 const hazChipHTML = h => `<span class="chip ${HAZ_TONE(h)}">${h === 'High Hazard' ? '▲ ' : (h === 'Moderate' ? '● ' : '■ ')}${esc(h)}</span>`;
 const micBtn = id => `<button onclick="micInto('${id}')" title="Dictate" style="flex:none;border:1px solid var(--line);background:#fff;border-radius:10px;width:42px;display:flex;align-items:center;justify-content:center;font-size:16px">🎤</button>`;
@@ -1652,7 +1685,7 @@ function allProjects() {
   const s = new Set(S.projects);
   if (S.site) s.add(S.site);
   for (const t of S.trees) if (t.site) s.add(t.site);
-  return [...s].sort();
+  return [...s].filter(p => !projHidden(p)).sort();
 }
 
 
@@ -1671,6 +1704,19 @@ function projScope(name) {
   const all = [...new Set([...(S.projects || []), ...Object.keys(S.projectParents2 || {})])];
   return [name, ...all.filter(x => x !== name && isUnder(x, name))];
 }
+/* A project deleted or archived — or filed anywhere under one — disappears
+   from the map, sheets, reports, register, and pickers on every device.
+   Records are never destroyed: restoring an archived project brings its
+   assets straight back. */
+function projHidden(p) {
+  let c = p, g = 0;
+  while (c && g++ < 8) {
+    if (S.deletedProjects.includes(c) || S.archivedProjects.includes(c)) return true;
+    c = parentOf(c);
+  }
+  return false;
+}
+const visT = t => !projHidden(siteOfT(t));
 function persistParents() { try { localStorage.setItem('trice_parents2', JSON.stringify(S.projectParents2)); } catch (e) {} }
 function setParentLocal(child, parent) {
   if (parent && (parent === child || isUnder(parent, child))) { toast("Can't file a project under its own sub-project"); return false; }
@@ -1712,21 +1758,80 @@ function subsSheet(main) {
   </div>`;
 }
 
-async function deleteProject(name) {
-  if (!confirm('Delete the empty project "' + name + '" for the whole team?')) return;
+async function projMetaPost(body, okMsg) {
   try {
     const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ since: Date.now(), push: [], deletes: [], dropProject: name, user: S.surveyor || '' }) });
-    if (r.status === 409) { const j = await r.json(); toast('"' + name + '" still holds ' + j.trees + ' record' + (j.trees > 1 ? 's' : '') + ' — projects with work cannot be deleted'); return; }
+      body: JSON.stringify(Object.assign({ op: 'put', recs: [], photos: {}, user: S.surveyor || '' }, body)) });
     if (!r.ok) throw new Error('http ' + r.status);
-    S.projects = S.projects.filter(x => x !== name);
-    localStorage.setItem('trice_projects', JSON.stringify(S.projects));
-    if (S.joined === name) { S.joined = ''; localStorage.removeItem('trice_joined'); }
-    toast('"' + name + '" deleted for the team');
-    render();
-  } catch (e) { toast('Could not reach the server — try again with signal'); }
+    if (okMsg) toast(okMsg);
+    queueSync();
+    return true;
+  } catch (e) { toast('Could not reach the server — try again with signal'); return false; }
 }
-
+async function deleteProject(name) {
+  const n = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), name)).length;
+  const subs = projScope(name).length - 1;
+  if (!confirm('Delete "' + name + '" for the whole team?' + (n ? '\n\n' + n + ' asset' + (n > 1 ? 's' : '') + (subs ? ' and ' + subs + ' sub-project' + (subs > 1 ? 's' : '') : '') + ' will be hidden from the map, sheets and reports.' : '') + '\nNothing is destroyed on the server.')) return;
+  if (!(await projMetaPost({ dropProject: name }, '"' + name + '" deleted for the team'))) return;
+  S.projects = S.projects.filter(x => x !== name);
+  if (!S.deletedProjects.includes(name)) S.deletedProjects.push(name);
+  try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); localStorage.setItem('trice_delproj', JSON.stringify(S.deletedProjects)); } catch (e) {}
+  if (S.joined === name || projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+  render();
+}
+async function archiveProject(name) {
+  const n = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), name)).length;
+  if (!confirm('Archive "' + name + '"' + (n ? ' and its ' + n + ' asset' + (n > 1 ? 's' : '') : '') + '?\n\nIt disappears from the map, sheets and reports for the whole team. Restore it any time from the Archived list below.')) return;
+  if (!(await projMetaPost({ archiveProject: name }, '"' + name + '" archived'))) return;
+  if (!S.archivedProjects.includes(name)) S.archivedProjects.push(name);
+  try { localStorage.setItem('trice_archproj', JSON.stringify(S.archivedProjects)); } catch (e) {}
+  if (projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+  render();
+}
+async function restoreProject(name) {
+  if (!(await projMetaPost({ unarchiveProject: name }, '"' + name + '" restored — its assets are back everywhere'))) return;
+  S.archivedProjects = S.archivedProjects.filter(x => x !== name);
+  try { localStorage.setItem('trice_archproj', JSON.stringify(S.archivedProjects)); } catch (e) {}
+  render();
+}
+/* Turn a sub-project into what it really is on a golf course: a location.
+   Every asset moves up to the parent project and carries the sub-project's
+   name in its Hole / zone field, so by-hole rollups keep working. The empty
+   sub-project name is then removed. */
+async function subToLocation(name, silent) {
+  const parent = parentOf(name);
+  if (!parent) { toast('"' + name + '" is a top-level project — file it under another project first'); return 0; }
+  const scope = projScope(name);
+  const affected = S.trees.filter(t => scope.includes(siteOfT(t)));
+  if (!silent && !confirm('Turn "' + name + '" into a location under "' + parent + '"?\n\n' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' will move to "' + parent + '" with "' + name + '" as their Hole / zone. Applies to the whole team.')) return 0;
+  for (const t of affected) {
+    t.zone = normZone(siteOfT(t) === name ? name : siteOfT(t));
+    t.site = parent;
+    markDirty(t);
+    try { DB.putTree(stripRuntime(t)); } catch (e) {}
+  }
+  for (const p of scope) {
+    setParentLocal(p, null);
+    await projMetaPost({ dropProject: p });
+    S.projects = S.projects.filter(x => x !== p);
+    if (!S.deletedProjects.includes(p)) S.deletedProjects.push(p);
+  }
+  try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); localStorage.setItem('trice_delproj', JSON.stringify(S.deletedProjects)); } catch (e) {}
+  if (S.joined && !allProjects().includes(S.joined)) { S.joined = parent; try { localStorage.setItem('trice_joined', parent); } catch (e) {} }
+  queueSync();
+  if (!silent) { toast('"' + name + '" is now a location under "' + parent + '" · ' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' moved'); render(); }
+  return affected.length;
+}
+async function allSubsToLocations(parent) {
+  const kids = allProjects().filter(p => parentOf(p) === parent);
+  if (!kids.length) return;
+  const total = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), parent) && siteOfT(t) !== parent).length;
+  if (!confirm('Turn all ' + kids.length + ' sub-projects of "' + parent + '" into locations?\n\n' + total + ' asset' + (total === 1 ? '' : 's') + ' will move to "' + parent + '" carrying their sub-project name as Hole / zone. Applies to the whole team.')) return;
+  let moved = 0;
+  for (const k of kids) moved += await subToLocation(k, true);
+  toast(kids.length + ' sub-projects are now locations under "' + parent + '" · ' + moved + ' assets moved');
+  render();
+}
 function selectProject(name) {
   if (S.site === name) {
     S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {}
@@ -1844,12 +1949,15 @@ function pickerRows() {
         <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:${isSub ? '500' : '700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pj)}</span>
         <span style="display:block;font-size:11px;color:var(--muted)">${scopeN ? scopeN + ' asset' + (scopeN > 1 ? 's' : '') : 'Empty'}${nSubs ? ' · ' + nSubs + ' location' + (nSubs > 1 ? 's' : '') : ''}${parentOf(pj) ? ' · under ' + esc(parentOf(pj)) : ''}</span></span>
       </button>
-      ${S.pickerEdit ? `
-      <span style="display:inline-flex;gap:7px;align-items:center;flex:none">
-        <button onclick="moveStart(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 13px;font-size:11.5px;font-weight:700;color:var(--info)">Move</button>
-        ${canDelete ? `<button onclick="pickDelete(${i})" style="border:0;background:none;color:var(--bad);font-size:12px;font-weight:700;padding:8px 4px">Delete</button>` : ''}
-      </span>` : ''}
-    </div>`;
+    </div>
+    ${S.pickerEdit ? `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 12px ${depth * 22}px;margin-top:-6px">
+      <button onclick="moveStart(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">Move</button>
+      ${parentOf(pj) ? `<button onclick="pickToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">→ Location</button>` : ''}
+      ${nSubs ? `<button onclick="pickSubsToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">Subs → locations</button>` : ''}
+      <button onclick="pickArchive(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--muted)">Archive</button>
+      <button onclick="pickDelete(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--bad)">Delete</button>
+    </div>` : ''}`;
   }).join('');
 }
 function moveStart(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; S.moveFor = nm; render(); }
@@ -1863,6 +1971,9 @@ function moveTo(i) {
 }
 function pickJoin(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; selectProject(nm); S.showPicker = false; render(); }
 function pickDelete(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; deleteProject(nm); }
+function pickArchive(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; archiveProject(nm); }
+function pickToLoc(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; subToLocation(nm); }
+function pickSubsToLoc(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; allSubsToLocations(nm); }
 
 function projectPicker() {
   return `
@@ -1882,6 +1993,15 @@ function projectPicker() {
       <input id="projNew" placeholder="New project — e.g. Lexington CC" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:11px;padding:12px 14px;font-size:14px;background:#fff">
       <button class="btn dark" style="width:auto;padding:12px 20px;margin:0" onclick="createProject()">Create</button>
     </div>
+    ${S.pickerEdit && S.archivedProjects.length ? `
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="slab" style="margin-bottom:4px">Archived</div>
+      ${S.archivedProjects.slice().sort().map(a => { const ak = a.replace(/'/g, "\\'"); const an = S.trees.filter(t => siteOfT(t) === a || isUnder(siteOfT(t), a)).length; return `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--hair)">
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a)}</span><span style="display:block;font-size:10.5px;color:var(--faint)">${an ? an + ' asset' + (an > 1 ? 's' : '') + ' hidden with it' : 'Empty'}</span></span>
+        <button onclick="restoreProject('${esc(ak)}')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;color:var(--info);flex:none">Restore</button>
+      </div>`; }).join('')}
+    </div>` : ''}
   </div>`;
 }
 
@@ -2096,8 +2216,9 @@ function regChips() {
   return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${c('all','All')}${c('High Hazard','▲ High Hazard','bad')}${c('Moderate','● Moderate','warn')}${c('Cleared','■ Cleared','good')}${c('pending','Pending','warn')}</div>`;
 }
 function treesView() {
-  if (!S.trees.length) return emptyState('No assets logged yet', 'Photograph the first tree on the Survey tab — every logged asset lands here and on the map.');
-  const T = totals(S.trees);
+  const vis = S.trees.filter(visT);
+  if (!vis.length) return emptyState('No assets logged yet', 'Photograph the first tree on the Survey tab — every logged asset lands here and on the map.');
+  const T = totals(vis);
   const filtered = S.regQ.trim() || S.regHaz !== 'all';
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px">
@@ -2287,7 +2408,7 @@ function netCard() {
 }
 function mapView() {
   const projs = topProjects();
-  const scoped = S.trees.filter(t => projMatches(siteOfT(t), S.mapProject));
+  const scoped = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), S.mapProject));
   const all = scoped.filter(t => typeof t.lat === 'number');
   const users = mapUsers(scoped);
   const names = Object.keys(users).sort((a, b) => a === S.surveyor ? -1 : (b === S.surveyor ? 1 : a.localeCompare(b)));
@@ -2336,7 +2457,7 @@ function projBadgeIcon(name, info) {
 function mountMap() {
   const el = document.getElementById('map'); if (!el || typeof L === 'undefined') return;
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
-  let withGps = S.trees.filter(t => typeof t.lat === 'number');
+  let withGps = S.trees.filter(t => visT(t) && typeof t.lat === 'number');
   if (S.mapProject) withGps = withGps.filter(t => projMatches(siteOfT(t), S.mapProject));
   if (S.mapUser) withGps = withGps.filter(t => (t.surveyor || 'Unassigned') === S.mapUser);
   leafletMap = L.map(el, { zoomControl: true, attributionControl: true });
@@ -2405,9 +2526,188 @@ function mountMap() {
   if (S.gpsWatch.ok) L.circleMarker([S.gpsWatch.lat, S.gpsWatch.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#2f5573', fillOpacity: 1 }).addTo(leafletMap).bindPopup('You are here');
 }
 
+/* ---- Team tab (desktop admin): employees, assignments, hours ---- */
+function empUpd(name, field, val) {
+  const e = S.emp[name] || { name, active: true };
+  if (field === 'rate') val = Math.max(0, parseFloat(val) || 0);
+  if (field === 'active') val = !!val;
+  e[field] = val; e.at = Date.now();
+  S.emp[name] = e; S.empDirty[name] = e;
+  try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); } catch (er) {}
+  queueSync();
+}
+function empAdd() {
+  const el = document.getElementById('empNew'); const name = (el && el.value || '').trim();
+  if (!name) return;
+  if (S.emp[name]) { toast('Already on the team'); return; }
+  S.emp[name] = { name, role: '', cert: '', phone: '', email: '', rate: 0, active: true, at: Date.now() };
+  S.empDirty[name] = S.emp[name];
+  try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); } catch (er) {}
+  queueSync(); render();
+}
+function asgAdd() {
+  const u = document.getElementById('asgUser').value, p = document.getElementById('asgProj').value;
+  const d = document.getElementById('asgDate').value, n = document.getElementById('asgNote').value.trim();
+  if (!u || !p) { toast('Pick an employee and a project'); return; }
+  const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const e = { user: u, project: p, date: d || '', note: n, at: Date.now() };
+  S.assign[id] = e; S.assignDirty[id] = e;
+  try { localStorage.setItem('trice_assign', JSON.stringify(S.assign)); } catch (er) {}
+  queueSync(); render(); toast(u + ' assigned to ' + p);
+}
+function asgDel(id) {
+  const e = S.assign[id]; if (!e) return;
+  const d = Object.assign({}, e, { del: true, at: Date.now() });
+  S.assign[id] = d; S.assignDirty[id] = d;
+  try { localStorage.setItem('trice_assign', JSON.stringify(S.assign)); } catch (er) {}
+  queueSync(); render();
+}
+function hrsSave(id, entry) {
+  S.hoursMap[id] = entry; S.hoursDirty[id] = entry;
+  try { localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); } catch (er) {}
+  queueSync();
+}
+function hrsAdd() {
+  const u = document.getElementById('hrUser').value, p = document.getElementById('hrProj').value;
+  const d = document.getElementById('hrDate').value, h = parseFloat(document.getElementById('hrHours').value);
+  const n = document.getElementById('hrNote').value.trim();
+  if (!u || !d || !(h > 0)) { toast('Employee, date and hours are required'); return; }
+  const id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  hrsSave(id, { user: u, project: p || '', date: d, hours: Math.min(24, h), note: n, approved: false, at: Date.now() });
+  render(); toast(h + ' h logged for ' + u);
+}
+function hrsEdit(id, field, val) {
+  const e = S.hoursMap[id]; if (!e || e.del) return;
+  const x = Object.assign({}, e);
+  if (field === 'hours') x.hours = Math.max(0, Math.min(24, parseFloat(val) || 0));
+  else if (field === 'approved') x.approved = !!val;
+  else x[field] = val;
+  x.at = Date.now();
+  hrsSave(id, x);
+  if (field === 'approved') render();
+}
+function hrsDel(id) {
+  const e = S.hoursMap[id]; if (!e) return;
+  hrsSave(id, Object.assign({}, e, { del: true, at: Date.now() }));
+  render();
+}
+function weekStart(off) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow + off * 7);
+  return d;
+}
+function dkey(d) { return d.toISOString().slice(0, 10); }
+function exportHoursCSV(weekOnly) {
+  const ws = weekStart(S.teamWeek), we = new Date(ws); we.setDate(we.getDate() + 7);
+  let list = Object.entries(S.hoursMap).filter(([, e]) => e && !e.del);
+  if (weekOnly) list = list.filter(([, e]) => e.date >= dkey(ws) && e.date < dkey(we));
+  list.sort((a, b) => (a[1].date + a[1].user) < (b[1].date + b[1].user) ? -1 : 1);
+  const rows = [['Date','Employee','Project','Hours','Rate ($/h)','Cost ($)','Approved','Note']];
+  for (const [, e] of list) { const r = (S.emp[e.user] || {}).rate || 0; rows.push([e.date, e.user, e.project, e.hours, r || '', r ? (r * e.hours).toFixed(2) : '', e.approved ? 'Yes' : '', e.note || '']); }
+  const csv = rows.map(r => r.map(c => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\n');
+  download('trice-hours-' + (weekOnly ? dkey(ws) : 'all') + '.csv', 'text/csv', csv);
+}
+function teamView() {
+  if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Team management is an admin desktop tool — turn on Admin in the header on a desktop browser.</div>';
+  const emps = Object.values(S.emp).filter(e => e && e.name).sort((a, b) => (b.active !== false) - (a.active !== false) || a.name.localeCompare(b.name));
+  const actNames = emps.filter(e => e.active !== false).map(e => e.name);
+  const projs = allProjects();
+  const asgs = Object.entries(S.assign).filter(([, e]) => e && !e.del).sort((a, b) => (a[1].project + a[1].user).localeCompare(b[1].project + b[1].user));
+  const ws = weekStart(S.teamWeek);
+  const days = []; for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(d.getDate() + i); days.push(d); }
+  const we = new Date(ws); we.setDate(we.getDate() + 7);
+  const wkEntries = Object.entries(S.hoursMap).filter(([, e]) => e && !e.del && e.date >= dkey(ws) && e.date < dkey(we));
+  const cell = {}; const rowTot = {}; const projTot = {};
+  for (const [, e] of wkEntries) {
+    cell[e.user + '|' + e.date] = (cell[e.user + '|' + e.date] || 0) + e.hours;
+    rowTot[e.user] = (rowTot[e.user] || 0) + e.hours;
+    projTot[e.project || '—'] = (projTot[e.project || '—'] || 0) + e.hours;
+  }
+  const grand = Object.values(rowTot).reduce((s, v) => s + v, 0);
+  const wkCost = wkEntries.reduce((s, [, e]) => s + ((S.emp[e.user] || {}).rate || 0) * e.hours, 0);
+  const inp = 'border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;background:#fff;font-family:inherit;color:var(--ink)';
+  const wkLabel = ws.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' – ' + new Date(we - 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `
+  <div class="slab" style="margin-bottom:8px">Employees</div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px">
+      <tr style="text-align:left;color:var(--faint);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase"><th style="padding:6px 8px 8px 0">Name</th><th style="padding:6px 8px 8px 0">Role</th><th style="padding:6px 8px 8px 0">ISA cert #</th><th style="padding:6px 8px 8px 0">Phone</th><th style="padding:6px 8px 8px 0">Email</th><th style="padding:6px 8px 8px 0">Rate $/h</th><th style="padding:6px 0 8px">Active</th></tr>
+      ${emps.map(e => { const k = e.name.replace(/'/g, "\\'"); const off = e.active === false; return `
+      <tr style="border-top:1px solid var(--hair);${off ? 'opacity:.5' : ''}">
+        <td style="padding:8px 8px 8px 0;font-weight:700;white-space:nowrap">${esc(e.name)}</td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.role || '')}" onchange="empUpd('${esc(k)}','role',this.value)" style="${inp};width:110px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.cert || '')}" onchange="empUpd('${esc(k)}','cert',this.value)" style="${inp};width:96px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.phone || '')}" onchange="empUpd('${esc(k)}','phone',this.value)" style="${inp};width:110px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.email || '')}" onchange="empUpd('${esc(k)}','email',this.value)" style="${inp};width:150px"></td>
+        <td style="padding:8px 8px 8px 0"><input type="number" step="0.5" min="0" value="${e.rate || ''}" onchange="empUpd('${esc(k)}','rate',this.value)" style="${inp};width:70px"></td>
+        <td style="padding:8px 0"><input type="checkbox" ${off ? '' : 'checked'} onchange="empUpd('${esc(k)}','active',this.checked);render()" style="width:17px;height:17px"></td>
+      </tr>`; }).join('')}
+      <tr style="border-top:1px solid var(--hair)"><td colspan="7" style="padding:10px 0 2px"><input id="empNew" placeholder="New employee name" style="${inp};width:200px"> <button onclick="empAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;margin-left:6px">Add</button></td></tr>
+    </table>
+  </div>
+
+  <div class="slab" style="margin:18px 0 8px">Assignments</div>
+  <div class="card" style="padding:13px 15px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+      <select id="asgUser" style="${inp}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
+      <select id="asgProj" style="${inp};max-width:210px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
+      <input id="asgDate" type="date" value="${dkey(new Date())}" style="${inp}">
+      <input id="asgNote" placeholder="Note (optional)" style="${inp};flex:1;min-width:130px">
+      <button onclick="asgAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700">Assign</button>
+    </div>
+    ${asgs.length ? asgs.map(([id, e]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px">
+      <span style="font-weight:700;flex:none">${esc(e.user)}</span><span style="color:var(--faint)">→</span>
+      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.project)}${e.note ? ` <span style="color:var(--muted)">· ${esc(e.note)}</span>` : ''}</span>
+      <span style="color:var(--muted);flex:none">${esc(e.date || '')}</span>
+      <button onclick="asgDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:11.5px;font-weight:700;flex:none">Remove</button>
+    </div>`).join('') : '<div style="padding:12px 0 4px;font-size:12px;color:var(--muted)">No assignments yet — crews see their project on the Survey tab once assigned.</div>'}
+  </div>
+
+  <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center"><span>Time &amp; hours</span>
+    <span style="display:flex;gap:6px;align-items:center">
+      <button onclick="S.teamWeek--;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">‹</button>
+      <span style="font-size:12px;font-weight:700">${wkLabel}${S.teamWeek === 0 ? ' · this week' : ''}</span>
+      <button onclick="S.teamWeek++;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">›</button>
+    </span></div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <select id="hrUser" style="${inp}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
+      <select id="hrProj" style="${inp};max-width:190px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
+      <input id="hrDate" type="date" value="${dkey(new Date())}" style="${inp}">
+      <input id="hrHours" type="number" step="0.25" min="0.25" max="24" placeholder="Hours" style="${inp};width:78px">
+      <input id="hrNote" placeholder="Note (optional)" style="${inp};flex:1;min-width:120px">
+      <button onclick="hrsAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700">Log</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:680px">
+      <tr style="color:var(--faint);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right"><th style="text-align:left;padding:5px 8px 7px 0">Employee</th>${days.map(d => `<th style="padding:5px 6px 7px">${d.toLocaleDateString(undefined, { weekday: 'short' })}<br>${d.getDate()}</th>`).join('')}<th style="padding:5px 0 7px 8px">Total</th></tr>
+      ${actNames.map(n => `<tr style="border-top:1px solid var(--hair);text-align:right">
+        <td style="text-align:left;padding:7px 8px 7px 0;font-weight:700;white-space:nowrap">${esc(n)}</td>
+        ${days.map(d => { const v = cell[n + '|' + dkey(d)]; return `<td style="padding:7px 6px;color:${v ? 'var(--ink)' : 'var(--faint)'}">${v ? v.toFixed(v % 1 ? 2 : 0) : '·'}</td>`; }).join('')}
+        <td style="padding:7px 0 7px 8px;font-weight:800;${(rowTot[n] || 0) > 40 ? 'color:var(--bad)' : ''}">${(rowTot[n] || 0) ? (rowTot[n]).toFixed(rowTot[n] % 1 ? 2 : 0) + ((rowTot[n] > 40) ? ' OT' : '') : '—'}</td>
+      </tr>`).join('')}
+      <tr style="border-top:1.5px solid var(--line);text-align:right"><td style="text-align:left;padding:8px 8px 2px 0;font-weight:800">Week total</td><td colspan="7" style="padding:8px 0 2px;font-weight:800">${grand.toFixed(grand % 1 ? 2 : 0)} h${wkCost ? ' · $' + wkCost.toFixed(2) : ''}</td></tr>
+    </table>
+    ${Object.keys(projTot).length ? `<div style="margin-top:9px;font-size:11.5px;color:var(--muted)">${Object.entries(projTot).sort((a, b) => b[1] - a[1]).map(([p, h]) => esc(p) + ' ' + h.toFixed(h % 1 ? 2 : 0) + 'h').join(' · ')}</div>` : ''}
+    ${wkEntries.length ? `<div style="margin-top:13px;border-top:1px solid var(--hair)">${wkEntries.sort((a, b) => (a[1].date + a[1].user) < (b[1].date + b[1].user) ? -1 : 1).map(([id, e]) => `
+      <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12px">
+        <span style="color:var(--muted);flex:none;width:74px">${e.date.slice(5)}</span>
+        <span style="font-weight:700;flex:none;width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.user)}</span>
+        <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${esc(e.project || '—')}${e.note ? ' · ' + esc(e.note) : ''}</span>
+        <input type="number" step="0.25" min="0" max="24" value="${e.hours}" onchange="hrsEdit('${id}','hours',this.value)" style="${inp};width:66px;text-align:right;flex:none">
+        <label style="display:flex;align-items:center;gap:4px;flex:none;font-size:11px;color:var(--muted)"><input type="checkbox" ${e.approved ? 'checked' : ''} onchange="hrsEdit('${id}','approved',this.checked)" style="width:15px;height:15px">OK</label>
+        <button onclick="hrsDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:11px;font-weight:700;flex:none">×</button>
+      </div>`).join('')}</div>` : '<div style="margin-top:11px;font-size:12px;color:var(--muted)">No hours logged this week yet.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="exportHoursCSV(true)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Export this week (CSV)</button>
+      <button onclick="exportHoursCSV(false)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Export all hours (CSV)</button>
+    </div>
+  </div>`;
+}
+
 /* ---- Sheet tab: the live spreadsheet ---- */
 function setSheetProject(p) { S.sheetProject = p; render(); }
-function sheetScope() { if (!S.sheetProject) return S.trees; const scope = projScope(S.sheetProject); return S.trees.filter(t => scope.includes(siteOfT(t))); }
+function sheetScope() { const vis = S.trees.filter(visT); if (!S.sheetProject) return vis; return vis.filter(t => projMatches(siteOfT(t), S.sheetProject)); }
 function sheetRows(src) {
   const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
   const rows = [head];
@@ -2419,6 +2719,43 @@ async function copyForSheets() {
   const tsv = rows.map(r => r.map(c => String(c ?? '').replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
   try { await navigator.clipboard.writeText(tsv); toast('Copied — paste straight into Google Sheets'); }
   catch (e) { toast('Copy blocked by the browser — use Export CSV instead'); }
+}
+/* Admin desktop: the Sheet becomes directly editable — every change is a
+   normal record edit that syncs to the whole team like any capture. */
+const SHEET_EDIT = {
+  'Project': { kind: 'proj' }, 'Hole / zone': { f: 'zone' }, 'Qty': { f: 'qty', num: 1 },
+  'DBH (in)': { f: 'dbhIn', num: 1 }, 'Height (ft)': { f: 'heightFt', num: 1 },
+  'Hazard': { kind: 'sel', f: 'hazard', opts: ['High Hazard', 'Moderate', 'Cleared'] },
+  'Cause of loss': { f: 'cause' }, 'IP/OP': { kind: 'sel', f: 'ip', opts: ['IP', 'OP'] },
+  'Removal ($)': { f: 'removal', num: 1 }, 'Disposal ($)': { f: 'disposal', num: 1 },
+  'Stump ($)': { f: 'stump', num: 1 },
+  'Assessor': { kind: 'assessor', f: 'surveyor' }, 'Notes': { f: 'notes' }
+};
+const SH_INP = 'border:1px solid var(--line);border-radius:7px;padding:5px 7px;font-size:11px;background:#fff;font-family:inherit;color:var(--ink)';
+function shCell(id, col, val) {
+  const ed = SHEET_EDIT[col];
+  const k = id.replace(/'/g, "\\'");
+  if (!ed) return `<span onclick="openEdit('${esc(k)}')" style="cursor:pointer">${esc(String(val))}</span>`;
+  if (ed.kind === 'proj') {
+    const cur = (S.trees.find(t => t.id === id) || {}); const site = siteOfT(cur);
+    return `<select onchange="shEdit('${esc(k)}','site',this.value)" style="${SH_INP};max-width:200px">${allProjects().map(p => `<option ${p === site ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select>`;
+  }
+  if (ed.kind === 'sel') return `<select onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${SH_INP}">${ed.opts.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  if (ed.kind === 'assessor') {
+    const names = [...new Set([...Object.values(S.emp).filter(e => e && e.active !== false).map(e => e.name), String(val)].filter(Boolean))].sort();
+    return `<select onchange="shEdit('${esc(k)}','surveyor',this.value)" style="${SH_INP};max-width:130px">${names.map(o => `<option ${String(val) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  }
+  return `<input value="${esc(String(val ?? ''))}" ${ed.num ? 'type="number" step="any"' : ''} onchange="shEdit('${esc(k)}','${ed.f}',this.value)" style="${SH_INP};width:${ed.num ? '68px' : (col === 'Notes' ? '190px' : '96px')}">`;
+}
+function shEdit(id, field, val) {
+  const t = S.trees.find(x => x.id === id); if (!t) return;
+  if (field === 'zone') val = normZone(val);
+  if (['qty', 'dbhIn', 'heightFt', 'removal', 'disposal', 'stump'].includes(field)) { const n = parseFloat(val); val = isFinite(n) ? n : null; if (field === 'qty') val = Math.max(1, Math.round(n) || 1); }
+  if (field === 'site') { t.site = val; }
+  else t[field] = val;
+  markDirty(t);
+  try { DB.putTree(stripRuntime(t)); } catch (e) {}
+  toast('Saved — syncing to the team');
 }
 function sheetView() {
   const projs = topProjects();
@@ -2456,7 +2793,7 @@ function sheetView() {
   ${body.length ? `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;max-height:58vh;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr>${head.map((h, ci) => `<th style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:8px 10px;white-space:nowrap">${esc(h)}</th>`).join('')}</tr>
-      ${body.map((r, ri) => `<tr onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer">${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:7px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${ri % 2 ? '#faf9f5' : '#fff'};color:var(--body)">${esc(String(c))}</td>`).join('')}</tr>`).join('')}
+      ${body.map((r, ri) => `<tr ${ADMIN() ? '' : `onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer"`}>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && SHEET_EDIT[head[ci]] ? '3px 6px' : '7px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${ri % 2 ? '#faf9f5' : '#fff'};color:var(--body)">${ADMIN() ? shCell(String(r[0]), head[ci], c) : esc(String(c))}</td>`).join('')}</tr>`).join('')}
     </table>
   </div>` : `<div class="card" style="text-align:center;padding:26px 16px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">No rows yet</div><div style="font-size:12px;color:var(--faint);margin-top:4px">Every capture writes a row here the moment it's logged — this is the spreadsheet, living.</div></div>`}`;
 }
@@ -2500,7 +2837,7 @@ function openHeaderEditor() {
   S.showHeader = true; render();
   setTimeout(() => { const el = document.getElementById('setSite'); if (el) el.focus(); }, 60);
 }
-function repScopeProject() { return S.repProject ? S.trees.filter(t => siteOfT(t) === S.repProject) : S.trees; }
+function repScopeProject() { const vis = S.trees.filter(visT); return S.repProject ? vis.filter(t => projMatches(siteOfT(t), S.repProject)) : vis; }
 function repScope() { let L = repScopeProject(); if (S.repZone) L = L.filter(t => normZone(t.zone) === S.repZone); if (ADMIN() && S.repUser) L = L.filter(t => (t.surveyor || 'Unassigned') === S.repUser); return L; }
 function printScoped() { const sc = S.repProject ? { site: S.repProject } : { all: true }; if (S.repZone) sc.zone = S.repZone; if (ADMIN() && S.repUser) sc.assessor = S.repUser; sc.sections = S.repSecs; printReport(sc); }
 function exportScopedXLSX() { exportXLSX(repScope(), ((S.repProject || '') + (S.repZone ? '-' + S.repZone : '')).replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase()); }
@@ -2624,7 +2961,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v15</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v17</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3112,18 +3449,19 @@ function render() {
   else if (S.tab === 'map') body = mapView();
   else if (S.tab === 'trees') { const t = S.detailId && S.trees.find(x => x.id === S.detailId); body = t ? detailView(t) : treesView(); }
   else if (S.tab === 'sheet') body = sheetView();
+  else if (S.tab === 'team') body = teamView();
   else body = reportView();
   const navBtn = (tab, label) => `<button class="${S.tab === tab ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span style="position:absolute;top:5px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--accent);border:1.5px solid #fff"></span>' : ''}${ICONS[tab]}<span>${label}</span></button>`;
   const adjT = S.adjustId && S.trees.find(x => x.id === S.adjustId);
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v15</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v17</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
     <div class="view">${body}</div>
-    <div class="nav">${navBtn('survey','Survey')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheet')}${navBtn('report','Report')}</div>
+    <div class="nav">${navBtn('survey','Survey')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheet')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}</div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
     ${S.camOpen ? camView() : ''}
@@ -3137,7 +3475,7 @@ function render() {
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
 try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => render()); } catch (e) { window.addEventListener('resize', () => { clearTimeout(window.__rzT); window.__rzT = setTimeout(render, 200); }); }
 const ADMIN = () => S.admin && IS_DESKTOP();
-function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
+function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && S.tab === 'team') S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 function go(tab) { S.tab = tab; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 

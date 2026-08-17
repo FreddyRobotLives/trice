@@ -1,4 +1,14 @@
-# Trice Tree Survey — v12.0 · sync rebuilt from the ground up
+# Trice Tree Survey — v16 · desktop admin
+
+## New: Team tab (desktop, Admin mode)
+On a desktop browser, turn on Admin in the header. A Team tab appears with:
+- **Employees** — roster with role, ISA cert #, phone, email, hourly rate, active toggle. Edits sync to every device.
+- **Assignments** — assign any employee to any project with a date and note.
+- **Time & hours** — log hours per employee/project/day, weekly grid with per-day cells, weekly totals with overtime flagged past 40h, labor cost when rates are set, approval checkboxes, CSV export (week or all).
+- **Sheet editing** — in Admin mode the Sheet tab becomes directly editable: project, hole/zone, qty, DBH, height, hazard, cause, IP/OP, all pricing, assessor, notes. Every change syncs to the team like a normal capture.
+Mobile is untouched — crews see exactly the app they know.
+
+# v12 sync core (unchanged underneath)
 
 ## Deploy — GitHub only. Never drag-and-drop.
 Commit EVERY file to FreddyRobotLives/trice. Both index.html and netlify/functions/sync.mjs are required this round — they speak a new protocol together. Push; Netlify builds trice.live.
