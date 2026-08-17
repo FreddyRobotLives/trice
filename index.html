@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v23.7">
+<meta name="version" content="trice-v24.1">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -333,6 +333,8 @@ const S = {
   emp: (() => { try { return JSON.parse(localStorage.getItem('trice_emp') || '{}'); } catch (e) { return {}; } })(),
   subs: (() => { try { return JSON.parse(localStorage.getItem('trice_subs') || '{}'); } catch (e) { return {}; } })(),
   subsDirty: {},
+  projState: (() => { try { return JSON.parse(localStorage.getItem('trice_projstate') || '{}'); } catch (e) { return {}; } })(),
+  projStateDirty: {},
   assign: (() => { try { return JSON.parse(localStorage.getItem('trice_assign') || '{}'); } catch (e) { return {}; } })(),
   hoursMap: (() => { try { return JSON.parse(localStorage.getItem('trice_hours') || '{}'); } catch (e) { return {}; } })(),
   empDirty: {}, assignDirty: {}, hoursDirty: {}, budgetDirty: {},
@@ -604,7 +606,7 @@ async function putDirty() {
   dirty = S.trees.filter(t => t.dirty);
   const failed = [];
   let i = 0;
-  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, budgetLWW: S.budgetDirty, subsLWW: S.subsDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
+  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, budgetLWW: S.budgetDirty, subsLWW: S.subsDirty, projLWW: S.projStateDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
   let metaSent = false;
   while (i < dirty.length || !metaSent) {
     const recs = [], photos = {};
@@ -620,7 +622,7 @@ async function putDirty() {
       if (needPhoto) photos[t.id] = { at: t.photoAt, data: t.photo };
       sz += mlen + plen; i++;
     }
-    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {}, budgetLWW: {}, subsLWW: {} } : baseMeta);
+    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {}, budgetLWW: {}, subsLWW: {}, projLWW: {} } : baseMeta);
     metaSent = true;
     try {
       const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -633,6 +635,7 @@ async function putDirty() {
       if (body.hoursLWW && Object.keys(body.hoursLWW).length) S.hoursDirty = {};
       if (body.budgetLWW && Object.keys(body.budgetLWW).length) S.budgetDirty = {};
       if (body.subsLWW && Object.keys(body.subsLWW).length && parseFloat(j.v) >= 12.1) S.subsDirty = {};
+      if (body.projLWW && Object.keys(body.projLWW).length && parseFloat(j.v) >= 12.2) S.projStateDirty = {};
       const okIds = new Set(j.saved || []);
       const okPh = new Set(j.savedPhotos || []);
       for (const m of recs) {
@@ -727,7 +730,8 @@ function applySharedMeta(j) {
   if (mergeLWW(S.hoursMap, j.hours, S.hoursDirty)) teamCh = true;
   if (mergeLWW(S.budgets, j.budgets, S.budgetDirty)) teamCh = true;
   if (mergeLWW(S.subs, j.subs, S.subsDirty)) teamCh = true;
-  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); localStorage.setItem('trice_subs', JSON.stringify(S.subs)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
+  if (mergeLWW(S.projState, j.projstate, S.projStateDirty)) teamCh = true;
+  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); localStorage.setItem('trice_subs', JSON.stringify(S.subs)); localStorage.setItem('trice_projstate', JSON.stringify(S.projState)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
   let projChanged = false;
   if (Array.isArray(j.deletedProjects)) {
     const before = S.projects.length;
@@ -1613,6 +1617,7 @@ Write 2-3 tight paragraphs, plain prose, no headers, no bullets, no markdown. Le
 'use strict';
 /* ================= Views ================= */
 const ICONS = {
+  projects: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 7.5c0-1.1.9-2 2-2h4l2 2.5h6c1.1 0 2 .9 2 2v7c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2v-9.5z"/></svg>',
   survey: '<svg class="ic" viewBox="0 0 24 24"><path d="M4.5 11 12 4.5 19.5 11"/><path d="M6.5 9.5V19h11V9.5"/><path d="M10 19v-5h4v5"/></svg>',
   capture: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 8.5c0-1.1.9-2 2-2h1.6l1.2-1.8c.2-.3.5-.5.9-.5h4.6c.4 0 .7.2.9.5l1.2 1.8H18c1.1 0 2 .9 2 2V17c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V8.5z"/><circle cx="12" cy="12.5" r="3.2"/></svg>',
   map: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 4.5 4 6.5v13l5-2 6 2 5-2v-13l-5 2-6-2z"/><path d="M9 4.5v13M15 6.5v13"/></svg>',
@@ -1925,6 +1930,12 @@ function selectProject(name) {
   localStorage.setItem('trice_job', JSON.stringify(S.job));
   toast(`Joined ${name}`); render();
 }
+function createProjectHome() {
+  const el = document.getElementById('projNewHome'); const v = ((el && el.value) || '').trim();
+  if (!v) { toast('Name the project'); return; }
+  S.reviveNext = true; S.pickerQ = '';
+  selectProject(v);
+}
 function createProject() {
   S.reviveNext = true; S.pickerQ = '';
   const el = document.getElementById('projNew'); const v = ((el && el.value) || '').trim();
@@ -2004,7 +2015,7 @@ function homeGlance() {
   ${T.unpriced || preds ? `
   <div class="card" style="margin-bottom:14px">
     <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="slab">Remediation pricing</span><span style="font-size:13px;font-weight:700">${money(T.total)}</span></div>
-    <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> carry an amber AI prediction (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
+    <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> AI prediction pricing (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
     ${ADMIN() ? `<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
       ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : (preds ? '↻ Re-run predictions' : '⚡ Predict pricing')}</button>` : ''}
       <button class="btn ghost" style="flex:1;min-width:130px;padding:11px" onclick="go('sheet')">Open the grid</button>
@@ -2164,6 +2175,14 @@ function surveyView() {
       <span style="width:34px;height:34px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:var(--muted);flex:none">${esc((S.surveyor || '').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span>
       <button onclick="promptRename()" style="flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:var(--ink)"><span style="display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(S.surveyor)}</span><span style="display:block;font-size:11.5px;color:var(--muted)">Signs every record · tap to rename</span></button>
       <button onclick="switchUser()" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:var(--info);flex:none">Switch user</button>
+    </div>
+    <div class="card" style="padding:13px 15px;margin-bottom:14px">
+      <div class="slab" style="margin-bottom:8px">Create a project</div>
+      <div style="display:flex;gap:8px">
+        <input id="projNewHome" placeholder="Project name" onkeydown="if(event.key==='Enter')createProjectHome()" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff;color:var(--ink);font-size:14px">
+        <button class="btn dark" style="width:auto;margin:0;padding:11px 18px;flex:none" onclick="createProjectHome()">Create</button>
+      </div>
+      <div style="margin-top:7px;font-size:11px;color:var(--faint)">Creates and joins it — every capture files under it. Syncs to the whole team.</div>
     </div>
     ${homeGlance()}
     ${projectsCard()}
@@ -2692,6 +2711,101 @@ function mountMap() {
     leafletMap.setView([26.1420, -81.7946], 16);
   }
   if (S.gpsWatch.ok) L.circleMarker([S.gpsWatch.lat, S.gpsWatch.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#2f5573', fillOpacity: 1 }).addTo(leafletMap).bindPopup('You are here');
+}
+
+
+/* ---- Projects tab (desktop) ----
+   Every project on one screen: live stats, assigned workers, create with assignment,
+   and mark complete — completion is signed by whoever marked it and syncs team-wide. */
+function projMark(name, done) {
+  const k = name.replace(/'/g, "\\'");
+  if (done && !confirm('Mark "' + name + '" complete? The register stays intact; the project is stamped complete, signed by you, on every device.')) return;
+  const e = { done: !!done, by: S.surveyor || 'Admin', at: Date.now() };
+  S.projState[name] = e; S.projStateDirty[name] = e;
+  try { localStorage.setItem('trice_projstate', JSON.stringify(S.projState)); } catch (er) {}
+  queueSync(); render();
+  toast(done ? '"' + name + '" marked complete — signed ' + e.by : '"' + name + '" reopened');
+}
+function projAssignWorker(name) {
+  const sel = document.getElementById('pw_' + btoa(unescape(encodeURIComponent(name))).replace(/[^a-z0-9]/gi, ''));
+  const u = sel && sel.value;
+  if (!u) { toast('Pick a worker'); return; }
+  const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const e = { user: u, project: name, date: new Date().toISOString().slice(0, 10), time: '', note: 'Assigned from Projects', at: Date.now() };
+  S.assign[id] = e; S.assignDirty[id] = e;
+  try { localStorage.setItem('trice_assign', JSON.stringify(S.assign)); } catch (er) {}
+  queueSync(); render(); toast(u + ' assigned to ' + name + ' — on the Team schedule');
+}
+function projCreateDesk() {
+  const el = document.getElementById('projDeskNew'); const name = ((el && el.value) || '').trim();
+  if (!name) { toast('Name the project'); return; }
+  if (allProjects().includes(name)) { toast('That project already exists'); return; }
+  if (!S.projects.includes(name)) S.projects.push(name);
+  try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (er) {}
+  const picks = Array.from(document.querySelectorAll('input[name="npWorker"]:checked')).map(i => i.value);
+  for (const u of picks) {
+    const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const e = { user: u, project: name, date: new Date().toISOString().slice(0, 10), time: '', note: 'Assigned at project creation', at: Date.now() };
+    S.assign[id] = e; S.assignDirty[id] = e;
+  }
+  try { localStorage.setItem('trice_assign', JSON.stringify(S.assign)); } catch (er) {}
+  queueSync(); render();
+  toast('"' + name + '" created' + (picks.length ? ' · ' + picks.length + ' worker' + (picks.length > 1 ? 's' : '') + ' assigned — see Team › Schedule' : ' — crews can join it from any phone'));
+}
+function projectsView() {
+  if (!IS_DESKTOP()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Projects management is a desktop tool — on the phone, create and join projects from Home.</div>';
+  const emps = activeEmps();
+  const names = topProjects();
+  const st = n => S.projState[n] || {};
+  const active = names.filter(n => !st(n).done);
+  const doneL = names.filter(n => st(n).done);
+  const projRow = (n) => {
+    const k = n.replace(/'/g, "\\'");
+    const rows = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), n));
+    const T = totals(rows);
+    const last = rows.reduce((m, t) => Math.max(m, t.when || 0), 0);
+    const workers = [...new Set(Object.values(S.assign).filter(e => e && !e.del && e.project === n).map(e => e.user))];
+    const s = st(n);
+    const selId = 'pw_' + btoa(unescape(encodeURIComponent(n))).replace(/[^a-z0-9]/gi, '');
+    return `
+    <div class="card" style="margin-bottom:10px;${s.done ? 'opacity:.72' : ''}">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+            <span style="font-size:16px;font-weight:800">${esc(n)}</span>
+            ${s.done ? '<span class="chip" style="background:var(--soft);color:var(--muted)">■ Completed</span>' : '<span class="chip good">● Active</span>'}
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:5px">${T.lines} line item${T.lines === 1 ? '' : 's'} · ${T.specimens} specimens · ${money(T.total)} priced${T.byHaz['High Hazard'].lines ? ` · <span style="color:var(--bad);font-weight:700">${T.byHaz['High Hazard'].lines} high hazard</span>` : ''}${last ? ' · last capture ' + fmtWhen(last) : ' · no captures yet'}</div>
+          ${s.done ? `<div style="margin-top:7px;font-size:12px;font-weight:700;color:var(--good)">✓ Marked complete by ${esc(s.by || 'Unknown')} · ${fmtWhen(s.at)}</div>` : ''}
+          <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span class="slab" style="flex:none">Workers</span>
+            ${workers.length ? workers.map(w => `<span class="chip info">${esc(w)}</span>`).join('') : '<span style="font-size:11.5px;color:var(--faint)">none assigned</span>'}
+            ${!s.done && emps.length ? `<select id="${selId}" style="${TEAM_INP};width:150px;margin-left:4px"><option value="">Assign worker…</option>${emps.filter(e => !workers.includes(e.name)).map(e => `<option>${esc(e.name)}</option>`).join('')}</select><button onclick="projAssignWorker('${esc(k)}')" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;cursor:pointer">Assign</button>` : ''}
+          </div>
+        </div>
+        <div style="flex:none;display:flex;flex-direction:column;gap:8px;min-width:170px">
+          ${s.done
+            ? `<button class="btn ghost" style="margin:0;padding:11px" onclick="projMark('${esc(k)}', false)">Reopen project</button>`
+            : `<button class="btn primary" style="margin:0;padding:11px" onclick="projMark('${esc(k)}', true)">✓ Mark complete</button>`}
+          <button class="btn ghost" style="margin:0;padding:11px" onclick="S.projectId='${esc(k)}';render()">Details ›</button>
+        </div>
+      </div>
+    </div>`;
+  };
+  return `
+  <div class="slab" style="margin-bottom:10px">New project</div>
+  <div class="card" style="margin-bottom:18px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="projDeskNew" placeholder="Project name — e.g. Riverside Development" onkeydown="if(event.key==='Enter')projCreateDesk()" style="${TEAM_INP};flex:1;min-width:240px;padding:12px 14px;font-size:14px">
+      <button class="btn dark" style="width:auto;margin:0;padding:12px 22px" onclick="projCreateDesk()">Create project</button>
+    </div>
+    ${emps.length ? `<div class="slab" style="margin:14px 0 8px">Assign workers <span style="text-transform:none;letter-spacing:0;font-weight:600;color:var(--faint)">· optional · lands on Team › Schedule</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${emps.map(e => `<label style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer"><input type="checkbox" name="npWorker" value="${esc(e.name)}" style="width:15px;height:15px;accent-color:#2e4a5e">${esc(e.name)}</label>`).join('')}</div>` : `<div style="margin-top:10px;font-size:11.5px;color:var(--faint)">Add employees on Team › Employees to assign workers at creation.</div>`}
+  </div>
+  <div class="slab" style="margin-bottom:10px">Active projects · ${active.length}</div>
+  ${active.length ? active.map(projRow).join('') : '<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;margin-bottom:10px">No active projects — create one above.</div>'}
+  ${doneL.length ? `<div class="slab" style="margin:20px 0 10px">Completed · ${doneL.length}</div>${doneL.map(projRow).join('')}` : ''}
+  <div style="margin-top:6px;font-size:11px;color:var(--faint);line-height:1.55">Completion is a status, not a deletion — the register, map and reports keep every record. Marking complete is signed with your assessor name and syncs to the whole team.</div>`;
 }
 
 /* ---- Team tab (desktop admin): clock, timesheets, schedule, job costing, employees ---- */
@@ -3832,7 +3946,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.7</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.1</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4514,6 +4628,7 @@ function render() {
   else if (S.tab === 'map') body = mapView();
   else if (S.tab === 'trees') { const t = S.detailId && S.trees.find(x => x.id === S.detailId); body = t ? detailView(t) : treesView(); }
   else if (S.tab === 'sheet') body = sheetView();
+  else if (S.tab === 'projects') body = projectsView();
   else if (S.tab === 'team') body = teamView();
   else body = reportView();
   const navBtn = (tab, label) => { const on = S.tab === tab || (tab === 'report' && S.tab === 'trees'); return `<button class="${on ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${ICONS[tab]}<span>${label}</span>${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span class="ndot" title="Unsynced records on this device"></span>' : ''}</button>`; };
@@ -4521,7 +4636,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.7</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.1</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -4531,7 +4646,7 @@ function render() {
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
-      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
+      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${navBtn('projects','Projects')}${ADMIN() ? navBtn('team','Team') : ''}`
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}${IS_DESKTOP() ? `<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button>` : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
@@ -4660,7 +4775,7 @@ function migrate(t) {
   if (S.site && !localStorage.getItem('trice_joined')) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
-  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','sheet','report'].includes(lt)) S.tab = lt; }
+  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','sheet','report','projects'].includes(lt)) S.tab = lt; }
   render();
   syncNow(); SYNC.timer = setInterval(syncNow, 25000 + Math.floor(Math.random() * 12000));
   window.addEventListener('online', syncNow);

@@ -78,3 +78,8 @@ Subcontractors edits seem to re-send, the function has not redeployed yet.
 Share image: og.png replaced; og:image is cache-busted (?v=28). After
 deploy, run Facebook Sharing Debugger "Scrape Again" and LinkedIn Post
 Inspector once on https://trice.live so cached previews refresh.
+
+## v24.0 (17 Aug 2026)
+Sync function is now v12.2 (project completion state, meta/projstate).
+Devices refuse to clear queued completion marks until the server confirms
+12.2 — commit netlify/functions/sync.mjs with this release.
