@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v17">
+<meta name="version" content="trice-v18">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -135,10 +135,19 @@ body{overflow-x:hidden}
 .trow .hs{font-size:16px;font-weight:700;flex:none;text-align:right;min-width:32px}
 
 /* Photo zoom overlay */
-.zoom{position:fixed;inset:0;z-index:80;background:#0b0e12;display:flex;flex-direction:column}
-.zoom .zt{flex:none;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 12px;display:flex;justify-content:space-between;align-items:center;color:#fff;gap:12px}
-.zoom img{flex:1;min-height:0;width:100%;object-fit:contain}
-.zoom .zb{flex:none;padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 20px);color:#fff}
+.zoom{position:fixed;inset:0;z-index:80;background:#000;display:flex;flex-direction:column}
+.zoom .zimg{flex:1;min-height:0;position:relative}
+.zoom .zimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.zoom .zclose{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;width:42px;height:42px;border-radius:50%;border:0;background:rgba(22,24,28,.55);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2}
+.zoom .zsheet{flex:none;max-height:44vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(17,19,23,.94);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border-radius:22px 22px 0 0;padding:20px 22px calc(env(safe-area-inset-bottom,0px) + 20px);color:#fff}
+.zoom .zin{max-width:640px;margin:0 auto}
+.zoom .zttl{font-size:22px;font-weight:800;letter-spacing:-.01em;line-height:1.2;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.zoom .zhz{font-size:11.5px;font-weight:800;letter-spacing:.02em;border-radius:999px;padding:5px 12px;flex:none}
+.zoom .zsub{font-size:13px;color:rgba(235,238,243,.55);margin-top:5px;line-height:1.45}
+.zoom .zrec{font-size:14.5px;line-height:1.6;color:rgba(235,238,243,.88);margin-top:14px}
+.zoom .zbtns{display:flex;gap:9px;margin-top:18px}
+.zoom .zbtn{flex:1;border:0;border-radius:14px;padding:15px 10px;font-size:14px;font-weight:700;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.12);color:#fff}
+.zoom .zbtn.pri{background:#fff;color:#101216}
 .backmap{border:0;border-radius:999px;background:rgba(255,255,255,.14);color:#fff;font-size:12.5px;font-weight:700;padding:9px 16px;display:inline-flex;align-items:center;gap:7px;backdrop-filter:blur(6px)}
 
 .sheet-scrim{position:fixed;inset:0;z-index:60;background:rgba(11,14,18,.45)}
@@ -273,7 +282,9 @@ const S = {
   emp: (() => { try { return JSON.parse(localStorage.getItem('trice_emp') || '{}'); } catch (e) { return {}; } })(),
   assign: (() => { try { return JSON.parse(localStorage.getItem('trice_assign') || '{}'); } catch (e) { return {}; } })(),
   hoursMap: (() => { try { return JSON.parse(localStorage.getItem('trice_hours') || '{}'); } catch (e) { return {}; } })(),
-  empDirty: {}, assignDirty: {}, hoursDirty: {},
+  empDirty: {}, assignDirty: {}, hoursDirty: {}, budgetDirty: {},
+  budgets: (() => { try { return JSON.parse(localStorage.getItem('trice_budgets') || '{}'); } catch (e) { return {}; } })(),
+  teamSec: 'clock',
   deletedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_delproj') || '[]'); } catch (e) { return []; } })(),
   archivedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_archproj') || '[]'); } catch (e) { return []; } })(),
   teamWeek: 0,
@@ -540,7 +551,7 @@ async function putDirty() {
   dirty = S.trees.filter(t => t.dirty);
   const failed = [];
   let i = 0;
-  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
+  const baseMeta = { parentsLWW: S.projectParents2, empLWW: S.empDirty, assignLWW: S.assignDirty, hoursLWW: S.hoursDirty, budgetLWW: S.budgetDirty, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
   let metaSent = false;
   while (i < dirty.length || !metaSent) {
     const recs = [], photos = {};
@@ -556,7 +567,7 @@ async function putDirty() {
       if (needPhoto) photos[t.id] = { at: t.photoAt, data: t.photo };
       sz += mlen + plen; i++;
     }
-    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {} } : baseMeta);
+    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [], empLWW: {}, assignLWW: {}, hoursLWW: {}, budgetLWW: {} } : baseMeta);
     metaSent = true;
     try {
       const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -567,6 +578,7 @@ async function putDirty() {
       if (body.empLWW && Object.keys(body.empLWW).length) S.empDirty = {};
       if (body.assignLWW && Object.keys(body.assignLWW).length) S.assignDirty = {};
       if (body.hoursLWW && Object.keys(body.hoursLWW).length) S.hoursDirty = {};
+      if (body.budgetLWW && Object.keys(body.budgetLWW).length) S.budgetDirty = {};
       const okIds = new Set(j.saved || []);
       const okPh = new Set(j.savedPhotos || []);
       for (const m of recs) {
@@ -659,7 +671,8 @@ function applySharedMeta(j) {
   if (Array.isArray(j.usersMeta)) { for (const u of j.usersMeta) { if (u && u.name && !S.emp[u.name] && !S.empDirty[u.name]) { S.emp[u.name] = Object.assign({ active: true, at: 0 }, u); teamCh = true; } else if (u && u.name && S.emp[u.name] && !S.empDirty[u.name]) { S.emp[u.name].lastSeen = u.lastSeen || S.emp[u.name].lastSeen; } } }
   if (mergeLWW(S.assign, j.assign, S.assignDirty)) teamCh = true;
   if (mergeLWW(S.hoursMap, j.hours, S.hoursDirty)) teamCh = true;
-  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
+  if (mergeLWW(S.budgets, j.budgets, S.budgetDirty)) teamCh = true;
+  if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
   let projChanged = false;
   if (Array.isArray(j.deletedProjects)) {
     const before = S.projects.length;
@@ -2535,7 +2548,7 @@ function mountMap() {
   if (S.gpsWatch.ok) L.circleMarker([S.gpsWatch.lat, S.gpsWatch.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#2f5573', fillOpacity: 1 }).addTo(leafletMap).bindPopup('You are here');
 }
 
-/* ---- Team tab (desktop admin): employees, assignments, hours ---- */
+/* ---- Team tab (desktop admin): clock, timesheets, schedule, job costing, employees ---- */
 function empUpd(name, field, val) {
   const e = S.emp[name] || { name, active: true };
   if (field === 'rate') val = Math.max(0, parseFloat(val) || 0);
@@ -2549,20 +2562,20 @@ function empAdd() {
   const el = document.getElementById('empNew'); const name = (el && el.value || '').trim();
   if (!name) return;
   if (S.emp[name]) { toast('Already on the team'); return; }
-  S.emp[name] = { name, role: '', cert: '', phone: '', email: '', rate: 0, active: true, at: Date.now() };
+  S.emp[name] = { name, role: '', cert: '', certExp: '', phone: '', email: '', rate: 0, active: true, at: Date.now() };
   S.empDirty[name] = S.emp[name];
   try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); } catch (er) {}
   queueSync(); render();
 }
 function asgAdd() {
   const u = document.getElementById('asgUser').value, p = document.getElementById('asgProj').value;
-  const d = document.getElementById('asgDate').value, n = document.getElementById('asgNote').value.trim();
+  const d = document.getElementById('asgDate').value, tm = document.getElementById('asgTime').value.trim(), n = document.getElementById('asgNote').value.trim();
   if (!u || !p) { toast('Pick an employee and a project'); return; }
   const id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const e = { user: u, project: p, date: d || '', note: n, at: Date.now() };
+  const e = { user: u, project: p, date: d || '', time: tm, note: n, at: Date.now() };
   S.assign[id] = e; S.assignDirty[id] = e;
   try { localStorage.setItem('trice_assign', JSON.stringify(S.assign)); } catch (er) {}
-  queueSync(); render(); toast(u + ' assigned to ' + p);
+  queueSync(); render(); toast(u + ' scheduled on ' + p);
 }
 function asgDel(id) {
   const e = S.assign[id]; if (!e) return;
@@ -2579,14 +2592,16 @@ function hrsSave(id, entry) {
 function hrsAdd() {
   const u = document.getElementById('hrUser').value, p = document.getElementById('hrProj').value;
   const d = document.getElementById('hrDate').value, h = parseFloat(document.getElementById('hrHours').value);
+  const kind = document.getElementById('hrKind').value;
   const n = document.getElementById('hrNote').value.trim();
   if (!u || !d || !(h > 0)) { toast('Employee, date and hours are required'); return; }
   const id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  hrsSave(id, { user: u, project: p || '', date: d, hours: Math.min(24, h), note: n, approved: false, at: Date.now() });
-  render(); toast(h + ' h logged for ' + u);
+  hrsSave(id, { user: u, project: kind === 'work' ? (p || '') : '', date: d, hours: Math.min(24, h), kind, note: n, approved: false, at: Date.now() });
+  render(); toast(h + ' h ' + (kind === 'work' ? 'logged' : kind.toUpperCase()) + ' for ' + u);
 }
 function hrsEdit(id, field, val) {
   const e = S.hoursMap[id]; if (!e || e.del) return;
+  if (e.approved && field !== 'approved') { toast('Approved entries are locked — untick OK first'); render(); return; }
   const x = Object.assign({}, e);
   if (field === 'hours') x.hours = Math.max(0, Math.min(24, parseFloat(val) || 0));
   else if (field === 'approved') x.approved = !!val;
@@ -2597,138 +2612,255 @@ function hrsEdit(id, field, val) {
 }
 function hrsDel(id) {
   const e = S.hoursMap[id]; if (!e) return;
+  if (e.approved) { toast('Approved entries are locked'); return; }
   hrsSave(id, Object.assign({}, e, { del: true, at: Date.now() }));
   render();
 }
+/* ---- Punch clock: one running entry per person; hours accrue on the entry ---- */
+function runningEntry(user) { return Object.entries(S.hoursMap).find(([, e]) => e && !e.del && e.user === user && e.in > 0) || null; }
+function clockIn(user, project) {
+  if (runningEntry(user)) { toast(user + ' is already on the clock'); return; }
+  const id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  hrsSave(id, { user, project: project || '', date: dkey(new Date()), hours: 0, kind: 'work', in: Date.now(), note: '', approved: false, at: Date.now() });
+  render();
+}
+function clockOut(user) {
+  const r = runningEntry(user); if (!r) return;
+  const [id, e] = r;
+  const worked = Math.round(((Date.now() - e.in) / 36e5) * 100) / 100;
+  hrsSave(id, Object.assign({}, e, { hours: Math.min(24, Math.round((e.hours + worked) * 100) / 100), in: 0, at: Date.now() }));
+  render(); toast(user + ' clocked out · ' + worked.toFixed(2) + ' h');
+}
+function clockOutAll() { for (const n of Object.keys(S.emp)) if (runningEntry(n)) clockOut(n); }
+function elapsedHrs(e) { return e.hours + (e.in ? (Date.now() - e.in) / 36e5 : 0); }
+/* live ticker: refresh elapsed labels without re-rendering (keeps inputs focused) */
+setInterval(() => {
+  if (S.tab !== 'team') return;
+  document.querySelectorAll('[data-clock]').forEach(el => {
+    const r = runningEntry(el.getAttribute('data-clock'));
+    if (r) el.textContent = elapsedHrs(r[1]).toFixed(2) + ' h';
+  });
+}, 15000);
+function otThresh() { return (S.budgets['~ot'] && S.budgets['~ot'].hours) || 40; }
+function setOT(v) { const h = Math.max(0, parseFloat(v) || 40); S.budgets['~ot'] = { hours: h, at: Date.now() }; S.budgetDirty['~ot'] = S.budgets['~ot']; try { localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); } catch (e) {} queueSync(); render(); }
+function setBudget(proj, v) { const h = Math.max(0, parseFloat(v) || 0); const k = proj; S.budgets[k] = { hours: h, at: Date.now() }; S.budgetDirty[k] = S.budgets[k]; try { localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); } catch (e) {} queueSync(); }
 function weekStart(off) {
   const d = new Date(); d.setHours(0, 0, 0, 0);
   const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow + off * 7);
   return d;
 }
 function dkey(d) { return d.toISOString().slice(0, 10); }
+function payFor(tot, rate) { const th = otThresh(); const reg = Math.min(tot, th), ot = Math.max(0, tot - th); return { reg, ot, cost: reg * rate + ot * rate * 1.5 }; }
+function approveWeek() {
+  const ws = weekStart(S.teamWeek), we = new Date(ws); we.setDate(we.getDate() + 7);
+  let n = 0;
+  for (const [id, e] of Object.entries(S.hoursMap)) {
+    if (e && !e.del && !e.approved && !e.in && e.date >= dkey(ws) && e.date < dkey(we)) { hrsSave(id, Object.assign({}, e, { approved: true, at: Date.now() })); n++; }
+  }
+  toast(n ? n + ' entries approved & locked' : 'Nothing to approve'); render();
+}
 function exportHoursCSV(weekOnly) {
   const ws = weekStart(S.teamWeek), we = new Date(ws); we.setDate(we.getDate() + 7);
-  let list = Object.entries(S.hoursMap).filter(([, e]) => e && !e.del);
+  let list = Object.entries(S.hoursMap).filter(([, e]) => e && !e.del && !e.in);
   if (weekOnly) list = list.filter(([, e]) => e.date >= dkey(ws) && e.date < dkey(we));
   list.sort((a, b) => (a[1].date + a[1].user) < (b[1].date + b[1].user) ? -1 : 1);
-  const rows = [['Date','Employee','Project','Hours','Rate ($/h)','Cost ($)','Approved','Note']];
-  for (const [, e] of list) { const r = (S.emp[e.user] || {}).rate || 0; rows.push([e.date, e.user, e.project, e.hours, r || '', r ? (r * e.hours).toFixed(2) : '', e.approved ? 'Yes' : '', e.note || '']); }
+  const weekTot = {};
+  for (const [, e] of list) if ((e.kind || 'work') === 'work') weekTot[e.user] = (weekTot[e.user] || 0) + e.hours;
+  const rows = [['Date','Employee','Type','Project','Hours','Rate ($/h)','Cost ($)','Approved','Note']];
+  for (const [, e] of list) { const r = (S.emp[e.user] || {}).rate || 0; rows.push([e.date, e.user, (e.kind || 'work').toUpperCase(), e.project, e.hours, r || '', r ? (r * e.hours).toFixed(2) : '', e.approved ? 'Yes' : '', e.note || '']); }
+  if (weekOnly) { rows.push([]); rows.push(['Weekly summary','','','','Reg','OT (x1.5)','Total pay ($)']); for (const [u, tot] of Object.entries(weekTot)) { const p = payFor(tot, (S.emp[u] || {}).rate || 0); rows.push([u, '', '', '', p.reg.toFixed(2), p.ot.toFixed(2), p.cost.toFixed(2)]); } }
   const csv = rows.map(r => r.map(c => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(',')).join('\n');
   download('trice-hours-' + (weekOnly ? dkey(ws) : 'all') + '.csv', 'text/csv', csv);
 }
+const TEAM_INP = 'border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;background:#fff;font-family:inherit;color:var(--ink)';
 function teamView() {
   if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Team management is an admin desktop tool — turn on Admin in the header on a desktop browser.</div>';
-  const emps = Object.values(S.emp).filter(e => e && e.name).sort((a, b) => (b.active !== false) - (a.active !== false) || a.name.localeCompare(b.name));
-  const actNames = emps.filter(e => e.active !== false).map(e => e.name);
+  const secs = [['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees']];
+  return `
+  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">${secs.map(([k, l]) => `<button onclick="S.teamSec='${k}';render()" style="border:1px solid ${S.teamSec === k ? 'var(--ink)' : 'var(--line)'};background:${S.teamSec === k ? 'var(--ink)' : '#fff'};color:${S.teamSec === k ? '#fff' : 'var(--ink)'};border-radius:999px;padding:9px 17px;font-size:12.5px;font-weight:700">${l}</button>`).join('')}</div>
+  ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : teamEmp()}`;
+}
+function activeEmps() { return Object.values(S.emp).filter(e => e && e.name && e.active !== false).sort((a, b) => a.name.localeCompare(b.name)); }
+function teamClock() {
+  const emps = activeEmps();
+  if (!emps.length) return '<div class="card" style="padding:20px;font-size:13px;color:var(--muted)">Add employees first — Employees section above.</div>';
   const projs = allProjects();
-  const asgs = Object.entries(S.assign).filter(([, e]) => e && !e.del).sort((a, b) => (a[1].project + a[1].user).localeCompare(b[1].project + b[1].user));
+  const today = dkey(new Date());
+  const onClock = emps.filter(e => runningEntry(e.name));
+  const todayAsg = Object.values(S.assign).filter(a => a && !a.del && a.date === today);
+  return `
+  ${onClock.length ? `<div class="card" style="padding:13px 16px;margin-bottom:12px;border-left:3px solid var(--good)"><div class="slab" style="margin-bottom:6px;color:var(--good)">On the clock now · ${onClock.length}</div>${onClock.map(e => { const [, r] = runningEntry(e.name); return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px"><span style="width:9px;height:9px;border-radius:50%;background:var(--good);flex:none"></span><span style="font-weight:700;flex:none;width:130px">${esc(e.name)}</span><span style="flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.project || 'No project')}</span><span data-clock="${esc(e.name)}" style="font-weight:800;flex:none">${elapsedHrs(r).toFixed(2)} h</span><button onclick="clockOut('${esc(e.name.replace(/'/g, "\\\\'"))}')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:var(--bad);flex:none">Clock out</button></div>`; }).join('')}<button onclick="clockOutAll()" style="margin-top:6px;border:0;background:none;color:var(--bad);font-size:11.5px;font-weight:700;padding:0">Clock out everyone</button></div>` : ''}
+  <div class="card" style="padding:13px 16px">
+    <div class="slab" style="margin-bottom:8px">Punch clock</div>
+    ${emps.map(e => { const k = e.name.replace(/'/g, "\\\\'"); const run = runningEntry(e.name); const asg = todayAsg.find(a => a.user === e.name); return `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--hair);font-size:13px">
+      <span style="font-weight:700;flex:none;width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.name)}</span>
+      ${run ? `<span style="flex:1;color:var(--muted)">On the clock · ${esc(run[1].project || 'No project')}</span><button onclick="clockOut('${esc(k)}')" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:12px;font-weight:700;color:var(--bad);flex:none">Clock out</button>`
+      : `<select id="ci_${esc(e.name.replace(/[^a-z0-9]/gi, '_'))}" style="${TEAM_INP};flex:1;max-width:260px">${['<option value="">' + (asg ? esc(asg.project) + ' (assigned today)' : 'Project…') + '</option>', ...projs.map(p => `<option ${asg && asg.project === p ? 'selected' : ''}>${esc(p)}</option>`)].join('')}</select>
+      <button onclick="clockIn('${esc(k)}', document.getElementById('ci_${esc(e.name.replace(/[^a-z0-9]/gi, '_'))}').value || '${asg ? esc(asg.project.replace(/'/g, "\\\\'")) : ''}')" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700;flex:none">Clock in</button>`}
+    </div>`; }).join('')}
+    <div style="margin-top:10px;font-size:11px;color:var(--faint)">Punches become normal time entries — edit, approve and export them under Timesheets. Everything syncs to every device.</div>
+  </div>`;
+}
+function teamTime() {
+  const emps = activeEmps();
+  const actNames = emps.map(e => e.name);
+  const projs = allProjects();
   const ws = weekStart(S.teamWeek);
   const days = []; for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(d.getDate() + i); days.push(d); }
   const we = new Date(ws); we.setDate(we.getDate() + 7);
   const wkEntries = Object.entries(S.hoursMap).filter(([, e]) => e && !e.del && e.date >= dkey(ws) && e.date < dkey(we));
-  const cell = {}; const rowTot = {}; const projTot = {};
+  const cell = {}; const rowTot = {}; const projTot = {}; const ptoTot = {};
   for (const [, e] of wkEntries) {
-    cell[e.user + '|' + e.date] = (cell[e.user + '|' + e.date] || 0) + e.hours;
-    rowTot[e.user] = (rowTot[e.user] || 0) + e.hours;
-    projTot[e.project || '—'] = (projTot[e.project || '—'] || 0) + e.hours;
+    const h = elapsedHrs(e);
+    if ((e.kind || 'work') === 'work') {
+      cell[e.user + '|' + e.date] = (cell[e.user + '|' + e.date] || 0) + h;
+      rowTot[e.user] = (rowTot[e.user] || 0) + h;
+      projTot[e.project || '—'] = (projTot[e.project || '—'] || 0) + h;
+    } else ptoTot[e.user] = (ptoTot[e.user] || 0) + h;
   }
   const grand = Object.values(rowTot).reduce((s, v) => s + v, 0);
-  const wkCost = wkEntries.reduce((s, [, e]) => s + ((S.emp[e.user] || {}).rate || 0) * e.hours, 0);
-  const inp = 'border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;background:#fff;font-family:inherit;color:var(--ink)';
+  const wkCost = Object.entries(rowTot).reduce((s, [u, tot]) => s + payFor(tot, (S.emp[u] || {}).rate || 0).cost, 0);
+  const pend = wkEntries.filter(([, e]) => !e.approved && !e.in).length;
   const wkLabel = ws.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' – ' + new Date(we - 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return `
-  <div class="slab" style="margin-bottom:8px">Employees</div>
-  <div class="card" style="padding:13px 15px;overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px">
-      <tr style="text-align:left;color:var(--faint);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase"><th style="padding:6px 8px 8px 0">Name</th><th style="padding:6px 8px 8px 0">Role</th><th style="padding:6px 8px 8px 0">ISA cert #</th><th style="padding:6px 8px 8px 0">Phone</th><th style="padding:6px 8px 8px 0">Email</th><th style="padding:6px 8px 8px 0">Rate $/h</th><th style="padding:6px 0 8px">Active</th></tr>
-      ${emps.map(e => { const k = e.name.replace(/'/g, "\\'"); const off = e.active === false; return `
-      <tr style="border-top:1px solid var(--hair);${off ? 'opacity:.5' : ''}">
-        <td style="padding:8px 8px 8px 0;font-weight:700;white-space:nowrap">${esc(e.name)}</td>
-        <td style="padding:8px 8px 8px 0"><input value="${esc(e.role || '')}" onchange="empUpd('${esc(k)}','role',this.value)" style="${inp};width:110px"></td>
-        <td style="padding:8px 8px 8px 0"><input value="${esc(e.cert || '')}" onchange="empUpd('${esc(k)}','cert',this.value)" style="${inp};width:96px"></td>
-        <td style="padding:8px 8px 8px 0"><input value="${esc(e.phone || '')}" onchange="empUpd('${esc(k)}','phone',this.value)" style="${inp};width:110px"></td>
-        <td style="padding:8px 8px 8px 0"><input value="${esc(e.email || '')}" onchange="empUpd('${esc(k)}','email',this.value)" style="${inp};width:150px"></td>
-        <td style="padding:8px 8px 8px 0"><input type="number" step="0.5" min="0" value="${e.rate || ''}" onchange="empUpd('${esc(k)}','rate',this.value)" style="${inp};width:70px"></td>
-        <td style="padding:8px 0"><input type="checkbox" ${off ? '' : 'checked'} onchange="empUpd('${esc(k)}','active',this.checked);render()" style="width:17px;height:17px"></td>
-      </tr>`; }).join('')}
-      <tr style="border-top:1px solid var(--hair)"><td colspan="7" style="padding:10px 0 2px"><input id="empNew" placeholder="New employee name" style="${inp};width:200px"> <button onclick="empAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;margin-left:6px">Add</button></td></tr>
-    </table>
-  </div>
-
-  <div class="slab" style="margin:18px 0 8px">Assignments</div>
-  <div class="card" style="padding:13px 15px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
-      <select id="asgUser" style="${inp}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
-      <select id="asgProj" style="${inp};max-width:210px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
-      <input id="asgDate" type="date" value="${dkey(new Date())}" style="${inp}">
-      <input id="asgNote" placeholder="Note (optional)" style="${inp};flex:1;min-width:130px">
-      <button onclick="asgAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700">Assign</button>
-    </div>
-    ${asgs.length ? asgs.map(([id, e]) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--hair);font-size:12.5px">
-      <span style="font-weight:700;flex:none">${esc(e.user)}</span><span style="color:var(--faint)">→</span>
-      <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.project)}${e.note ? ` <span style="color:var(--muted)">· ${esc(e.note)}</span>` : ''}</span>
-      <span style="color:var(--muted);flex:none">${esc(e.date || '')}</span>
-      <button onclick="asgDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:11.5px;font-weight:700;flex:none">Remove</button>
-    </div>`).join('') : '<div style="padding:12px 0 4px;font-size:12px;color:var(--muted)">No assignments yet — crews see their project on the Survey tab once assigned.</div>'}
-  </div>
-
-  <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:center"><span>Time &amp; hours</span>
-    <span style="display:flex;gap:6px;align-items:center">
+  <div class="slab" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>Timesheets</span>
+    <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted)">OT after</span><input type="number" min="0" step="1" value="${otThresh()}" onchange="setOT(this.value)" style="${TEAM_INP};width:58px"><span style="font-size:11px;color:var(--muted)">h/wk · 1.5×</span>
       <button onclick="S.teamWeek--;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">‹</button>
       <span style="font-size:12px;font-weight:700">${wkLabel}${S.teamWeek === 0 ? ' · this week' : ''}</span>
       <button onclick="S.teamWeek++;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">›</button>
     </span></div>
   <div class="card" style="padding:13px 15px;overflow-x:auto">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <select id="hrUser" style="${inp}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
-      <select id="hrProj" style="${inp};max-width:190px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
-      <input id="hrDate" type="date" value="${dkey(new Date())}" style="${inp}">
-      <input id="hrHours" type="number" step="0.25" min="0.25" max="24" placeholder="Hours" style="${inp};width:78px">
-      <input id="hrNote" placeholder="Note (optional)" style="${inp};flex:1;min-width:120px">
+      <select id="hrUser" style="${TEAM_INP}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
+      <select id="hrKind" style="${TEAM_INP}"><option value="work">Work</option><option value="pto">PTO</option><option value="sick">Sick</option></select>
+      <select id="hrProj" style="${TEAM_INP};max-width:180px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
+      <input id="hrDate" type="date" value="${dkey(new Date())}" style="${TEAM_INP}">
+      <input id="hrHours" type="number" step="0.25" min="0.25" max="24" placeholder="Hours" style="${TEAM_INP};width:76px">
+      <input id="hrNote" placeholder="Note (optional)" style="${TEAM_INP};flex:1;min-width:110px">
       <button onclick="hrsAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700">Log</button>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:680px">
-      <tr style="color:var(--faint);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right"><th style="text-align:left;padding:5px 8px 7px 0">Employee</th>${days.map(d => `<th style="padding:5px 6px 7px">${d.toLocaleDateString(undefined, { weekday: 'short' })}<br>${d.getDate()}</th>`).join('')}<th style="padding:5px 0 7px 8px">Total</th></tr>
-      ${actNames.map(n => `<tr style="border-top:1px solid var(--hair);text-align:right">
-        <td style="text-align:left;padding:7px 8px 7px 0;font-weight:700;white-space:nowrap">${esc(n)}</td>
+      <tr style="color:var(--faint);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right"><th style="text-align:left;padding:5px 8px 7px 0">Employee</th>${days.map(d => `<th style="padding:5px 6px 7px">${d.toLocaleDateString(undefined, { weekday: 'short' })}<br>${d.getDate()}</th>`).join('')}<th style="padding:5px 0 7px 8px">Reg / OT · Pay</th></tr>
+      ${actNames.map(n => { const tot = rowTot[n] || 0; const p = payFor(tot, (S.emp[n] || {}).rate || 0); return `<tr style="border-top:1px solid var(--hair);text-align:right">
+        <td style="text-align:left;padding:7px 8px 7px 0;font-weight:700;white-space:nowrap">${esc(n)}${ptoTot[n] ? ` <span style="font-size:10px;color:var(--info);font-weight:700">+${ptoTot[n].toFixed(1)} PTO</span>` : ''}</td>
         ${days.map(d => { const v = cell[n + '|' + dkey(d)]; return `<td style="padding:7px 6px;color:${v ? 'var(--ink)' : 'var(--faint)'}">${v ? v.toFixed(v % 1 ? 2 : 0) : '·'}</td>`; }).join('')}
-        <td style="padding:7px 0 7px 8px;font-weight:800;${(rowTot[n] || 0) > 40 ? 'color:var(--bad)' : ''}">${(rowTot[n] || 0) ? (rowTot[n]).toFixed(rowTot[n] % 1 ? 2 : 0) + ((rowTot[n] > 40) ? ' OT' : '') : '—'}</td>
-      </tr>`).join('')}
-      <tr style="border-top:1.5px solid var(--line);text-align:right"><td style="text-align:left;padding:8px 8px 2px 0;font-weight:800">Week total</td><td colspan="7" style="padding:8px 0 2px;font-weight:800">${grand.toFixed(grand % 1 ? 2 : 0)} h${wkCost ? ' · $' + wkCost.toFixed(2) : ''}</td></tr>
+        <td style="padding:7px 0 7px 8px;font-weight:800;white-space:nowrap">${tot ? `${p.reg.toFixed(1)}${p.ot ? ` / <span style="color:var(--bad)">${p.ot.toFixed(1)} OT</span>` : ''}${(S.emp[n] || {}).rate ? ` · $${p.cost.toFixed(0)}` : ''}` : '—'}</td>
+      </tr>`; }).join('')}
+      <tr style="border-top:1.5px solid var(--line);text-align:right"><td style="text-align:left;padding:8px 8px 2px 0;font-weight:800">Week total</td><td colspan="8" style="padding:8px 0 2px;font-weight:800">${grand.toFixed(grand % 1 ? 2 : 0)} h${wkCost ? ' · $' + wkCost.toFixed(2) + ' incl. OT premium' : ''}</td></tr>
     </table>
     ${Object.keys(projTot).length ? `<div style="margin-top:9px;font-size:11.5px;color:var(--muted)">${Object.entries(projTot).sort((a, b) => b[1] - a[1]).map(([p, h]) => esc(p) + ' ' + h.toFixed(h % 1 ? 2 : 0) + 'h').join(' · ')}</div>` : ''}
     ${wkEntries.length ? `<div style="margin-top:13px;border-top:1px solid var(--hair)">${wkEntries.sort((a, b) => (a[1].date + a[1].user) < (b[1].date + b[1].user) ? -1 : 1).map(([id, e]) => `
-      <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12px">
-        <span style="color:var(--muted);flex:none;width:74px">${e.date.slice(5)}</span>
-        <span style="font-weight:700;flex:none;width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.user)}</span>
+      <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12px;${e.approved ? 'opacity:.65' : ''}">
+        <span style="color:var(--muted);flex:none;width:58px">${e.date.slice(5)}</span>
+        <span style="font-weight:700;flex:none;width:104px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.user)}</span>
+        ${(e.kind || 'work') !== 'work' ? `<span class="chip info" style="flex:none">${e.kind.toUpperCase()}</span>` : ''}
+        ${e.in ? '<span class="chip good" style="flex:none">running</span>' : ''}
         <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${esc(e.project || '—')}${e.note ? ' · ' + esc(e.note) : ''}</span>
-        <input type="number" step="0.25" min="0" max="24" value="${e.hours}" onchange="hrsEdit('${id}','hours',this.value)" style="${inp};width:66px;text-align:right;flex:none">
-        <label style="display:flex;align-items:center;gap:4px;flex:none;font-size:11px;color:var(--muted)"><input type="checkbox" ${e.approved ? 'checked' : ''} onchange="hrsEdit('${id}','approved',this.checked)" style="width:15px;height:15px">OK</label>
-        <button onclick="hrsDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:11px;font-weight:700;flex:none">×</button>
-      </div>`).join('')}</div>` : '<div style="margin-top:11px;font-size:12px;color:var(--muted)">No hours logged this week yet.</div>'}
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button onclick="exportHoursCSV(true)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Export this week (CSV)</button>
-      <button onclick="exportHoursCSV(false)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Export all hours (CSV)</button>
+        <input type="number" step="0.25" min="0" max="24" value="${Math.round(elapsedHrs(e) * 100) / 100}" ${e.approved || e.in ? 'disabled' : ''} onchange="hrsEdit('${id}','hours',this.value)" style="${TEAM_INP};width:64px;text-align:right;flex:none">
+        <label style="display:flex;align-items:center;gap:4px;flex:none;font-size:11px;color:var(--muted)"><input type="checkbox" ${e.approved ? 'checked' : ''} ${e.in ? 'disabled' : ''} onchange="hrsEdit('${id}','approved',this.checked)" style="width:15px;height:15px">OK</label>
+        <button onclick="hrsDel('${id}')" style="border:0;background:none;color:${e.approved ? 'var(--faint)' : 'var(--bad)'};font-size:11px;font-weight:700;flex:none">×</button>
+      </div>`).join('')}</div>` : '<div style="margin-top:11px;font-size:12px;color:var(--muted)">No hours this week yet — use the punch clock or log entries above.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button onclick="approveWeek()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 16px;font-size:11.5px;font-weight:700">Approve week${pend ? ' (' + pend + ')' : ''}</button>
+      <button onclick="exportHoursCSV(true)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Payroll CSV — this week</button>
+      <button onclick="exportHoursCSV(false)" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">Export all hours</button>
     </div>
   </div>`;
 }
+function teamSched() {
+  const actNames = activeEmps().map(e => e.name);
+  const projs = allProjects();
+  const ws = weekStart(S.teamWeek);
+  const days = []; for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(d.getDate() + i); days.push(d); }
+  const we = new Date(ws); we.setDate(we.getDate() + 7);
+  const asgs = Object.entries(S.assign).filter(([, a]) => a && !a.del);
+  const wk = asgs.filter(([, a]) => a.date >= dkey(ws) && a.date < dkey(we));
+  const undated = asgs.filter(([, a]) => !a.date);
+  const wkLabel = ws.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' – ' + new Date(we - 864e5).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `
+  <div class="slab" style="margin:0 0 8px;display:flex;justify-content:space-between;align-items:center"><span>Schedule</span>
+    <span style="display:flex;gap:6px;align-items:center">
+      <button onclick="S.teamWeek--;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">‹</button>
+      <span style="font-size:12px;font-weight:700">${wkLabel}${S.teamWeek === 0 ? ' · this week' : ''}</span>
+      <button onclick="S.teamWeek++;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;width:30px;height:30px;font-weight:700">›</button>
+    </span></div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <select id="asgUser" style="${TEAM_INP}">${['<option value="">Employee…</option>', ...actNames.map(n => `<option>${esc(n)}</option>`)].join('')}</select>
+      <select id="asgProj" style="${TEAM_INP};max-width:200px">${['<option value="">Project…</option>', ...projs.map(p => `<option>${esc(p)}</option>`)].join('')}</select>
+      <input id="asgDate" type="date" value="${dkey(new Date())}" style="${TEAM_INP}">
+      <input id="asgTime" placeholder="7:00–3:30" style="${TEAM_INP};width:96px">
+      <input id="asgNote" placeholder="Instructions (optional)" style="${TEAM_INP};flex:1;min-width:130px">
+      <button onclick="asgAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:9px 17px;font-size:12px;font-weight:700">Schedule</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;min-width:760px">
+      <tr style="color:var(--faint);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase"><th style="text-align:left;padding:5px 8px 7px 0">Employee</th>${days.map(d => `<th style="text-align:left;padding:5px 6px 7px">${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}</th>`).join('')}</tr>
+      ${actNames.map(n => `<tr style="border-top:1px solid var(--hair)">
+        <td style="padding:8px 8px 8px 0;font-weight:700;white-space:nowrap;vertical-align:top">${esc(n)}</td>
+        ${days.map(d => { const here = wk.filter(([, a]) => a.user === n && a.date === dkey(d)); return `<td style="padding:8px 6px;vertical-align:top">${here.map(([id, a]) => `<div style="background:var(--soft);border:1px solid var(--hair);border-radius:8px;padding:6px 8px;margin-bottom:4px"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(a.project)}</div>${a.time ? `<div style="color:var(--muted)">${esc(a.time)}</div>` : ''}${a.note ? `<div style="color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(a.note)}</div>` : ''}<button onclick="asgDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:10px;font-weight:700;padding:2px 0 0">remove</button></div>`).join('') || '<span style="color:var(--faint)">·</span>'}</td>`; }).join('')}
+      </tr>`).join('')}
+    </table>
+    ${undated.length ? `<div style="margin-top:12px;border-top:1px solid var(--hair);padding-top:9px"><div style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:5px">Standing assignments (no date)</div>${undated.map(([id, a]) => `<div style="display:flex;gap:9px;align-items:center;padding:5px 0;font-size:12px"><span style="font-weight:700">${esc(a.user)}</span><span style="color:var(--faint)">→</span><span style="flex:1">${esc(a.project)}${a.note ? ' · ' + esc(a.note) : ''}</span><button onclick="asgDel('${id}')" style="border:0;background:none;color:var(--bad);font-size:11px;font-weight:700">Remove</button></div>`).join('')}</div>` : ''}
+  </div>`;
+}
+function teamCost() {
+  const roots = [...new Set(S.trees.filter(visT).map(t => rootProjOf(siteOfT(t))).concat(Object.values(S.hoursMap).filter(e => e && !e.del && e.project).map(e => rootProjOf(e.project))))].filter(p => p && !projHidden(p)).sort();
+  if (!roots.length) return '<div class="card" style="padding:20px;font-size:13px;color:var(--muted)">Job costing appears once hours or captures are logged against projects.</div>';
+  const rows = roots.map(p => {
+    const hrs = Object.values(S.hoursMap).filter(e => e && !e.del && (e.kind || 'work') === 'work' && rootProjOf(e.project) === p);
+    const actual = hrs.reduce((s, e) => s + elapsedHrs(e), 0);
+    const cost = hrs.reduce((s, e) => s + elapsedHrs(e) * ((S.emp[e.user] || {}).rate || 0), 0);
+    const assets = S.trees.filter(t => visT(t) && rootProjOf(siteOfT(t)) === p).length;
+    const budget = (S.budgets[p] && S.budgets[p].hours) || 0;
+    const crew = new Set(hrs.map(e => e.user)).size;
+    return { p, actual, cost, assets, budget, crew };
+  });
+  return `
+  <div class="slab" style="margin:0 0 8px">Job costing — labor vs budget, by project</div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:720px">
+      <tr style="color:var(--faint);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;text-align:right"><th style="text-align:left;padding:5px 8px 8px 0">Project</th><th style="padding:5px 8px 8px">Budget h</th><th style="padding:5px 8px 8px">Actual h</th><th style="padding:5px 8px 8px">Variance</th><th style="padding:5px 8px 8px">Labor $</th><th style="padding:5px 8px 8px">Crew</th><th style="padding:5px 8px 8px">Assets</th><th style="padding:5px 0 8px 8px">Assets / h</th></tr>
+      ${rows.map(r => { const over = r.budget && r.actual > r.budget; const pct = r.budget ? Math.min(100, r.actual / r.budget * 100) : 0; const k = r.p.replace(/'/g, "\\\\'"); return `
+      <tr style="border-top:1px solid var(--hair);text-align:right">
+        <td style="text-align:left;padding:8px 8px 8px 0;font-weight:700;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis">${esc(r.p)}${r.budget ? `<div style="height:4px;background:var(--hair);border-radius:99px;margin-top:5px;max-width:180px"><div style="height:4px;border-radius:99px;width:${pct}%;background:${over ? 'var(--bad)' : 'var(--good)'}"></div></div>` : ''}</td>
+        <td style="padding:8px"><input type="number" min="0" step="1" value="${r.budget || ''}" placeholder="—" onchange="setBudget('${esc(k)}', this.value);render()" style="${TEAM_INP};width:70px;text-align:right"></td>
+        <td style="padding:8px;font-weight:700">${r.actual ? r.actual.toFixed(1) : '—'}</td>
+        <td style="padding:8px;font-weight:700;color:${r.budget ? (over ? 'var(--bad)' : 'var(--good)') : 'var(--faint)'}">${r.budget ? ((r.budget - r.actual >= 0 ? '+' : '') + (r.budget - r.actual).toFixed(1) + ' h') : '—'}</td>
+        <td style="padding:8px">${r.cost ? '$' + r.cost.toFixed(0) : '—'}</td>
+        <td style="padding:8px">${r.crew || '—'}</td>
+        <td style="padding:8px">${r.assets || '—'}</td>
+        <td style="padding:8px 0 8px 8px;font-weight:700">${r.actual && r.assets ? (r.assets / r.actual).toFixed(1) : '—'}</td>
+      </tr>`; }).join('')}
+    </table>
+    <div style="margin-top:10px;font-size:11px;color:var(--faint)">Assets / h joins the crew's captured field records with logged labor — productivity the timesheet apps can't see. Set a budget to get the variance bar.</div>
+  </div>`;
+}
+function teamEmp() {
+  const emps = Object.values(S.emp).filter(e => e && e.name).sort((a, b) => (b.active !== false) - (a.active !== false) || a.name.localeCompare(b.name));
+  const soon = Date.now() + 60 * 864e5;
+  return `
+  <div class="slab" style="margin:0 0 8px">Employees</div>
+  <div class="card" style="padding:13px 15px;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:860px">
+      <tr style="text-align:left;color:var(--faint);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase"><th style="padding:6px 8px 8px 0">Name</th><th style="padding:6px 8px 8px 0">Role</th><th style="padding:6px 8px 8px 0">ISA cert #</th><th style="padding:6px 8px 8px 0">Cert expires</th><th style="padding:6px 8px 8px 0">Phone</th><th style="padding:6px 8px 8px 0">Email</th><th style="padding:6px 8px 8px 0">Rate $/h</th><th style="padding:6px 0 8px">Active</th></tr>
+      ${emps.map(e => { const k = e.name.replace(/'/g, "\\\\'"); const off = e.active === false; const exp = e.certExp ? new Date(e.certExp + 'T12:00').getTime() : 0; const expired = exp && exp < Date.now(); const expSoon = exp && !expired && exp < soon; return `
+      <tr style="border-top:1px solid var(--hair);${off ? 'opacity:.5' : ''}">
+        <td style="padding:8px 8px 8px 0;font-weight:700;white-space:nowrap">${esc(e.name)}${expired ? ' <span class="chip bad" style="font-size:9px">cert expired</span>' : (expSoon ? ' <span class="chip warn" style="font-size:9px">cert renews soon</span>' : '')}</td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.role || '')}" onchange="empUpd('${esc(k)}','role',this.value)" style="${TEAM_INP};width:104px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.cert || '')}" onchange="empUpd('${esc(k)}','cert',this.value)" style="${TEAM_INP};width:92px"></td>
+        <td style="padding:8px 8px 8px 0"><input type="date" value="${esc(e.certExp || '')}" onchange="empUpd('${esc(k)}','certExp',this.value);render()" style="${TEAM_INP}"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.phone || '')}" onchange="empUpd('${esc(k)}','phone',this.value)" style="${TEAM_INP};width:104px"></td>
+        <td style="padding:8px 8px 8px 0"><input value="${esc(e.email || '')}" onchange="empUpd('${esc(k)}','email',this.value)" style="${TEAM_INP};width:140px"></td>
+        <td style="padding:8px 8px 8px 0"><input type="number" step="0.5" min="0" value="${e.rate || ''}" onchange="empUpd('${esc(k)}','rate',this.value)" style="${TEAM_INP};width:66px"></td>
+        <td style="padding:8px 0"><input type="checkbox" ${off ? '' : 'checked'} onchange="empUpd('${esc(k)}','active',this.checked);render()" style="width:17px;height:17px"></td>
+      </tr>`; }).join('')}
+      <tr style="border-top:1px solid var(--hair)"><td colspan="8" style="padding:10px 0 2px"><input id="empNew" placeholder="New employee name" style="${TEAM_INP};width:200px"> <button onclick="empAdd()" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;margin-left:6px">Add</button></td></tr>
+    </table>
+  </div>`;
+}
 
-/* ---- Sheet tab: the live spreadsheet ---- */
-function setSheetProject(p) { S.sheetProject = p; render(); }
-function sheetScope() { const vis = S.trees.filter(visT); if (!S.sheetProject) return vis; return vis.filter(t => projMatches(siteOfT(t), S.sheetProject)); }
-function sheetRows(src) {
-  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Removal ($)','Disposal','Disposal ($)','Stump','Stump ($)','Line total ($)','Assessor','Notes'];
-  const rows = [head];
-  for (const t of src) { const a = t.ai || {}; rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
-  return rows;
-}
-async function copyForSheets() {
-  const rows = sheetRows(sheetScope());
-  const tsv = rows.map(r => r.map(c => String(c ?? '').replace(/\t/g, ' ').replace(/\n/g, ' ')).join('\t')).join('\n');
-  try { await navigator.clipboard.writeText(tsv); toast('Copied — paste straight into Google Sheets'); }
-  catch (e) { toast('Copy blocked by the browser — use Export CSV instead'); }
-}
 /* Admin desktop: the Sheet becomes directly editable — every change is a
    normal record edit that syncs to the whole team like any capture. */
 const SHEET_EDIT = {
@@ -2970,7 +3102,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v17</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v18</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3399,95 +3531,27 @@ function openZoomDraft(i) {
 function closeZoom() { S.zoomSrc = null; render(); }
 function zoomView() {
   const m = S.zoomMeta;
+  const hazBg = m.hazard === 'High Hazard' ? 'rgba(216,74,60,.22)' : (m.hazard === 'Moderate' ? 'rgba(200,148,44,.22)' : 'rgba(66,150,96,.22)');
+  const hazInk = m.hazard === 'High Hazard' ? '#ff7a6b' : (m.hazard === 'Moderate' ? '#ffc85e' : '#7fd8a1');
+  const subBits = [m.id, m.loc, fmtWhen(m.when), (typeof m.lat === 'number') ? fmtCoord(m.lat) + ', ' + fmtCoord(m.lng) : ''].filter(Boolean);
   return `
   <div class="zoom">
-    <div class="zt">
-      <div style="min-width:0"><div style="font-size:15px;font-weight:700">${esc(m.species)}${m.hazard ? ` <span style="color:${HAZ_INK(m.hazard)}">· ${esc(m.hazard)}</span>` : ''}</div><div style="font-size:11.5px;color:#8a929b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.id)}${m.loc ? (m.id ? ' · ' : '') + esc(m.loc) : ''}</div></div>
-      <button onclick="closeZoom()" style="border:0;background:none;color:#fff;font-size:24px;line-height:1;width:44px;height:44px;display:flex;align-items:center;justify-content:center;margin:-10px -10px -10px 0">×</button>
+    <div class="zimg" onclick="closeZoom()">
+      <img src="${S.zoomSrc}" alt="Asset, full frame">
+      <button class="zclose" onclick="event.stopPropagation();closeZoom()" aria-label="Close">✕</button>
     </div>
-    <img src="${S.zoomSrc}" alt="Asset, full frame" onclick="closeZoom()">
-    <div class="zb" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-      <div style="min-width:0">
-        <div class="mono" style="font-size:12.5px;font-weight:700">${fmtCoord(m.lat)}, ${fmtCoord(m.lng)}</div>
-        <div style="font-size:11.5px;color:#8a929b;margin-top:2px">${fmtWhen(m.when)}${m.action ? ' · ' + esc(m.action) : ''}</div>
+    <div class="zsheet"><div class="zin">
+      <div class="zttl">${esc(m.species)}${m.hazard ? `<span class="zhz" style="background:${hazBg};color:${hazInk}">${m.hazard === 'High Hazard' ? '▲ ' : (m.hazard === 'Moderate' ? '● ' : '✓ ')}${esc(m.hazard)}</span>` : ''}</div>
+      <div class="zsub">${subBits.map(esc).join('&ensp;·&ensp;')}${m.health ? `&ensp;·&ensp;Health ${esc(String(m.health))}` : ''}</div>
+      ${m.action ? `<div class="zrec">${esc(m.action)}</div>` : ''}
+      <div class="zbtns">
+        ${m.id ? `<button class="zbtn pri" onclick="closeZoom();openDetail('${m.id}')">Open record</button>` : ''}
+        ${S.zoomFromMap && typeof m.lat === 'number' ? `<a class="zbtn" href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}&travelmode=driving" target="_blank" rel="noopener">➤&nbsp;Navigate</a>` : ''}
+        <button class="zbtn" onclick="closeZoom()">${S.zoomFromMap ? 'Back to map' : 'Close'}</button>
       </div>
-      <div style="display:flex;gap:8px;flex:none;flex-wrap:wrap;justify-content:flex-end">
-        ${m.id ? `<button class="backmap" onclick="closeZoom();openDetail('${m.id}')">Open record ›</button>` : ''}
-        ${S.zoomFromMap && typeof m.lat === 'number' ? `<a class="backmap" style="text-decoration:none" href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}&travelmode=driving" target="_blank" rel="noopener">➤ Navigate</a>` : ''}
-        ${S.zoomFromMap ? `<button class="backmap" onclick="closeZoom()">⤺ Back to map</button>` : ''}
-      </div>
-    </div>
+    </div></div>
   </div>`;
 }
-
-/* ---- Camera overlay ---- */
-function camView() {
-  return `
-  <div class="cam">
-    <video id="camVideo" autoplay muted playsinline></video>
-    <div class="ct">
-      <button onclick="closeCamera()" style="border:0;background:rgba(11,14,18,.55);color:#fff;border-radius:999px;width:44px;height:44px;font-size:20px;line-height:1">×</button>
-      <div style="display:flex;flex-direction:column;gap:7px;align-items:flex-end">
-        <span class="camchip"><span class="liv"></span><span id="camGps">${S.gpsWatch.ok ? 'GPS ±' + Math.round(S.gpsWatch.acc) + ' m' : 'Acquiring GPS…'}</span></span>
-        <span class="camchip">Facing <span id="camHeading" class="mono" style="margin-left:2px">${compass.deg != null ? fmtBearing(compass.deg) : '—'}</span></span>
-      </div>
-    </div>
-    <div style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
-      <div style="position:relative;width:62px;height:62px">
-        <span style="position:absolute;inset:0;border:2px solid rgba(255,255,255,.92);border-radius:50%;box-shadow:0 0 0 1px rgba(11,14,18,.35), inset 0 0 0 1px rgba(11,14,18,.35)"></span>
-        <span style="position:absolute;left:50%;top:-11px;width:2px;height:14px;background:#c8452c;transform:translateX(-50%)"></span>
-        <span style="position:absolute;left:50%;bottom:-11px;width:2px;height:14px;background:#c8452c;transform:translateX(-50%)"></span>
-        <span style="position:absolute;top:50%;left:-11px;height:2px;width:14px;background:#c8452c;transform:translateY(-50%)"></span>
-        <span style="position:absolute;top:50%;right:-11px;height:2px;width:14px;background:#c8452c;transform:translateY(-50%)"></span>
-        <span style="position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;background:#c8452c;transform:translate(-50%,-50%)"></span>
-      </div>
-    </div>
-    <div style="position:absolute;left:0;right:0;bottom:104px;display:flex;justify-content:center;pointer-events:none"><span class="camchip">◎ Aim at the target trunk · frame base to crown</span></div>
-    <div class="cb"><button class="shutter" onclick="shutter()" aria-label="Take photo"><span></span></button></div>
-  </div>`;
-}
-
-/* ---- Shell ---- */
-function emptyState(t, b) {
-  return `<div style="text-align:center;padding:52px 16px;background:#fff;border:1px dashed #ddd9cf;border-radius:16px"><div style="font-size:16px;font-weight:600;color:#5c584f">${esc(t)}</div><div style="font-size:13px;color:var(--faint);margin-top:5px;max-width:300px;margin-left:auto;margin-right:auto">${esc(b)}</div></div>`;
-}
-function render() {
-  if (S.draft) queueDraftSave();
-  const app = document.getElementById('app');
-  let body = '';
-  if (S.tab === 'survey') body = surveyView();
-  else if (S.tab === 'map') body = mapView();
-  else if (S.tab === 'trees') { const t = S.detailId && S.trees.find(x => x.id === S.detailId); body = t ? detailView(t) : treesView(); }
-  else if (S.tab === 'sheet') body = sheetView();
-  else if (S.tab === 'team') body = teamView();
-  else body = reportView();
-  const navBtn = (tab, label) => `<button class="${S.tab === tab ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span style="position:absolute;top:5px;right:calc(50% - 16px);width:8px;height:8px;border-radius:50%;background:var(--accent);border:1.5px solid #fff"></span>' : ''}${ICONS[tab]}<span>${label}</span></button>`;
-  const adjT = S.adjustId && S.trees.find(x => x.id === S.adjustId);
-  app.innerHTML = `
-    <div class="hdr">
-      <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v17</div></div></button>
-      ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
-      <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
-    </div>
-    <div class="view">${body}</div>
-    <div class="nav">${navBtn('survey','Survey')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheet')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}</div>
-    ${S.ruler ? rulerView() : ''}
-    ${S.showCheck ? checkSheet() : ''}
-    ${S.camOpen ? camView() : ''}
-    ${S.zoomSrc ? zoomView() : ''}
-    ${adjT ? adjustSheet(adjT) : ''}
-    ${S.projectId ? projectSheet(S.projectId) : ''}
-    ${S.backups ? backupsSheet() : ''}
-    ${S.showPicker ? projectPicker() : ''}`;
-  if (S.tab === 'map' && !S.zoomSrc) requestAnimationFrame(mountMap);
-}
-const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
-try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => render()); } catch (e) { window.addEventListener('resize', () => { clearTimeout(window.__rzT); window.__rzT = setTimeout(render, 200); }); }
-const ADMIN = () => S.admin && IS_DESKTOP();
-function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && S.tab === 'team') S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
-function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { S.tab = tab; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Boot (migrates v2/v3 records) ---- */
 function migrate(t) {
