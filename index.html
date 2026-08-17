@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v12.1">
+<meta name="version" content="trice-v15">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -1207,7 +1207,7 @@ async function logDraft() {
   const d = S.draft; if (!d) return;
   const picks = (d.results || []).filter(r => r.include);
   if (!picks.length) { toast('Select at least one tree to log'); return; }
-  if (d.zone) { S.lastZone = d.zone; localStorage.setItem('trice_lastzone', d.zone); }
+  if (d.zone) { S.lastZone = normZone(d.zone); localStorage.setItem('trice_lastzone', S.lastZone); }
   const logged = [];
   for (const r of picks) {
     const id = makeId(S.seq);
@@ -1216,7 +1216,7 @@ async function logDraft() {
       id, photo: r.crop, frame: (d.results.length > 1 ? d.photo : null),
       lat: r.lat, lng: r.lng, posMethod: r.method, bearing: r.bearing ?? null, dist: r.dist ?? null,
       camLat: d.camLat, camLng: d.camLng, acc: d.acc, heading: d.heading,
-      when: d.when, zone: d.zone || '', locDetails: r.locDetails || '',
+      when: d.when, zone: normZone(d.zone), locDetails: r.locDetails || '',
       qty: r.qty || 1, hazard: r.hazard, cause: r.cause, failures: r.failures || [],
       ip: r.ip || 'IP', mgd: r.mgd || 'No', notes: r.notes || '',
       dbhIn: a.dbh_in ?? null, heightFt: a.height_ft ?? null,
@@ -1392,7 +1392,7 @@ async function saveEdit(id) {
   t.failures = gc('ed_fail');
   t.qty = Math.max(1, parseInt(g('qty'), 10) || t.qty || 1);
   t.dbhIn = num(g('dbh')) || null; t.heightFt = num(g('height')) || null;
-  t.zone = g('zone'); t.locDetails = g('locdet');
+  t.zone = normZone(g('zone')); t.locDetails = g('locdet');
   t.ip = g('ip') || 'IP'; t.mgd = g('mgd') || 'No';
   t.removal = g('removal') === '' ? null : num(g('removal'));
   t.disposalMethod = g('dispmethod'); t.disposal = g('disposal') === '' ? null : num(g('disposal'));
@@ -2295,13 +2295,9 @@ function mapView() {
     <span class="slab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hazard map · ${esc(S.mapProject || 'All projects')}</span>
     <span style="font-size:12px;color:var(--muted);flex:none">${withGps.length} pinned${S.mapUser ? ' · ' + esc(S.mapUser) : ''}</span>
   </div>
-  ${projs.length > 1 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-    <button onclick="setMapProject(null)" class="chip ${!S.mapProject ? 'info' : ''}" style="border:1px solid ${!S.mapProject ? 'transparent' : 'var(--line)'};background:${!S.mapProject ? '' : '#fff'};${!S.mapProject ? '' : 'color:var(--muted);'}padding:8px 13px;min-height:34px">All projects</button>
-    ${projs.map(p => { const k = p.replace(/'/g, "\\'"); const on = S.mapProject === p; return `<button onclick="setMapProject('${esc(k)}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:8px 13px;min-height:34px">${esc(p)}</button>`; }).join('')}
-  </div>` : ''}
-  ${names.length > 1 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-    <button onclick="setMapUser(null)" class="chip ${!S.mapUser ? 'info' : ''}" style="border:1px solid ${!S.mapUser ? 'transparent' : 'var(--line)'};background:${!S.mapUser ? '' : '#fff'};${!S.mapUser ? '' : 'color:var(--muted);'}padding:8px 13px;min-height:34px">Everyone · ${all.length}</button>
-    ${names.map(n => { const k = n.replace(/'/g, "\\'"); const on = S.mapUser === n; return `<button onclick="setMapUser('${esc(k)}')" class="chip" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? 'var(--ink)' : '#fff'};color:${on ? '#fff' : 'var(--ink)'};padding:8px 13px;min-height:34px;font-weight:700">${esc(n)}${n === S.surveyor ? ' (you)' : ''} · ${users[n].n}</button>`; }).join('')}
+  ${(projs.length > 1 || names.length > 1) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    ${projs.length > 1 ? filterSel(S.mapProject, projs.map(projOpt), 'setMapProject(this.value||null)', 'All projects') : ''}
+    ${names.length > 1 ? filterSel(S.mapUser, names.map(n => [n, n + (n === S.surveyor ? ' (you)' : '') + ' \u00b7 ' + users[n].n]), 'S.mapUser=this.value||null;render()', 'Everyone \u00b7 ' + all.length) : ''}
   </div>` : ''}
   <div id="mapWrap">
     <div id="map"></div>
@@ -2371,10 +2367,7 @@ function sheetView() {
   const zmax = Math.max(1, ...zones.map(z => z[1].cost));
   const bmax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
   return `
-  ${projs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-    <button onclick="setSheetProject(null)" class="chip ${!S.sheetProject ? 'info' : ''}" style="border:1px solid ${!S.sheetProject ? 'transparent' : 'var(--line)'};background:${!S.sheetProject ? '' : '#fff'};${!S.sheetProject ? '' : 'color:var(--muted);'}padding:9px 14px;min-height:36px">All projects</button>
-    ${projs.map(p => { const k = p.replace(/'/g, "\\'"); const on = S.sheetProject === p; return `<button onclick="setSheetProject('${esc(k)}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:9px 14px;min-height:36px">${esc(p)}</button>`; }).join('')}
-  </div>` : ''}
+  ${projs.length ? `<div style="margin-bottom:12px">${filterSel(S.sheetProject, projs.map(projOpt), 'setSheetProject(this.value||null)', 'All projects')}</div>` : ''}
   <div class="slab" style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Live sheet · ${esc(label)}</span><span style="font-size:10px;font-weight:700;color:var(--good);letter-spacing:.06em">● LIVE</span></div>
   <div class="card">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
@@ -2428,14 +2421,21 @@ function vizCard(scoped, T) {
     ${charts || '<div style="margin-top:12px;font-size:12.5px;color:var(--muted)">Toggle a visual on — it draws live from the scoped register.</div>'}
   </div>`;
 }
+function filterSel(cur, opts, oc, allLabel) {
+  const norm = opts.map(o => Array.isArray(o) ? o : [o, o]);
+  const sel = norm.some(o => o[0] === cur);
+  return `<span style="position:relative;display:inline-flex;max-width:100%"><select onchange="${oc}" style="appearance:none;-webkit-appearance:none;border:1px solid ${sel ? 'transparent' : 'var(--line)'};background:${sel ? 'var(--info)' : '#fff'};color:${sel ? '#fff' : 'var(--ink)'};border-radius:999px;padding:10px 32px 10px 15px;font-size:13px;font-weight:600;font-family:inherit;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:40px">${[`<option value="">${esc(allLabel)}</option>`, ...norm.map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`)].join('')}</select><span style="position:absolute;right:13px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:8.5px;color:${sel ? '#fff' : 'var(--faint)'}">▼</span></span>`;
+}
+const projOpt = p => [p, '↳ '.repeat(Math.min(projDepth(p), 2)) + p];
 function setRepZone(z) { S.repZone = (S.repZone === z) ? null : z; render(); }
+function normZone(z) { return String(z || '').trim().replace(/\s+/g, ' '); }
 function zoneSort(a, b) { const na = parseInt((a.match(/\d+/) || [])[0], 10), nb = parseInt((b.match(/\d+/) || [])[0], 10); if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb; return a < b ? -1 : (a > b ? 1 : 0); }
 function openHeaderEditor() {
   S.showHeader = true; render();
   setTimeout(() => { const el = document.getElementById('setSite'); if (el) el.focus(); }, 60);
 }
 function repScopeProject() { return S.repProject ? S.trees.filter(t => siteOfT(t) === S.repProject) : S.trees; }
-function repScope() { let L = repScopeProject(); if (S.repZone) L = L.filter(t => (t.zone || '') === S.repZone); if (ADMIN() && S.repUser) L = L.filter(t => (t.surveyor || 'Unassigned') === S.repUser); return L; }
+function repScope() { let L = repScopeProject(); if (S.repZone) L = L.filter(t => normZone(t.zone) === S.repZone); if (ADMIN() && S.repUser) L = L.filter(t => (t.surveyor || 'Unassigned') === S.repUser); return L; }
 function printScoped() { const sc = S.repProject ? { site: S.repProject } : { all: true }; if (S.repZone) sc.zone = S.repZone; if (ADMIN() && S.repUser) sc.assessor = S.repUser; sc.sections = S.repSecs; printReport(sc); }
 function exportScopedXLSX() { exportXLSX(repScope(), ((S.repProject || '') + (S.repZone ? '-' + S.repZone : '')).replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase()); }
 function exportScopedCSV() { exportCSV(repScope()); }
@@ -2449,22 +2449,18 @@ function reportView() {
   const projs = allProjects();
   if (S.repProject && !projs.includes(S.repProject)) S.repProject = null;
   const scoped = repScope();
-  const zones = [...new Set(repScopeProject().map(t => t.zone || ''))].filter(Boolean).sort(zoneSort);
+  const zones = [...new Set(repScopeProject().map(t => (t.zone || '').trim()))].filter(Boolean).sort(zoneSort);
   if (S.repZone && !zones.includes(S.repZone)) S.repZone = null;
   const scopeLabel = (S.repProject || 'All projects') + (S.repZone ? ' · ' + S.repZone : '') + (ADMIN() && S.repUser ? ' · ' + S.repUser : '');
   const T = totals(scoped);
   const gaps = certGaps();
   const hazCard = (h, glyph) => `<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:${HAZ_INK(h)}">${glyph} ${h.toUpperCase()}</div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em">${T.byHaz[h].lines}</div><div style="font-size:10.5px;color:var(--muted)">${T.byHaz[h].specimens} specimens${T.byHaz[h].cost ? ' · ' + money(T.byHaz[h].cost) : ''}</div></div>`;
   return `
-  ${projs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-    <button onclick="setRepProject(null)" class="chip ${!S.repProject ? 'info' : ''}" style="border:1px solid ${!S.repProject ? 'transparent' : 'var(--line)'};background:${!S.repProject ? '' : '#fff'};${!S.repProject ? '' : 'color:var(--muted);'}padding:9px 14px;min-height:36px">All projects</button>
-    ${projs.map(p => { const k = p.replace(/'/g, "\\'"); const on = S.repProject === p; return `<button onclick="setRepProject('${esc(k)}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:9px 14px;min-height:36px">${esc(p)}</button>`; }).join('')}
+  ${(projs.length || zones.length) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    ${projs.length ? filterSel(S.repProject, projs.map(projOpt), 'setRepProject(this.value||null)', 'All projects') : ''}
+    ${zones.length ? filterSel(S.repZone, zones, 'S.repZone=this.value||null;render()', 'All holes') : ''}
+    ${ADMIN() ? (() => { const us = [...new Set(repScopeProject().map(t => t.surveyor || 'Unassigned'))].sort(); return us.length > 1 ? filterSel(S.repUser, us, 'S.repUser=this.value||null;render()', 'Every assessor') : ''; })() : ''}
   </div>` : ''}
-  ${zones.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;align-items:center"><span style="font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-right:2px">Hole / zone</span>
-    <button onclick="setRepZone(null)" class="chip ${!S.repZone ? 'info' : ''}" style="border:1px solid ${!S.repZone ? 'transparent' : 'var(--line)'};background:${!S.repZone ? '' : '#fff'};${!S.repZone ? '' : 'color:var(--muted);'}padding:7px 12px">All holes</button>
-    ${zones.map(z => { const k = z.replace(/'/g, "\\'"); const on = S.repZone === z; return `<button onclick="setRepZone('${esc(k)}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:7px 12px">${esc(z)}</button>`; }).join('')}
-  </div>` : ''}
-  ${ADMIN() ? (() => { const us = [...new Set(repScopeProject().map(t => t.surveyor || 'Unassigned'))].sort(); return us.length > 1 ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;align-items:center"><span style="font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin-right:2px">Assessor</span><button onclick="setRepUser(null)" class="chip ${!S.repUser ? 'info' : ''}" style="border:1px solid ${!S.repUser ? 'transparent' : 'var(--line)'};background:${!S.repUser ? '' : '#fff'};${!S.repUser ? '' : 'color:var(--muted);'}padding:7px 12px">Everyone</button>${us.map(u => { const k = u.replace(/'/g, "\\'"); const on = S.repUser === u; return `<button onclick="setRepUser('${esc(k)}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:7px 12px">${esc(u)}</button>`; }).join('')}</div>` : ''; })() : ''}
   <div class="slab" style="margin-bottom:10px">Assessment at a glance · ${esc(scopeLabel)}</div>
   <div class="card">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
@@ -2480,7 +2476,6 @@ function reportView() {
     <div style="margin-top:14px;padding-top:13px;border-top:1px solid var(--hair);display:flex;gap:10px">${hazCard('High Hazard','▲')}${hazCard('Moderate','●')}${hazCard('Cleared','■')}</div>
   </div>
   ${vizCard(scoped, T)}
-  ${gaps.length && T.lines ? `<div class="card" style="margin-top:10px;background:var(--warn-bg);border-color:#eadfc2"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn)">Certification block incomplete</div><div style="font-size:12.5px;color:#7a5a1d;margin-top:5px;line-height:1.5">An unsigned assessment is a field note, not evidence. Missing: ${gaps.join(' · ')}.</div><button onclick="openHeaderEditor()" style="margin-top:10px;border:1px solid #eadfc2;background:#fff;border-radius:999px;padding:9px 15px;font-size:12px;font-weight:700;color:#7a5a1d">Complete the header ›</button></div>` : ''}
 
   ${projectsSection()}
   ${assessorsSection()}
@@ -2494,6 +2489,7 @@ function reportView() {
 
   <div class="slab" style="margin:18px 0 8px">Submit — build the report, review it, send it</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${REP_SECS.map(([k, l]) => { const on = S.repSecs[k] !== false; return `<button onclick="toggleSec('${k}')" class="chip ${on ? 'info' : ''}" style="border:1px solid ${on ? 'transparent' : 'var(--line)'};background:${on ? '' : '#fff'};${on ? '' : 'color:var(--muted);'}padding:8px 13px">${on ? '✓ ' : ''}${l}</button>`; }).join('')}</div>
+  ${gaps.length && T.lines ? `<button onclick="openHeaderEditor()" style="width:100%;display:flex;align-items:center;gap:11px;border:1px solid var(--line);background:#fff;border-radius:13px;padding:13px 15px;margin-bottom:10px;text-align:left;cursor:pointer"><span style="width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none"></span><span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:600;color:var(--ink)">Certification header — ${gaps.length} field${gaps.length > 1 ? 's' : ''} missing</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${gaps.join(' · ')}</span></span><span style="color:var(--faint);flex:none">›</span></button>` : ''}
   <button class="btn primary" onclick="submitPackage()" ${T.lines ? '' : 'disabled'}>Review &amp; submit the package</button>
   <div style="margin-top:7px;font-size:11px;color:var(--faint);text-align:center;line-height:1.5">${(() => { const pend = scoped.filter(t => t.pending).length; const bits = []; if (pend) bits.push(pend + ' not analyzed'); if (T.unpriced) bits.push(T.unpriced + ' unpriced'); if (gaps.length) bits.push('header incomplete'); return bits.length ? 'Ready with gaps: ' + bits.join(' · ') + ' — fix them or submit anyway.' : 'Everything analyzed and signed — review on screen, edit any text, then export.'; })()}</div>
   <div class="slab" style="margin:18px 0 8px">Deliverables</div>
@@ -2563,7 +2559,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v12.1</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v15</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -2734,7 +2730,7 @@ function printReport(scope) {
   const siteScope = scope.site ? ((typeof projScope === 'function') ? projScope(scope.site) : [scope.site]) : null;
   const TS = S.trees.filter(t =>
     (!siteScope || siteScope.includes(siteOf(t))) &&
-    (!scope.zone || (t.zone || '') === scope.zone) &&
+    (!scope.zone || normZone(t.zone) === scope.zone) &&
     (!scope.hazard || (t.hazard || '') === scope.hazard) &&
     (!scope.assessor || (t.surveyor || 'Unassigned') === scope.assessor));
   if (!TS.length) { toast('Nothing in that scope yet'); return; }
@@ -3057,7 +3053,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v14</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v15</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
@@ -3110,6 +3106,7 @@ function migrate(t) {
   }
   try {
     S.trees = (await DB.allTrees()).map(migrate);
+    for (const t of S.trees) { const nz = normZone(t.zone); if (t.zone && t.zone !== nz) { t.zone = nz; t.updated = Date.now(); t.dirty = true; try { DB.putTree(stripRuntime(t)); } catch (e) {} } }
     S.trees.sort((a, b) => a.id < b.id ? -1 : 1);
     const seq = await DB.getMeta('seq');
     if (seq) S.seq = seq;
