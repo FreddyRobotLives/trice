@@ -776,7 +776,19 @@ var getStore = (input, options) => {
   );
 };
 
-// sync-src.mjs
+// sync-src.mjs — v12 append-only per-record storage
+//
+// DESIGN
+//   Every record revision is its own immutable blob:  e{N}/r/{id}!{updated}
+//   Every photo is its own immutable blob:            e{N}/p/{id}!{photoAt}
+//   Deletes are tombstone blobs:                      e{N}/d/{id}!{at}
+//   Nothing is ever overwritten or destroyed. Writes cannot conflict, so
+//   there is no compare-and-swap on data, no retries, no "busy".
+//   The key listing IS the sync manifest: same keys = same data, exactly.
+//   "Fresh register" increments the epoch; the old epoch's keys remain
+//   untouched forever — that is the archive.
+//   The legacy "state" blob is never modified or deleted; it is migrated
+//   into per-record keys in background slices.
 var sync_src_default = async (req) => {
   const cors = { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" };
   try {
@@ -786,179 +798,274 @@ var sync_src_default = async (req) => {
         const siteID = env("NETLIFY_SITE_ID") || env("SITE_ID");
         const token = env("NETLIFY_BLOBS_TOKEN") || env("NETLIFY_API_TOKEN");
         if (siteID && token) return getStore({ name: "trice-shared", siteID, token });
-        const err = new Error("blobs_not_configured"); err.hint = "Netlify Blobs is not active on this site. Add env vars NETLIFY_SITE_ID (Site settings → General → Site ID) and NETLIFY_BLOBS_TOKEN (a personal access token from app.netlify.com/user/applications) then redeploy."; throw err;
+        const err = new Error("blobs_not_configured"); err.hint = "Netlify Blobs is not active on this site. Add env vars NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN then redeploy."; throw err;
       }
     })();
-    const freshState = () => ({ trees: {}, deletes: {}, projects: {}, users: {}, resetAt: 0 });
+    const V = "12.0";
     const T0 = Date.now();
-    const BUDGET = 6500;
-    const overBudget = () => Date.now() - T0 > BUDGET;
-    const busyNow = () => new Response(JSON.stringify({ error: "busy", where: "storage-slow", elapsed: Date.now() - T0 }), { status: 503, headers: cors });
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const jitter = (a) => 60 * (a + 1) + Math.floor(Math.random() * 120);
-    const read = async () => {
-      let res = null;
-      for (let ra = 0; ra < 2 && !res && !overBudget(); ra++) {
-        try { res = await store.getWithMetadata("state", { type: "json", consistency: "strong" }); } catch (e) { res = null; if (ra < 2) await sleep(jitter(ra)); }
+    const safeGetJSON = async (k) => { try { return await store.get(k, { type: "json", consistency: "strong" }); } catch (e) { return null; } };
+    const safeGetText = async (k) => { try { return await store.get(k, { consistency: "strong" }); } catch (e) { return null; } };
+
+    // ---- epoch ----
+    const getEpoch = async () => (await safeGetJSON("meta/epoch")) || { n: 1, at: 0 };
+    const EP = await getEpoch();
+    const PRE = "e" + EP.n + "/";
+
+    // ---- tiny LWW meta maps (parents, users, projects) with light CAS ----
+    const metaMerge = async (key, mergeFn) => {
+      for (let a = 0; a < 5; a++) {
+        let res = null;
+        try { res = await store.getWithMetadata(key, { type: "json", consistency: "strong" }); } catch (e) { res = null; }
+        const cur = (res && res.data) || {};
+        const { next, changed } = mergeFn(JSON.parse(JSON.stringify(cur)));
+        if (!changed) return cur;
+        const opts = res && res.etag ? { onlyIfMatch: res.etag } : { onlyIfNew: true };
+        let w = null;
+        try { w = await store.setJSON(key, next, opts); } catch (e) { w = { modified: false }; }
+        if (!w || w.modified !== false) return next;
+        await sleep(40 * (a + 1) + Math.floor(Math.random() * 60));
       }
-      const state = (res && res.data) || freshState();
-      state.trees = state.trees || {}; state.deletes = state.deletes || {}; state.projects = state.projects || {}; state.users = state.users || {};
-      return { state, etag: res && res.etag };
+      return null;
     };
-    const write = async (state, etag) => {
-      const opts = etag ? { onlyIfMatch: etag } : { onlyIfNew: true };
-      let r = null;
-      try { r = await store.setJSON("state", state, opts); } catch (e) { return false; }
-      return !r || r.modified !== false;
+
+    // ---- key listing: newest revision per id, tombstones, counts ----
+    const listAll = async () => {
+      const recs = {};   // id -> {u: newest updated, k: key}
+      const dels = {};   // id -> at
+      const photos = {}; // id -> newest photo key
+      const { blobs } = await store.list({ prefix: PRE });
+      for (const b of blobs) {
+        const k = b.key;
+        const rest = k.slice(PRE.length);
+        const bang = rest.lastIndexOf("!");
+        if (bang < 2) continue;
+        const kind = rest.slice(0, 2);
+        const id = rest.slice(2, bang);
+        const st = parseInt(rest.slice(bang + 1), 10) || 0;
+        if (kind === "r/") { if (!recs[id] || st > recs[id].u) recs[id] = { u: st, k }; }
+        else if (kind === "d/") { if (!dels[id] || st > dels[id]) dels[id] = st; }
+        else if (kind === "p/") { if (!photos[id] || st > (parseInt(photos[id].slice(photos[id].lastIndexOf("!") + 1), 10) || 0)) photos[id] = k; }
+      }
+      // a tombstone newer than the newest revision hides the record
+      const live = {};
+      for (const [id, r] of Object.entries(recs)) { if (!dels[id] || dels[id] < r.u) live[id] = r; }
+      return { live, dels, photos, all: recs };
     };
-    if (req.method === "POST") {
-      const b = await req.json().catch(() => ({}));
-      if (b.reset === true && b.resetKey !== "trice-reset-2026") { /* legacy client reset attempt — refused */ }
-      else if (b.reset === true) {
-        const stamp = Date.now();
-        for (let a = 0; a < 6; a++) {
-          if (overBudget()) return busyNow();
-          if (a > 0) await sleep(jitter(a));
-          const { state, etag } = await read();
-          if (Object.keys(state.trees).length) await store.setJSON("archive-" + stamp, state);
-          const next = { trees: {}, deletes: {}, projects: {}, users: state.users, resetAt: stamp };
-          if (await write(next, etag)) return new Response(JSON.stringify({ now: stamp, resetAt: stamp, trees: [], deletes: [], projects: [], users: Object.keys(next.users), usersMeta: Object.values(next.users), archived: true }), { headers: cors });
-        }
-        return new Response(JSON.stringify({ error: "busy" }), { status: 503, headers: cors });
+
+    // ---- background migration of the legacy single-blob state (never deletes it) ----
+    const migrateSlice = async () => {
+      const mig = (await safeGetJSON("meta/mig")) || { done: false, i: 0 };
+      if (mig.done) return;
+      const state = await safeGetJSON("state");
+      if (!state || !state.trees) { await store.setJSON("meta/mig", { done: true, i: 0, at: Date.now(), note: "no legacy state" }); return; }
+      const entries = Object.entries(state.trees);
+      let i = mig.i, moved = 0;
+      while (i < entries.length && moved < 6 && Date.now() - T0 < 6000) {
+        const [id, t] = entries[i];
+        const u = t.updated || t.syncedAt || 1;
+        const meta = Object.assign({}, t); delete meta.photo;
+        meta.photoAt = meta.photoAt || (t.photo ? u : 0);
+        try {
+          await store.setJSON(PRE + "r/" + id + "!" + u, meta);
+          if (t.photo) { try { const has = await store.get(PRE + "p/" + id + "!" + meta.photoAt); if (!has) await store.set(PRE + "p/" + id + "!" + meta.photoAt, t.photo); } catch (e) { await store.set(PRE + "p/" + id + "!" + meta.photoAt, t.photo); } }
+        } catch (e) { break; }
+        i++; moved++;
       }
-      if (b.op === "manifest") {
-        const { state: st } = await read();
-        const ids = Object.values(st.trees).map((t) => [t.id, t.updated || 0]);
-        return new Response(JSON.stringify({ v: "11.7", now: Date.now(), resetAt: st.resetAt || 0, assets: ids.length, ids, deletes: Object.keys(st.deletes || {}) }), { headers: cors });
+      if (i >= entries.length) {
+        for (const [id, at] of Object.entries(state.deletes || {})) { try { await store.setJSON(PRE + "d/" + id + "!" + (at || 1), { at: at || 1 }); } catch (e) {} }
+        await metaMerge("meta/parents", (cur) => {
+          let changed = false;
+          const src = state.projectParents2 || {};
+          for (const [c, e] of Object.entries(src)) { if (!cur[c] || (e.at || 0) > (cur[c].at || 0)) { cur[c] = e; changed = true; } }
+          for (const [c, p] of Object.entries(state.projectParents || {})) { if (!cur[c]) { cur[c] = { p, at: 1 }; changed = true; } }
+          return { next: cur, changed };
+        });
+        await metaMerge("meta/users", (cur) => { let ch = false; for (const [n, u] of Object.entries(state.users || {})) { if (!cur[n]) { cur[n] = u; ch = true; } } return { next: cur, changed: ch }; });
+        await metaMerge("meta/projects", (cur) => {
+          cur.names = cur.names || {}; cur.deleted = cur.deleted || {};
+          let ch = false;
+          for (const [n, ts] of Object.entries(state.projects || {})) { if (!cur.names[n]) { cur.names[n] = ts || 1; ch = true; } }
+          for (const [n, ts] of Object.entries(state.projectDeletes || {})) { if (!cur.deleted[n]) { cur.deleted[n] = ts || 1; ch = true; } }
+          return { next: cur, changed: ch };
+        });
+        if (!EP.at && state.resetAt) { try { await store.setJSON("meta/epoch", { n: EP.n, at: state.resetAt }); } catch (e) {} }
+        await store.setJSON("meta/mig", { done: true, i, at: Date.now(), migrated: entries.length });
+      } else {
+        await store.setJSON("meta/mig", { done: false, i, at: Date.now() });
       }
-      if (Array.isArray(b.need)) {
-        const { state: st } = await read();
-        const CAPN = 3500000;
-        const out = []; let sz = 0; let cut = b.need.length;
-        for (let i = 0; i < b.need.length; i++) {
-          const t = st.trees[b.need[i]];
-          if (!t) continue;
-          const len = JSON.stringify(t).length;
-          if (out.length && sz + len > CAPN) { cut = i; break; }
-          out.push(t); sz += len;
-        }
-        const pending = b.need.slice(cut === b.need.length ? b.need.length : cut);
-        return new Response(JSON.stringify({ v: "11.7", now: Date.now(), trees: out, pending, assets: Object.keys(st.trees).length }), { headers: cors });
+    };
+
+    const metaBundle = async (live) => {
+      const parents = (await safeGetJSON("meta/parents")) || {};
+      const users = (await safeGetJSON("meta/users")) || {};
+      const proj = (await safeGetJSON("meta/projects")) || { names: {}, deleted: {} };
+      const names = new Set(Object.keys(proj.names || {}));
+      const flat = {}; for (const [c, e] of Object.entries(parents)) { if (e && e.p) flat[c] = e.p; }
+      return {
+        projects: [...names].filter((n) => !(proj.deleted || {})[n]),
+        deletedProjects: Object.keys(proj.deleted || {}),
+        projectParents: flat, projectParents2: parents,
+        users: Object.keys(users), usersMeta: Object.values(users)
+      };
+    };
+
+    // =================== GET ===================
+    if (req.method !== "POST") {
+      const url = new URL(req.url);
+      const ph = url.searchParams.get("photo");
+      if (ph && /^e\d+\/p\/[A-Za-z0-9_.:-]+![0-9]+$/.test(ph)) {
+        const data = await safeGetText(ph);
+        if (data == null) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
+        return new Response(JSON.stringify({ key: ph, photo: data }), { headers: cors });
       }
-      let state = freshState();
-      for (let a = 0; a < 10; a++) {
-        if (overBudget()) return busyNow();
-        if (a > 0) await sleep(jitter(a));
-        const r0 = await read();
-        state = r0.state;
-        let changed = false;
-        for (const t0 of Object.values(state.trees)) { if (!t0.syncedAt) { t0.syncedAt = Date.now(); changed = true; } }
-        for (const t of b.push || []) {
-          if (!t || !t.id) continue;
-          const cur = state.trees[t.id];
-          if (!cur || (t.updated || 0) >= (cur.updated || 0)) { t.syncedAt = Date.now(); state.trees[t.id] = t; changed = true; }
-          if (state.deletes[t.id]) { delete state.deletes[t.id]; changed = true; }
-        }
-        for (const d of b.deletes || []) {
-          const id = typeof d === "string" ? d : d && d.id;
-          if (!id) continue;
-          if (!state.deletes[id]) changed = true;
-          state.deletes[id] = Date.now();
-          if (state.trees[id]) { delete state.trees[id]; changed = true; }
-        }
-        state.projectDeletes = state.projectDeletes || {};
-        if (b.reviveProject) { const rn = String(b.reviveProject).trim().slice(0, 80); if (rn && state.projectDeletes[rn]) { delete state.projectDeletes[rn]; changed = true; } }
-        for (const p of b.projects || []) {
-          const n = String(p || "").trim().slice(0, 80);
-          if (n && !state.projects[n] && !state.projectDeletes[n]) { state.projects[n] = Date.now(); changed = true; }
-        }
-        state.projectParents = state.projectParents || {};
-        if (!state.projectParents2) {
-          state.projectParents2 = {};
-          for (const [c0, p0] of Object.entries(state.projectParents)) state.projectParents2[c0] = { p: p0, at: 1 };
-          if (Object.keys(state.projectParents2).length) changed = true;
-        }
-        for (const [c1, e1] of Object.entries(b.parentsLWW || {})) {
-          const cn1 = String(c1 || "").trim().slice(0, 80);
-          if (!cn1 || !e1 || typeof e1 !== "object") continue;
-          const pn1 = e1.p ? String(e1.p).trim().slice(0, 80) : null;
-          const at1 = +e1.at || 0;
-          const cur1 = state.projectParents2[cn1];
-          if (!cur1 || at1 > (cur1.at || 0)) { state.projectParents2[cn1] = { p: pn1, at: at1 }; changed = true; }
-        }
-        if (b.setParent && b.setParent.child) {
-          const ch = String(b.setParent.child).trim().slice(0, 80);
-          const pa = b.setParent.parent ? String(b.setParent.parent).trim().slice(0, 80) : null;
-          if (state.projects[ch] === void 0) return new Response(JSON.stringify({ error: "unknown project", reason: "The server does not know a project named \"" + ch + "\" — sync first, then retry" }), { status: 409, headers: cors });
-          if (pa !== null && state.projects[pa] === void 0) return new Response(JSON.stringify({ error: "unknown project", reason: "The server does not know a main project named \"" + pa + "\"" }), { status: 409, headers: cors });
-          if (state.projects[ch] !== void 0) {
-            if (pa === null) { if (state.projectParents[ch]) { delete state.projectParents[ch]; changed = true; } }
-            else if (state.projects[pa] !== void 0 && pa !== ch) {
-              let cur = pa, guard = 0, cycle = false;
-              while (cur && guard++ < 12) { if (cur === ch) { cycle = true; break; } cur = state.projectParents[cur] || null; }
-              if (cycle) return new Response(JSON.stringify({ error: "cycle", reason: "That would nest a project under its own sub-project" }), { status: 409, headers: cors });
-              if (state.projectParents[ch] !== pa) { state.projectParents[ch] = pa; changed = true; }
-            }
+      if (url.searchParams.get("list") === "backups") {
+        const out = [];
+        for (let n = 1; n < EP.n; n++) out.push("epoch-" + n);
+        try { const { blobs } = await store.list(); for (const bb of blobs) { if (/^(backup|archive)-/.test(bb.key)) out.push(bb.key); } } catch (e) {}
+        return new Response(JSON.stringify({ v: V, backups: out, epoch: EP.n }), { headers: cors });
+      }
+      const dl = url.searchParams.get("download");
+      if (dl && /^epoch-\d+$/.test(dl)) {
+        const n = parseInt(dl.slice(6), 10);
+        const pre2 = "e" + n + "/";
+        const { blobs } = await store.list({ prefix: pre2 });
+        const newest = {};
+        for (const b of blobs) { const rest = b.key.slice(pre2.length); if (!rest.startsWith("r/")) continue; const bang = rest.lastIndexOf("!"); const id = rest.slice(2, bang); const st = parseInt(rest.slice(bang + 1), 10) || 0; if (!newest[id] || st > newest[id].u) newest[id] = { u: st, k: b.key }; }
+        const trees = {};
+        for (const [id, r] of Object.entries(newest)) { const t = await safeGetJSON(r.k); if (t) trees[id] = t; if (Date.now() - T0 > 8000) break; }
+        return new Response(JSON.stringify({ at: Date.now(), epoch: n, trees, note: "Metadata register for this archived epoch. Photos remain stored and fetchable individually." }), { headers: cors });
+      }
+      if (dl && /^(backup|archive)-[A-Za-z0-9_.-]+$/.test(dl)) {
+        const snap2 = await safeGetJSON(dl);
+        if (!snap2) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
+        return new Response(JSON.stringify(snap2), { headers: cors });
+      }
+      await migrateSlice();
+      const { live } = await listAll();
+      const meta = await metaBundle(live);
+      return new Response(JSON.stringify({ ok: true, v: V, epoch: EP.n, resetAt: EP.at || 0, assets: Object.keys(live).length, projects: meta.projects, users: meta.users }, null, 1), { headers: cors });
+    }
+
+    // =================== POST ===================
+    const b = await req.json().catch(() => ({}));
+
+    // fresh register: bump the epoch — the old epoch's keys are the archive
+    if (b.reset === true) {
+      if (b.resetKey !== "trice-reset-2026") return new Response(JSON.stringify({ error: "refused" }), { status: 403, headers: cors });
+      const stamp = Date.now();
+      await store.setJSON("meta/epoch", { n: EP.n + 1, at: stamp });
+      return new Response(JSON.stringify({ v: V, now: stamp, resetAt: stamp, archived: true, epoch: EP.n + 1, trees: [], deletes: [], projects: [], users: [], usersMeta: [] }), { headers: cors });
+    }
+
+    await migrateSlice();
+
+    // shared meta updates ride along with any op
+    const applyMeta = async () => {
+      if (b.parentsLWW && Object.keys(b.parentsLWW).length) {
+        await metaMerge("meta/parents", (cur) => {
+          let ch = false;
+          for (const [c, e] of Object.entries(b.parentsLWW)) {
+            const cn = String(c || "").trim().slice(0, 80);
+            if (!cn || !e || typeof e !== "object") continue;
+            const pn = e.p ? String(e.p).trim().slice(0, 80) : null;
+            const at = +e.at || 0;
+            if (!cur[cn] || at > (cur[cn].at || 0)) { cur[cn] = { p: pn, at }; ch = true; }
           }
-        }
-        if (b.dropProject) {
-          const dn = String(b.dropProject).trim().slice(0, 80);
-          if (dn && state.projects[dn] !== void 0) {
-            const inUse = Object.values(state.trees).filter((t) => (t.site || "") === dn || (t.project || "") === dn).length;
-            if (inUse > 0) return new Response(JSON.stringify({ error: "in use", trees: inUse }), { status: 409, headers: cors });
-            if (Object.values(state.projectParents || {}).includes(dn)) return new Response(JSON.stringify({ error: "has subs" }), { status: 409, headers: cors });
-            delete state.projects[dn]; if ((state.projectParents || {})[dn]) delete state.projectParents[dn]; state.projectDeletes[dn] = Date.now(); changed = true;
-          }
-        }
-        if (b.user && typeof b.user === "string") {
-          const un = b.user.trim().slice(0, 60);
-          if (un) { const u = state.users[un] || { name: un, created: Date.now() }; if (!state.users[un] || (Date.now() - (u.lastSeen || 0)) > 3e4) changed = true; u.lastSeen = Date.now(); state.users[un] = u; }
-        }
-        if (b.dropUser && typeof b.dropUser === "string") {
-          const dn = b.dropUser.trim().slice(0, 60);
-          if (dn && state.users[dn]) { delete state.users[dn]; changed = true; }
-        }
-        if (!changed) break;
-        const __day = new Date().toISOString().slice(0, 10);
-        if (state._backupDay !== __day) {
-          state._backupDay = __day;
-          try { await store.setJSON("backup-" + __day, { at: Date.now(), trees: state.trees, deletes: state.deletes, projects: state.projects }); } catch (e) {}
-        }
-        if (await write(state, r0.etag)) break;
-        if (a === 9) return new Response(JSON.stringify({ error: "busy", where: "write-contention", attempts: 10 }), { status: 503, headers: cors });
+          return { next: cur, changed: ch };
+        });
       }
-      const since = b.since || 0;
-      const sinceId = typeof b.sinceId === "string" ? b.sinceId : "";
-      const stamp2 = (t) => t.syncedAt || t.updated || 0;
-      const all2 = Object.values(state.trees).filter((t) => stamp2(t) > since || (sinceId && stamp2(t) === since && String(t.id) > sinceId));
-      all2.sort((x, y) => (stamp2(x) - stamp2(y)) || (String(x.id) < String(y.id) ? -1 : 1));
-      const CAP2 = 3500000;
-      const trees = []; let sz2 = 0; let more = false; let next = since; let nextId = sinceId;
-      for (const t of all2) {
+      if ((b.projects && b.projects.length) || b.dropProject || b.reviveProject) {
+        await metaMerge("meta/projects", (cur) => {
+          cur.names = cur.names || {}; cur.deleted = cur.deleted || {};
+          let ch = false;
+          for (const p of b.projects || []) { const n = String(p || "").trim().slice(0, 80); if (n && !cur.names[n] && !cur.deleted[n]) { cur.names[n] = Date.now(); ch = true; } }
+          if (b.reviveProject) { const rn = String(b.reviveProject).trim().slice(0, 80); if (rn && cur.deleted[rn]) { delete cur.deleted[rn]; ch = true; } }
+          if (b.dropProject) { const dn = String(b.dropProject).trim().slice(0, 80); if (dn && cur.names[dn]) { delete cur.names[dn]; cur.deleted[dn] = Date.now(); ch = true; } }
+          return { next: cur, changed: ch };
+        });
+      }
+      if (b.user && typeof b.user === "string") {
+        const un = b.user.trim().slice(0, 60);
+        if (un) await metaMerge("meta/users", (cur) => { const u = cur[un] || { name: un, created: Date.now() }; const stale = !cur[un] || Date.now() - (u.lastSeen || 0) > 30000; u.lastSeen = Date.now(); cur[un] = u; return { next: cur, changed: stale }; });
+      }
+      if (b.dropUser && typeof b.dropUser === "string") {
+        const dn = b.dropUser.trim().slice(0, 60);
+        if (dn) await metaMerge("meta/users", (cur) => { if (cur[dn]) { delete cur[dn]; return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      }
+    };
+
+    // ---- put: append-only writes, no read-modify-write, cannot conflict ----
+    if (b.op === "put") {
+      await applyMeta();
+      const saved = [], savedPhotos = [];
+      for (const t of b.recs || []) {
+        if (!t || !t.id || !/^[A-Za-z0-9_.:-]{1,64}$/.test(String(t.id))) continue;
+        const u = +t.updated || Date.now();
+        const meta = Object.assign({}, t); delete meta.photo;
+        try { await store.setJSON(PRE + "r/" + t.id + "!" + u, meta); saved.push(t.id); } catch (e) {}
+      }
+      for (const [id, obj] of Object.entries(b.photos || {})) {
+        if (!/^[A-Za-z0-9_.:-]{1,64}$/.test(String(id)) || !obj || typeof obj.data !== "string") continue;
+        const at = +obj.at || Date.now();
+        try { await store.set(PRE + "p/" + id + "!" + at, obj.data); savedPhotos.push(id); } catch (e) {}
+      }
+      for (const d of b.dels || []) {
+        const id = typeof d === "string" ? d : d && d.id;
+        if (!id || !/^[A-Za-z0-9_.:-]{1,64}$/.test(String(id))) continue;
+        try { await store.setJSON(PRE + "d/" + id + "!" + Date.now(), { at: Date.now() }); } catch (e) {}
+      }
+      return new Response(JSON.stringify({ v: V, now: Date.now(), ok: true, saved, savedPhotos }), { headers: cors });
+    }
+
+    // ---- list: the manifest — same keys on two devices means identical data ----
+    if (b.op === "list" || b.push !== void 0 || b.since !== void 0) {
+      await applyMeta();
+      // legacy v11 clients: accept their pushed records so nothing waits on the app update
+      if (Array.isArray(b.push) && b.push.length) {
+        for (const t of b.push) {
+          if (!t || !t.id || !/^[A-Za-z0-9_.:-]{1,64}$/.test(String(t.id))) continue;
+          const u = +t.updated || Date.now();
+          const meta = Object.assign({}, t); delete meta.photo;
+          meta.photoAt = meta.photoAt || (t.photo ? u : 0);
+          try {
+            await store.setJSON(PRE + "r/" + t.id + "!" + u, meta);
+            if (t.photo) await store.set(PRE + "p/" + t.id + "!" + meta.photoAt, t.photo);
+          } catch (e) {}
+        }
+        for (const d of b.deletes || []) { const id = typeof d === "string" ? d : d && d.id; if (id && /^[A-Za-z0-9_.:-]{1,64}$/.test(String(id))) { try { await store.setJSON(PRE + "d/" + id + "!" + Date.now(), { at: Date.now() }); } catch (e) {} } }
+      }
+      const { live, dels, photos } = await listAll();
+      const meta = await metaBundle(live);
+      const mig = (await safeGetJSON("meta/mig")) || { done: false };
+      const ids = Object.entries(live).map(([id, r]) => [id, r.u, photos[id] || null]);
+      return new Response(JSON.stringify(Object.assign({
+        v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
+        assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
+        migrating: !mig.done,
+        trees: [], deletes: [], more: false
+      }, meta)), { headers: cors });
+    }
+
+    // ---- get: fetch record metadata by key, size-capped with a pending remainder ----
+    if (b.op === "get" && Array.isArray(b.keys)) {
+      const CAP = 3500000;
+      const out = []; let sz = 0; let cut = b.keys.length;
+      for (let i = 0; i < b.keys.length; i++) {
+        const k = String(b.keys[i] || "");
+        if (!/^e\d+\/r\/[A-Za-z0-9_.:-]+![0-9]+$/.test(k)) continue;
+        const t = await safeGetJSON(k);
+        if (!t) continue;
         const len = JSON.stringify(t).length;
-        if (trees.length && sz2 + len > CAP2) { more = true; break; }
-        trees.push(t); sz2 += len; next = stamp2(t); nextId = String(t.id);
+        if (out.length && sz + len > CAP) { cut = i; break; }
+        t.__key = k; out.push(t); sz += len;
+        if (Date.now() - T0 > 8000) { cut = i + 1; break; }
       }
-      const deletes = Object.entries(state.deletes).filter(([, ts]) => ts > since).map(([id]) => id);
-      const pp2 = state.projectParents2 || {};
-      const ppFlat = {}; for (const [c9, e9] of Object.entries(pp2)) { if (e9 && e9.p) ppFlat[c9] = e9.p; }
-      return new Response(JSON.stringify({ v: "11.7", now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, more, next, nextId, assets: Object.keys(state.trees).length, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: ppFlat, projectParents2: pp2, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
+      const pending = b.keys.slice(cut === b.keys.length ? b.keys.length : cut);
+      return new Response(JSON.stringify({ v: V, now: Date.now(), trees: out, pending }), { headers: cors });
     }
-    const { state } = await read();
-    const __url = new URL(req.url);
-    if (__url.searchParams.get("list") === "backups") {
-      const out = [];
-      try { const { blobs } = await store.list(); for (const bb of blobs) { if (/^(backup|archive)-/.test(bb.key)) out.push(bb.key); } } catch (e) {}
-      out.sort().reverse();
-      return new Response(JSON.stringify({ backups: out }), { headers: cors });
-    }
-    const __dl = __url.searchParams.get("download");
-    if (__dl && /^(backup|archive)-[A-Za-z0-9_.-]+$/.test(__dl)) {
-      const snap2 = await store.get(__dl, { type: "json" });
-      if (!snap2) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
-      return new Response(JSON.stringify(snap2), { headers: cors });
-    }
-    return new Response(JSON.stringify((() => { const trees = Object.values(state.trees); const byProject = {}; for (const t of trees) { const s = t.site || "Unassigned"; byProject[s] = (byProject[s] || 0) + 1; } const assessors = [...new Set(trees.map((t) => t.surveyor).filter(Boolean))]; const last = trees.reduce((m, t) => Math.max(m, t.updated || 0), 0); return { ok: true, v: "11.7", assets: trees.length, projects: Object.keys(state.projects), users: Object.keys(state.users), byProject, assessors, lastActivity: last ? new Date(last).toISOString() : null, resetAt: state.resetAt || 0 }; })(), null, 1), { headers: cors });
+
+    return new Response(JSON.stringify({ v: V, error: "unknown op" }), { status: 400, headers: cors });
   } catch (e) {
     return new Response(JSON.stringify({ error: "store unavailable", reason: String((e && e.message) || e), hint: (e && e.hint) || "If reason mentions environment/credentials: add NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN env vars in Netlify, then redeploy." }), { status: 503, headers: cors });
   }
