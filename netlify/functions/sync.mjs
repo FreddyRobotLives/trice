@@ -826,6 +826,25 @@ var sync_src_default = async (req) => {
         }
         return new Response(JSON.stringify({ error: "busy" }), { status: 503, headers: cors });
       }
+      if (b.op === "manifest") {
+        const { state: st } = await read();
+        const ids = Object.values(st.trees).map((t) => [t.id, t.updated || 0]);
+        return new Response(JSON.stringify({ now: Date.now(), resetAt: st.resetAt || 0, assets: ids.length, ids, deletes: Object.keys(st.deletes || {}) }), { headers: cors });
+      }
+      if (Array.isArray(b.need)) {
+        const { state: st } = await read();
+        const CAPN = 3500000;
+        const out = []; let sz = 0; let cut = b.need.length;
+        for (let i = 0; i < b.need.length; i++) {
+          const t = st.trees[b.need[i]];
+          if (!t) continue;
+          const len = JSON.stringify(t).length;
+          if (out.length && sz + len > CAPN) { cut = i; break; }
+          out.push(t); sz += len;
+        }
+        const pending = b.need.slice(cut === b.need.length ? b.need.length : cut);
+        return new Response(JSON.stringify({ now: Date.now(), trees: out, pending, assets: Object.keys(st.trees).length }), { headers: cors });
+      }
       let state = freshState();
       for (let a = 0; a < 10; a++) {
         if (overBudget()) return busyNow();
@@ -833,6 +852,7 @@ var sync_src_default = async (req) => {
         const r0 = await read();
         state = r0.state;
         let changed = false;
+        for (const t0 of Object.values(state.trees)) { if (!t0.syncedAt) { t0.syncedAt = Date.now(); changed = true; } }
         for (const t of b.push || []) {
           if (!t || !t.id) continue;
           const cur = state.trees[t.id];
@@ -861,9 +881,10 @@ var sync_src_default = async (req) => {
           if (state.projects[ch] !== void 0) {
             if (pa === null) { if (state.projectParents[ch]) { delete state.projectParents[ch]; changed = true; } }
             else if (state.projects[pa] !== void 0 && pa !== ch) {
-              if (state.projectParents[pa]) return new Response(JSON.stringify({ error: "one level", reason: "That project is itself a sub-project" }), { status: 409, headers: cors });
-              if (Object.values(state.projectParents).includes(ch)) return new Response(JSON.stringify({ error: "one level", reason: "That project has sub-projects of its own" }), { status: 409, headers: cors });
-              state.projectParents[ch] = pa; changed = true;
+              let cur = pa, guard = 0, cycle = false;
+              while (cur && guard++ < 12) { if (cur === ch) { cycle = true; break; } cur = state.projectParents[cur] || null; }
+              if (cycle) return new Response(JSON.stringify({ error: "cycle", reason: "That would nest a project under its own sub-project" }), { status: 409, headers: cors });
+              if (state.projectParents[ch] !== pa) { state.projectParents[ch] = pa; changed = true; }
             }
           }
         }
@@ -894,9 +915,19 @@ var sync_src_default = async (req) => {
         if (a === 9) return new Response(JSON.stringify({ error: "busy", where: "write-contention", attempts: 10 }), { status: 503, headers: cors });
       }
       const since = b.since || 0;
-      const trees = Object.values(state.trees).filter((t) => (t.syncedAt || t.updated || 0) > since);
+      const sinceId = typeof b.sinceId === "string" ? b.sinceId : "";
+      const stamp2 = (t) => t.syncedAt || t.updated || 0;
+      const all2 = Object.values(state.trees).filter((t) => stamp2(t) > since || (sinceId && stamp2(t) === since && String(t.id) > sinceId));
+      all2.sort((x, y) => (stamp2(x) - stamp2(y)) || (String(x.id) < String(y.id) ? -1 : 1));
+      const CAP2 = 3500000;
+      const trees = []; let sz2 = 0; let more = false; let next = since; let nextId = sinceId;
+      for (const t of all2) {
+        const len = JSON.stringify(t).length;
+        if (trees.length && sz2 + len > CAP2) { more = true; break; }
+        trees.push(t); sz2 += len; next = stamp2(t); nextId = String(t.id);
+      }
       const deletes = Object.entries(state.deletes).filter(([, ts]) => ts > since).map(([id]) => id);
-      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: state.projectParents || {}, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
+      return new Response(JSON.stringify({ now: Date.now(), resetAt: state.resetAt || 0, trees, deletes, more, next, nextId, assets: Object.keys(state.trees).length, projects: Object.keys(state.projects), deletedProjects: Object.keys(state.projectDeletes || {}), projectParents: state.projectParents || {}, users: Object.keys(state.users), usersMeta: Object.values(state.users) }), { headers: cors });
     }
     const { state } = await read();
     const __url = new URL(req.url);
