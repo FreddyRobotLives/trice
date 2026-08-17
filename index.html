@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v11.5">
+<meta name="version" content="trice-v11.6">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -24,7 +24,7 @@
 *{box-sizing:border-box}
 :root{
   --ink:#17181a; --body:#403d37; --muted:#86837b; --faint:#a8a49a; --label:#98948a;
-  --accent:#c8452c; --bg:#f3f1ec; --card:#fff; --line: rgba(22,24,29,.12); --soft:#f7f5f0; --hair: rgba(22,24,29,.07);
+  --accent:#c8452c; --bg:#f3f1ec; --card:#fff; --line:#e7e4dc; --soft:#f7f5f0; --hair:#efece5;
   --good:#2f7d55; --good-bg:#eaf3ec; --info:#2f5573; --info-bg:#ebf0f2;
   --warn:#b8842a; --warn-ink:#8a6118; --warn-bg:#f7f0dd; --bad:#b34b48; --bad-bg:#faeeec;
 }
@@ -551,6 +551,67 @@ async function pushDirtyBatched(baseBody) {
   return { lastResponse, failed };
 }
 
+/* ---------------- Verify & repair (anti-entropy) ----------------
+   Watermark sync is fast but can miss records after clock skew, an old build,
+   or an interrupted push. This is the guarantee underneath it: fetch the
+   server's full id list (tiny — no photos), then repair both directions.
+   Missing here → pulled. Missing on the server → re-sent. Nothing is ever
+   deleted by verification. Runs automatically when counts disagree, and by
+   hand from Report → Data → Verify team data. */
+async function reconcile(mode) {
+  if (SYNC.reconciling) return null;
+  SYNC.reconciling = true;
+  try {
+    const r = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ op:'manifest' }) });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const m = await r.json();
+    const server = new Map(m.ids || []);
+    const serverDel = new Set(m.deletes || []);
+    const tombSet = new Set(tombs());
+    const localById = new Map(S.trees.map(t => [t.id, t]));
+    const want = [];
+    for (const [id, upd] of server) {
+      const loc = localById.get(id);
+      if (!loc) { if (!tombSet.has(id)) want.push(id); }
+      else if ((upd || 0) > (loc.updated || 0) && !loc.dirty) want.push(id);
+    }
+    let repushed = 0;
+    for (const t of S.trees) {
+      if (!server.has(t.id) && !t.dirty && !serverDel.has(t.id)) { t.dirty = true; repushed++; }
+    }
+    mergeRemote([], m.deletes || []);
+    let pulled = 0, pendIds = want, guard = 0;
+    while (pendIds.length && guard++ < 40) {
+      const rr = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ need: pendIds }) });
+      if (!rr.ok) break;
+      const jj = await rr.json();
+      mergeRemote(jj.trees || [], []);
+      pulled += (jj.trees || []).length;
+      pendIds = jj.pending || [];
+    }
+    SYNC.serverAssets = typeof m.assets === 'number' ? m.assets : SYNC.serverAssets;
+    if (repushed) queueSync();
+    return { server: m.assets, local: S.trees.length, pulled, repushed };
+  } catch (e) {
+    return null;
+  } finally {
+    SYNC.reconciling = false;
+    SYNC.lastReconcile = Date.now();
+  }
+}
+async function verifyTeamData() {
+  toast('Verifying against the server…');
+  const res = await reconcile('manual');
+  if (!res) { toast('Could not reach the server — try again with signal'); return; }
+  const dirtyN = S.trees.filter(t => t.dirty).length;
+  if (dirtyN) { try { await syncNow(); } catch (e) {} }
+  const localN = S.trees.length;
+  const srvN = (typeof SYNC.serverAssets === 'number') ? SYNC.serverAssets : res.server;
+  if (!res.pulled && !res.repushed && localN === srvN) toast('Consistent — ' + localN + ' records here and on the server');
+  else toast('Repaired: pulled ' + res.pulled + ', re-sent ' + res.repushed + ' · this phone ' + localN + ' · server ' + (srvN + (res.repushed ? '+' : '')));
+  render();
+}
+
 async function syncNow(){
   // Always try — a cold function start or blip must not disable team sync for the session.
   if(!navigator.onLine){ SYNC.status='offline'; syncChip(); return; }
@@ -592,10 +653,28 @@ async function syncNow(){
       S.usersMeta = j.usersMeta;
       if (S.tab === 'map' && !S.draft) { const ae2 = document.activeElement; if (!ae2 || !/input|textarea|select/i.test(ae2.tagName)) render(); }
     }
-    for(const t of dirty){ const x=S.trees.find(y=>y.id===t.id); if(x){ delete x.dirty; try{DB.putTree(stripRuntime(x));}catch(e){} } }
-    localStorage.setItem('trice_tombs','[]');
-    SYNC.last = j.now || Date.now(); localStorage.setItem('trice_sync_last', String(SYNC.last)); SYNC.busyCount = 0;
+    if (!failed.length) localStorage.setItem('trice_tombs','[]');
+    /* Drain remaining pages — the server caps each response, so a long backlog
+       arrives in slices instead of one oversized reply that the gateway drops. */
+    let page = j, guard = 0;
+    while (page.more && guard++ < 40) {
+      const rp = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ since: page.next, sinceId: page.nextId || '', push: [], user: S.surveyor || '' }) });
+      if (!rp.ok) break;
+      page = await rp.json();
+      mergeRemote(page.trees, page.deletes);
+    }
+    SYNC.last = page.more ? page.next : (page.now || Date.now());
+    localStorage.setItem('trice_sync_last', String(SYNC.last)); SYNC.busyCount = 0;
     SYNC.status='ok'; SYNC.lastOk=Date.now();
+    if (typeof page.assets === 'number') {
+      SYNC.serverAssets = page.assets;
+      /* Belt and braces: if this phone and the server disagree on the record
+         count after a clean cycle, verify against the server id list. */
+      if (!page.more && !failed.length && page.assets !== S.trees.length &&
+          Date.now() - (SYNC.lastReconcile || 0) > 90000 && !SYNC.reconciling) {
+        reconcile('auto').then(res => { if (res && (res.pulled || res.repushed)) { render(); } }).catch(()=>{});
+      }
+    }
   }catch(e){ if(SYNC.enabled!==true) SYNC.enabled=false; SYNC.status='err'; SYNC.lastErr=(e&&e.message)||'network'; }
   syncChip();
 }
@@ -1542,7 +1621,13 @@ function allProjects() {
 /* ---------------- Main / sub-projects ---------------- */
 const parentOf = name => (S.projectParents || {})[name] || null;
 const subsOf = name => Object.entries(S.projectParents || {}).filter(([c, pa]) => pa === name).map(([c]) => c);
-function projScope(name) { return [name, ...subsOf(name)]; }
+function isUnder(a, b) { let c = parentOf(a), g = 0; while (c && g++ < 8) { if (c === b) return true; c = parentOf(c); } return false; }
+function projMatches(site, sel) { if (!sel) return true; if (site === sel) return true; return isUnder(site, sel); }
+function projDepth(name) { let d = 0, c = parentOf(name), g = 0; while (c && g++ < 8) { d++; c = parentOf(c); } return d; }
+function projScope(name) {
+  const all = [...new Set([...(S.projects || []), ...Object.keys(S.projectParents || {})])];
+  return [name, ...all.filter(x => x !== name && isUnder(x, name))];
+}
 async function setProjectParent(child, parent) {
   try {
     const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1676,33 +1761,36 @@ function projectsCard() {
 function pickerRows() {
   const projs = allProjects();
   const q = (S.pickerQ || '').toLowerCase().trim();
-  const mains = projs.filter(p => !parentOf(p));
-  const ordered = mains.flatMap(mn => [mn, ...subsOf(mn).filter(c => projs.includes(c))]);
-  const list = q ? ordered.filter(p => p.toLowerCase().includes(q)) : ordered;
-  window.__PICK = list;
-  window.__MAINS = mains;
+  const kidsIn = p => projs.filter(x => x !== p && parentOf(x) === p);
+  const ordered = [];
+  const addRow = (p, d) => { ordered.push([p, d]); kidsIn(p).forEach(k => addRow(k, Math.min(d + 1, 3))); };
+  projs.filter(p => { const pa = parentOf(p); return !pa || !projs.includes(pa); }).forEach(p => addRow(p, 0));
+  const list = q ? ordered.filter(([p]) => p.toLowerCase().includes(q)) : ordered;
+  window.__PICK = list.map(([p]) => p);
+  window.__ALLP = projs;
   if (!list.length) return `<div style="padding:22px 0;text-align:center;font-size:12.5px;color:var(--faint)">${q ? 'No project matches.' : 'No projects yet — create the first below.'}</div>`;
-  return list.map((pj, i) => {
-    const isSub = !!parentOf(pj);
+  return list.map(([pj, depth], i) => {
+    const isSub = depth > 0 || !!parentOf(pj);
     const on = S.site === pj;
     const own = S.trees.filter(t => siteOfT(t) === pj).length;
-    const nSubs = isSub ? 0 : subsOf(pj).length;
-    const scopeN = isSub ? own : S.trees.filter(t => projScope(pj).includes(siteOfT(t))).length;
+    const nSubs = kidsIn(pj).length;
+    const scope = projScope(pj);
+    const scopeN = scope.length > 1 ? S.trees.filter(t => scope.includes(siteOfT(t))).length : own;
     const canDelete = !own && !nSubs;
     return `
-    <div style="display:flex;align-items:center;gap:11px;padding:13px 0 13px ${isSub ? '22px' : '0'};border-top:1px solid var(--hair)">
+    <div style="display:flex;align-items:center;gap:11px;padding:13px 0 13px ${depth * 22}px;border-top:1px solid var(--hair)">
       <button onclick="pickJoin(${i})" style="flex:1;min-width:0;display:flex;align-items:center;gap:11px;border:0;background:none;padding:0;text-align:left;color:var(--ink)">
         <span style="width:20px;height:20px;border-radius:${isSub ? '6px' : '50%'};flex:none;border:1.5px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'var(--accent)' : 'transparent'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800">${on ? '✓' : ''}</span>
         <span style="flex:1;min-width:0"><span style="display:block;font-size:13.5px;font-weight:${isSub ? '500' : '700'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pj)}</span>
-        <span style="display:block;font-size:11px;color:var(--muted)">${scopeN ? scopeN + ' asset' + (scopeN > 1 ? 's' : '') : 'Empty'}${nSubs ? ' · ' + nSubs + ' location' + (nSubs > 1 ? 's' : '') : ''}${isSub ? ' · under ' + esc(parentOf(pj)) : ''}</span></span>
+        <span style="display:block;font-size:11px;color:var(--muted)">${scopeN ? scopeN + ' asset' + (scopeN > 1 ? 's' : '') : 'Empty'}${nSubs ? ' · ' + nSubs + ' location' + (nSubs > 1 ? 's' : '') : ''}${parentOf(pj) ? ' · under ' + esc(parentOf(pj)) : ''}</span></span>
       </button>
       ${S.pickerEdit ? `
       <span style="display:inline-flex;gap:7px;align-items:center;flex:none">
-        ${!nSubs ? `<select onchange="pickMove(${i}, this.value)" style="border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:11.5px;color:var(--ink);max-width:128px">
+        <select onchange="pickMove(${i}, this.value)" style="border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 6px;font-size:11.5px;color:var(--ink);max-width:128px">
           <option value="">File under…</option>
-          ${isSub ? '<option value="top">Top level (no main)</option>' : ''}
-          ${window.__MAINS.map((mn, mi) => (mn === pj || parentOf(pj) === mn) ? '' : `<option value="${mi}">${esc(mn)}</option>`).join('')}
-        </select>` : `<span style="font-size:10.5px;color:var(--faint)">main</span>`}
+          ${parentOf(pj) ? '<option value="top">Top level</option>' : ''}
+          ${projs.map((mn, mi) => (mn === pj || parentOf(pj) === mn || isUnder(mn, pj)) ? '' : `<option value="${mi}">${esc(mn)}</option>`).join('')}
+        </select>
         ${canDelete ? `<button onclick="pickDelete(${i})" style="border:0;background:none;color:var(--bad);font-size:12px;font-weight:700;padding:8px 4px">Delete</button>` : ''}
       </span>` : ''}
     </div>`;
@@ -1712,7 +1800,7 @@ function pickJoin(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; sel
 function pickDelete(i) { const nm = (window.__PICK || [])[i]; if (!nm) return; deleteProject(nm); }
 async function pickMove(i, val) {
   const child = (window.__PICK || [])[i]; if (!child || val === '') return;
-  const parent = val === 'top' ? null : (window.__MAINS || [])[parseInt(val, 10)];
+  const parent = val === 'top' ? null : (window.__ALLP || [])[parseInt(val, 10)];
   if (val !== 'top' && !parent) return;
   const ok = await setProjectParent(child, parent);
   if (ok) { toast(parent ? `"${child}" filed under "${parent}"` : `"${child}" moved to top level`); render(); }
@@ -2364,6 +2452,7 @@ function reportView() {
   <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Data</span><button id="syncChip" onclick="syncDiag()" style="font-size:10px;font-weight:700;border:0;background:none;padding:0;cursor:pointer" title="Tap to test team sync"></button></div>
   <div class="card" style="padding:9px 15px">
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${(typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : ''}</span><span class="l2">This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — checks every record id against the server and repairs both ways. Nothing is deleted.</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${needsBackup() ? ` <span class="chip bad" style="margin-left:4px">${unbackedCount()} not backed up</span>` : ''}</span><span class="l2">${needsBackup() ? 'Do this before the phone leaves the site' : (lastBackupAt() ? `Everything, photos included · last backup ${fmtWhen(lastBackupAt())}` : 'Everything, photos included, as one file')}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="forceRefreshDevice()"><span class="mid"><span class="l1">Force refresh this device</span><span class="l2">Clears cached app &amp; local copies, re-pulls everything. Unsynced work is pushed first, never lost.</span></span><span style="color:var(--faint)">&#8250;</span></button>
@@ -2419,7 +2508,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v11.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v11.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
