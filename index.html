@@ -673,6 +673,12 @@ function applySharedMeta(j) {
     projChanged = true;
   }
   if (S.joined && projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+  if (S.site && projHidden(S.site)) {
+    const was = S.site;
+    S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {}
+    toast('"' + was + '" was archived — pick a project to keep capturing');
+    projChanged = true;
+  }
   if (Array.isArray(j.projects)) {
     const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
     if (add.length) { S.projects.push(...add); projChanged = true; }
@@ -1777,6 +1783,7 @@ async function deleteProject(name) {
   if (!S.deletedProjects.includes(name)) S.deletedProjects.push(name);
   try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); localStorage.setItem('trice_delproj', JSON.stringify(S.deletedProjects)); } catch (e) {}
   if (S.joined === name || projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+  if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   render();
 }
 async function archiveProject(name) {
@@ -1786,6 +1793,7 @@ async function archiveProject(name) {
   if (!S.archivedProjects.includes(name)) S.archivedProjects.push(name);
   try { localStorage.setItem('trice_archproj', JSON.stringify(S.archivedProjects)); } catch (e) {}
   if (projHidden(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+  if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   render();
 }
 async function restoreProject(name) {
@@ -1833,6 +1841,7 @@ async function allSubsToLocations(parent) {
   render();
 }
 function selectProject(name) {
+  if (projHidden(name)) { toast('"' + name + '" is archived — restore it under Organize to use it again'); return; }
   if (S.site === name) {
     S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {}
     toast(`Left ${name} — its records stay filed under it`); render(); return;
@@ -1895,7 +1904,7 @@ function nameCard() {
 }
 function projectsCard() {
   // Compact selector — the screen shows WHERE you are; managing projects lives in the picker.
-  const cur = S.site;
+  const cur = (S.site && !projHidden(S.site)) ? S.site : '';
   const pa = cur ? parentOf(cur) : null;
   return `
   <button class="card" onclick="S.showPicker=true;S.pickerEdit=false;S.pickerQ='';render()" style="width:100%;text-align:left;display:flex;align-items:center;gap:12px;padding:15px 17px;margin-bottom:14px;border:1px solid var(--line);color:var(--ink)">
@@ -2006,7 +2015,7 @@ function projectPicker() {
 }
 
 function walkRows() {
-  const mine = S.site ? S.trees.filter(t => siteOfT(t) === S.site) : [];
+  const mine = (S.site && !projHidden(S.site)) ? S.trees.filter(t => siteOfT(t) === S.site) : [];
   if (!mine.length) return '';
   const T = totals(mine);
   return `<div style="margin-top:14px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span class="slab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Logged · ${esc(S.site)}</span><span style="font-size:12px;color:var(--muted);flex:none">${T.lines} line items · ${T.byHaz['High Hazard'].specimens} high hazard</span></div>
@@ -3048,10 +3057,10 @@ function weatherCard() {
 
 /* ---------------- Projects & per-assessor reporting ---------------- */
 const siteOfT = t => t.site || S.site || 'Unassigned site';
-function projTrees(site) { const scope = (typeof projScope === 'function') ? projScope(site) : [site]; return S.trees.filter(t => scope.includes(siteOfT(t))); }
+function projTrees(site) { const scope = (typeof projScope === 'function') ? projScope(site) : [site]; return S.trees.filter(t => visT(t) && scope.includes(siteOfT(t))); }
 function projectsSection() {
   const sites = {};
-  for (const t of S.trees) { const k = siteOfT(t); sites[k] = sites[k] || { n: 0, hi: 0, users: new Set() }; sites[k].n++; if (t.hazard === 'High Hazard') sites[k].hi++; sites[k].users.add(t.surveyor || 'Unassigned'); }
+  for (const t of S.trees) { if (!visT(t)) continue; const k = siteOfT(t); sites[k] = sites[k] || { n: 0, hi: 0, users: new Set() }; sites[k].n++; if (t.hazard === 'High Hazard') sites[k].hi++; sites[k].users.add(t.surveyor || 'Unassigned'); }
   // Roll locations up under their mains; order = main, then its locations, indented
   const allNames = new Set(Object.keys(sites));
   for (const nm of Object.keys(sites)) { const pa = parentOf(nm); if (pa) allNames.add(pa); }
@@ -3131,6 +3140,7 @@ function printReport(scope) {
   const siteOf = t => t.site || S.site || 'Unassigned site';
   const siteScope = scope.site ? ((typeof projScope === 'function') ? projScope(scope.site) : [scope.site]) : null;
   const TS = S.trees.filter(t =>
+    visT(t) &&
     (!siteScope || siteScope.includes(siteOf(t))) &&
     (!scope.zone || normZone(t.zone) === scope.zone) &&
     (!scope.hazard || (t.hazard || '') === scope.hazard) &&
@@ -3292,7 +3302,7 @@ function openReview() {
     document.body.appendChild(w);
   }
   const cur = lastReviewScope || {};
-  const pool = S.trees.filter(t => !cur.site || (t.site || S.site || 'Unassigned site') === cur.site);
+  const pool = S.trees.filter(t => visT(t) && (!cur.site || (t.site || S.site || 'Unassigned site') === cur.site));
   const zs = [...new Set(pool.map(t => t.zone || ''))].filter(Boolean).sort(zoneSort);
   const us = [...new Set(pool.map(t => t.surveyor || 'Unassigned'))].sort();
   const selSt = 'border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:600;color:#17181a';
@@ -3519,6 +3529,7 @@ function migrate(t) {
   // Migration: a site chosen in an older build becomes a project (listed, not auto-joined).
   if (S.site && !S.projects.includes(S.site)) { S.projects.push(S.site); try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {} }
   if (S.site && !localStorage.getItem('trice_joined')) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
+  if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
   if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','report'].includes(lt)) S.tab = lt; }
   render();
