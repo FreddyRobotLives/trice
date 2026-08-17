@@ -52,3 +52,11 @@ Deploy: commit these files to FreddyRobotLives/trice, push, let Netlify build tr
 - Landing page first: hero (mark, tagline, mountains) -> Get Started / Team Access -> company list -> WTR password -> profile picker. One password entry per device.
 - Sheets: "⛶ Full screen" puts the grid alone on screen; Predict pricing and Accept all stay in the fullscreen bar. Leaving the tab closes it.
 - Desktop rail: Capture removed (mobile center Capture button unchanged).
+
+## Build watchdog (v21.8+)
+Every device compares its running build against the server on boot, on every
+return to the foreground, and every 10 minutes. When the server has a newer
+build, the device pushes unsynced records, purges its caches, and reloads.
+For this to trigger, the `<meta name="version">` in index.html must change on
+every release (the delivered zips always bump it). Records, drafts, projects
+and the team password live in IndexedDB/localStorage and are never touched.

@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v21.5">
+<meta name="version" content="trice-v22.0">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -2359,6 +2359,7 @@ function treesView() {
   const T = totals(vis);
   const filtered = S.regQ.trim() || S.regHaz !== 'all';
   return `
+  <button onclick="go('report')" style="border:0;background:none;padding:0 0 12px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ink)"><span style="font-size:18px;line-height:1">‹</span> Report</button>
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px">
     <span class="slab">Asset register${S.site ? ' · ' + esc(S.site) : ''}</span>
     <span style="font-size:12px;color:var(--muted)">${T.lines} line items · ${T.specimens} specimens · ${money(T.total)}</span>
@@ -2795,7 +2796,7 @@ function exportHoursCSV(weekOnly) {
 const TEAM_INP = 'border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;background:#fff;font-family:inherit;color:var(--ink)';
 function teamPerf() {
   const now = Date.now();
-  const rng = S.perfRange == null ? 30 : S.perfRange;
+  const rng = 0; /* all-time — the 7D/30D/90D range pills were removed */
   const cut = rng ? now - rng * 864e5 : 0;
   const vis = S.trees.filter(visT);
   const names = [...new Set(vis.map(t => t.surveyor || 'Unassigned'))].sort();
@@ -2829,22 +2830,18 @@ function teamPerf() {
   const per = names.map(n => { const rows = vis.filter(t => (t.surveyor || 'Unassigned') === n && (t.when || 0) >= cut); return { n, c: rows.length, s: rows.reduce((s, t) => s + (t.qty || 1), 0), hi: rows.filter(t => t.hazard === 'High Hazard').length, $: rows.reduce((s, t) => s + (lineTotal(t) || 0), 0), last: rows.reduce((m, t) => Math.max(m, t.when || 0), 0) }; }).filter(e => e.c).sort((a, b) => b.c - a.c);
   const pMax = Math.max(1, ...per.map(e => e.c));
   const tone = e => { const r = e.c ? e.hi / e.c : 0; return r > .25 ? ['var(--bad-bg)', '#7d3330'] : r > .1 ? ['var(--warn-bg)', '#7a5a1d'] : ['var(--good-bg)', '#245c3c']; };
-  const rangeBtn = (d, l) => `<button onclick="S.perfRange=${d};render()" style="border:1px solid ${rng === d ? 'var(--ink)' : 'var(--line)'};background:${rng === d ? 'var(--ink)' : '#fff'};color:${rng === d ? '#fff' : 'var(--muted)'};border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">${l}</button>`;
   return `
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-    ${names.length > 1 ? filterSel(S.perfUser, names, 'S.perfUser=this.value||null;render()', 'Everyone') : ''}
-    <span style="flex:1"></span>${rangeBtn(7, '7D')}${rangeBtn(30, '30D')}${rangeBtn(90, '90D')}${rangeBtn(0, 'All')}
-  </div>
+  ${names.length > 1 ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">${filterSel(S.perfUser, names, 'S.perfUser=this.value||null;render()', 'Everyone')}</div>` : ''}
   ${TS.length || vis.length ? '' : '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Performance draws itself from the field — captures, hours and hazards appear here as the team works.</div>'}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
     ${tile('Captures', TS.length, `${spec} specimens`)}
     ${tile('High hazard', hi, TS.length ? Math.round(hi / TS.length * 100) + '% of captures' : '')}
     ${tile('Hours this week', wkH ? wkH.toFixed(1) : '0', 'from the punch clock')}
-    ${tile('Priced', priced ? money(priced) : '$0', 'remediation in range')}
+    ${tile('Priced', priced ? money(priced) : '$0', 'remediation priced')}
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px">
     <div class="card" style="padding:18px 19px"><div style="${K}">Capture streak</div><div style="${V}">${streak}<span style="font-size:15px;font-weight:700;color:var(--muted)"> day${streak === 1 ? '' : 's'}</span></div><div style="margin-top:7px;font-size:11px;color:var(--muted)">${streak ? 'Consecutive days with at least one capture' : 'Log a capture to start a streak'}</div></div>
-    <div class="card" style="padding:18px 19px"><div style="${K}">Weekly rhythm</div><div style="${V}">${in7}<span style="font-size:15px;font-weight:700;color:var(--muted)"> this week</span></div><div style="margin-top:7px;font-size:11px;color:${mom >= 0 ? 'var(--good)' : 'var(--bad)'};font-weight:700">${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom)}% vs last week <span style="color:var(--muted);font-weight:500">· ${dset.size} active day${dset.size === 1 ? '' : 's'} in range</span></div></div>
+    <div class="card" style="padding:18px 19px"><div style="${K}">Weekly rhythm</div><div style="${V}">${in7}<span style="font-size:15px;font-weight:700;color:var(--muted)"> this week</span></div><div style="margin-top:7px;font-size:11px;color:${mom >= 0 ? 'var(--good)' : 'var(--bad)'};font-weight:700">${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom)}% vs last week <span style="color:var(--muted);font-weight:500">· ${dset.size} active day${dset.size === 1 ? '' : 's'} total</span></div></div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:10px">
     <div class="card" style="padding:18px 19px"><div style="${K}">Captures by weekday</div><div style="display:flex;align-items:flex-end;gap:4px;margin-top:16px;height:92px">${wdN.map((n, i) => bar(n, wdMax, wdL[i])).join('')}</div></div>
@@ -2854,7 +2851,7 @@ function teamPerf() {
     <div style="${K}">By assessor</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">${per.map(e => { const [bg, ink] = tone(e); return `<button onclick="S.perfUser='${esc(e.n.replace(/'/g, "\\'"))}';render()" style="flex:${e.c} 1 ${Math.max(110, Math.round(e.c / pMax * 240))}px;border:0;background:${bg};border-radius:14px;padding:15px 15px 13px;text-align:left;cursor:pointer;min-width:110px"><span style="display:block;font-size:24px;font-weight:800;letter-spacing:-.02em;color:${ink}">${e.c}</span><span style="display:block;margin-top:4px;font-size:11px;font-weight:700;color:${ink};opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.n)}</span></button>`; }).join('')}</div>
     <div style="margin-top:14px">${per.map(e => `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px"><span style="width:132px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(e.n)}</span><span style="flex:1;height:7px;background:var(--bg);border-radius:99px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(e.c / pMax * 100)}%;background:var(--ink);border-radius:99px"></span></span><span style="flex:none;color:var(--muted)">${e.c} · ${e.s} spec${e.hi ? ` · <span style="color:var(--bad);font-weight:700">${e.hi} high</span>` : ''}${e.$ ? ` · ${money(e.$)}` : ''}</span></div>`).join('')}</div>
-    <div style="margin-top:10px;font-size:10.5px;color:var(--faint)">Tile size = captures in range · tint = high-hazard share. Tap a tile to focus one assessor.</div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--faint)">Tile size = captures · tint = high-hazard share. Tap a tile to focus one assessor.</div>
   </div>` : ''}`;
 }
 function teamView() {
@@ -3271,19 +3268,21 @@ function sheetView() {
       ${projs.length ? filterSel(S.sheetProject, projs, 'setSheetProject(this.value||null)', 'All projects') : ''}
       <input value="${esc(S.sheetQ || '')}" placeholder="Search ID, species, hole, notes…" oninput="S.sheetQ=this.value;clearTimeout(S._shq);S._shq=setTimeout(render,250)" style="${SH_INP};flex:1;min-width:150px;border-radius:999px;padding:8px 13px">
       <span style="flex:none;display:inline-flex;gap:5px">${hz.map(h => `<button onclick="S.sheetHaz=S.sheetHaz==='${h}'?null:'${h}';render()" style="${pill};${S.sheetHaz === h ? `background:${hcol[h]};color:#fff;border-color:transparent` : ''};padding:8px 11px" title="${h} only">${h === 'High Hazard' ? '▲' : h === 'Moderate' ? '●' : '■'}</button>`).join('')}</span>
-      <span style="font-size:11px;color:var(--muted);flex:none;font-weight:600">${body.length} of ${T.lines} rows · ${T.specimens} specimens · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span> priced${preds ? ` · <span style="color:#b8842a;font-weight:700">≈${money(T.predTotal)} predicted</span>` : (unpriced ? ` · ${unpriced} unpriced` : '')}</span>
+      <span style="font-size:11px;color:var(--muted);flex:none;font-weight:600">${IS_DESKTOP() ? `${body.length} of ${T.lines} rows · ${T.specimens} specimens · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span> priced${preds ? ` · <span style="color:#b8842a;font-weight:700">≈${money(T.predTotal)} predicted</span>` : (unpriced ? ` · ${unpriced} unpriced` : '')}` : `${body.length} row${body.length === 1 ? '' : 's'} · <span class="mono" style="font-weight:700;color:var(--ink)">${money(T.total)}</span>${unpriced ? ` · ${unpriced} unpriced` : ''}`}</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       ${ADMIN() ? `
       <button onclick="predictPricing()" ${S.predBusy || !unpriced ? 'disabled' : ''} style="${pill};background:var(--ink);color:#fff;border-color:transparent;${S.predBusy || !unpriced ? 'opacity:.5' : ''}">${S.predBusy ? '<span class="spinner"></span> Predicting…' : `⚡ Predict pricing${unpriced ? ' · ' + unpriced : ''}`}</button>
       ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
       <span style="flex:1"></span>
-      <button onclick="S.gridFull=true;render()" style="${pill}" title="Grid only — everything else hidden">⛶ Full screen</button>
+      <button onclick="S.gridFull=true;render()" style="${pill}" title="The full spreadsheet — every column, sortable">⛶ Full grid</button>
       <button onclick="S.sheetSummary=!S.sheetSummary;render()" style="${pill}">${S.sheetSummary ? '✕ Close summary' : '☰ Summary & exports'}</button>
     </div>
   </div>
-  <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px)">
-    ${body.length ? gridTable(head, body, src) : `<div class="card" style="text-align:center;padding:26px 16px;margin-top:8px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">${S.sheetQ || S.sheetHaz ? 'Nothing matches the filter' : 'No rows yet'}</div><div style="font-size:12px;color:var(--faint);margin-top:4px">${S.sheetQ || S.sheetHaz ? 'Clear the search or the hazard chip above.' : "Every capture writes a row here the moment it's logged — this is the spreadsheet, living."}</div></div>`}
+  <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);overflow-y:auto;-webkit-overflow-scrolling:touch">
+    ${body.length ? gridHero(src, label) : ''}
+    ${body.length ? `<div class="slab" style="margin:18px 2px 8px">Working grid — tap a row to edit</div>` : ''}
+    ${body.length ? (IS_DESKTOP() ? `<div style="height:62vh">${gridTable(head, body, src)}</div>` : gridCards(src)) : `<div class="card" style="text-align:center;padding:26px 16px;margin-top:8px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">${S.sheetQ || S.sheetHaz ? 'Nothing matches the filter' : 'No rows yet'}</div><div style="font-size:12px;color:var(--faint);margin-top:4px">${S.sheetQ || S.sheetHaz ? 'Clear the search or the hazard chip above.' : "Every capture writes a row here the moment it's logged — this is the spreadsheet, living."}</div></div>`}
   </div>
   ${S.sheetSummary ? `
   <div onclick="if(event.target===this){S.sheetSummary=false;render()}" style="position:fixed;inset:0;z-index:130;background:rgba(22,24,29,.45);display:flex;justify-content:flex-end">
@@ -3330,6 +3329,225 @@ function sheetView() {
     </div>
     <div style="flex:1;min-height:0;padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px)">${gridTable(head, body, src)}</div>
   </div>` : ''}`;
+}
+/* The Sheets hero — a live, scaled preview of the grid exhibit built from the rows
+   in scope right now, with one-tap preview & export. The preview is the real document,
+   rendered small; what you see is exactly what prints. */
+function gridHero(TS, label) {
+  const docW = 1020;
+  const availW = Math.min(window.innerWidth, 560) - 66;
+  const sc = Math.min(0.5, availW / docW);
+  const previewH = IS_DESKTOP() ? 340 : 300;
+  return `
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:16px 18px 0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <div style="min-width:0"><div style="font-size:17px;font-weight:800;letter-spacing:-.01em">The grid \u2014 carrier-ready exhibit</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5">Your live register as a signed-off document: glance stats, damage profile, the full priced table. Built from <strong>${TS.length} row${TS.length === 1 ? '' : 's'}</strong> in scope \u00b7 ${esc(label)}.</div></div>
+        <span style="flex:none;font-size:10px;font-weight:700;color:var(--good);letter-spacing:.06em">\u25cf LIVE</span>
+      </div>
+    </div>
+    <div onclick="openGridExhibit()" style="margin:14px 18px 0;height:${previewH}px;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#f3f1ec;position:relative;cursor:pointer">
+      <div style="width:${docW}px;transform:scale(${sc});transform-origin:0 0;padding:22px;pointer-events:none">${gridExhibitHTML(TS, label)}</div>
+      <div style="position:absolute;inset:auto 0 0 0;height:70px;background:linear-gradient(transparent,#f3f1ec)"></div>
+      <span style="position:absolute;right:10px;bottom:10px;background:rgba(23,24,26,.78);color:#fff;font-size:10.5px;font-weight:700;border-radius:999px;padding:6px 12px">Tap to open full preview</span>
+    </div>
+    <div style="display:flex;gap:8px;padding:14px 18px 16px;flex-wrap:wrap">
+      <button class="btn primary" style="flex:2;min-width:170px" onclick="openGridExhibit()">Preview &amp; export PDF</button>
+      <button class="btn ghost" style="flex:1;min-width:110px" onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">XLSX</button>
+    </div>
+  </div>`;
+}
+
+/* ---- The Grid Exhibit ----
+   The register rendered as a carrier-ready document in the Trice design language:
+   branded header, navy stat band, glance tiles, CSS charts, the full register table
+   with totals, and a data-quality footer. Everything is computed live from the rows
+   in the current Grid scope (project + search + hazard filters). Predictions never
+   appear — unpriced and predicted lines print as TBD, the way an honest exhibit reads. */
+const GX_NAVY = '#1b2733', GX_CREAM = '#f3f1ec', GX_ACCENT = '#c8452c';
+const GX_HAZ = h => h === 'High Hazard' ? ['#b34b48', '\u25b2', 'HIGH HAZARD'] : (h === 'Cleared' ? ['#2f7d55', '\u25a0', 'CLEARED'] : ['#b8842a', '\u25cf', 'MODERATE']);
+const gxMoney = v => v > 0 ? money(v) : '<span style="color:#b8842a;font-weight:700;font-size:9px;letter-spacing:.04em">TBD</span>';
+function gridExhibitHTML(TS, label) {
+  const j = S.job || {};
+  const T = totals(TS);
+  const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  const counts = (arr) => { const m = {}; for (const k of arr) if (k) m[k] = (m[k] || 0) + 1; return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const causeTop = counts(TS.map(t => t.cause))[0];
+  const specByName = {}; for (const t of TS) { const s = (t.ai && t.ai.species) || 'Pending analysis'; specByName[s] = (specByName[s] || 0) + (t.qty || 1); }
+  const species = Object.entries(specByName).sort((a, b) => b[1] - a[1]);
+  const zones = {}; for (const t of TS) { const z = t.zone || 'No zone'; const o = zones[z] = zones[z] || { spec: 0, cost: 0 }; o.spec += (t.qty || 1); o.cost += lineTotal(t) || 0; }
+  const zoneKeys = Object.keys(zones).sort(zoneSort);
+  const fails = {}; for (const t of TS) for (const f of (t.failures || [])) fails[f] = (fails[f] || 0) + 1;
+  const failTop = Object.entries(fails).sort((a, b) => b[1] - a[1]);
+  const dbhTotal = TS.reduce((s, t) => s + (t.dbhIn || 0) * (t.qty || 1), 0);
+  const dbhKnown = TS.filter(t => t.dbhIn).length;
+  const gpsN = TS.filter(t => typeof t.lat === 'number').length;
+  const priced = TS.filter(t => lineTotal(t) > 0).length;
+  const anyPriced = T.total > 0;
+  const assessors = [...new Set(TS.map(t => t.surveyor).filter(Boolean))];
+  const idSlug = (label === 'All projects' ? 'TRICE' : label.replace(/[^A-Za-z0-9]+/g, '').slice(0, 10).toUpperCase() || 'TRICE') + '-' + new Date().getFullYear();
+  const K = 'font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#98948a;font-weight:700';
+  const tile = (k, v, sub) => `<div style="flex:1;min-width:118px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 14px;page-break-inside:avoid"><div style="${K}">${k}</div><div style="font-size:23px;font-weight:800;letter-spacing:-.02em;margin-top:3px;color:#17181a">${v}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:3px;line-height:1.4">${sub}</div>` : ''}</div>`;
+  const bar = (lab, n, max, right, col) => `<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="width:104px;font-size:9.5px;color:#5c584f;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none;font-weight:600">${esc(lab)}</div><div style="flex:1;height:11px;background:${GX_CREAM};border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(n / max * 100))}%;background:${col || GX_NAVY};border-radius:4px"></div></div><div style="width:58px;font-size:9.5px;font-weight:800;flex:none;font-family:ui-monospace,Menlo,monospace">${right}</div></div>`;
+  const panel = (title, sub, inner) => `<div style="flex:1;min-width:300px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:15px 16px;page-break-inside:avoid"><div style="font-size:11.5px;font-weight:800;color:#17181a">${title}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:2px;line-height:1.45">${sub}</div>` : ''}<div style="margin-top:9px">${inner}</div></div>`;
+  const zMax = Math.max(1, ...zoneKeys.map(z => zones[z].spec));
+  const zCostMax = Math.max(1, ...zoneKeys.map(z => zones[z].cost));
+  const spMax = Math.max(1, ...(species.slice(0, 7).map(s => s[1])));
+  const flMax = Math.max(1, ...(failTop.map(f => f[1])));
+  const bMax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
+  const th = t => `<th style="background:${GX_NAVY};color:#fff;font-size:7.5px;letter-spacing:.09em;text-transform:uppercase;text-align:left;padding:8px 7px;white-space:nowrap;font-weight:700">${t}</th>`;
+  const td = (v, extra) => `<td style="padding:7px;border-bottom:1px solid #efece5;font-size:9.5px;color:#403d37;vertical-align:top;${extra || ''}">${v}</td>`;
+  const rows = TS.map((t, i) => {
+    const a = t.ai || {};
+    const hz = GX_HAZ(t.hazard || 'Moderate');
+    const lt = lineTotal(t);
+    return `<tr style="background:${i % 2 ? '#faf9f5' : '#fff'}">
+      ${td(i + 1, 'color:#a8a49a;font-size:8.5px')}
+      ${td(`<span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span>`)}
+      ${td(esc(t.zone || '\u2014'), 'white-space:nowrap')}
+      ${td(`<strong>${esc(a.species || 'Pending')}</strong>${a.latin ? `<br><em style="color:#86837b;font-size:8.5px">${esc(a.latin)}</em>` : ''}`)}
+      ${td(t.dbhIn ? t.dbhIn + '\u2033' : '\u2014', 'text-align:right;font-family:ui-monospace,Menlo,monospace')}
+      ${td(DBH_BAND(t.dbhIn) || '\u2014', 'white-space:nowrap;color:#86837b')}
+      ${td(t.heightFt ? t.heightFt + '\u2032' : '\u2014', 'text-align:right')}
+      ${td(t.qty || 1, 'text-align:right;font-weight:700')}
+      ${td(t.ip === 'OP' ? 'OP' : 'IP')}
+      ${td(`<span style="color:${hz[0]};font-weight:800;font-size:8.5px;letter-spacing:.05em;white-space:nowrap">${hz[1]} ${hz[2]}</span>`)}
+      ${td(esc((t.failures || []).join(' | ') || '\u2014'))}
+      ${td(esc(t.cause || '\u2014'))}
+      ${td(gxMoney(t.prune), 'text-align:right')}
+      ${td(gxMoney(t.removal), 'text-align:right')}
+      ${td(gxMoney(t.disposal), 'text-align:right')}
+      ${td(gxMoney(t.stump), 'text-align:right')}
+      ${td(lt > 0 ? `<strong style="font-family:ui-monospace,Menlo,monospace">${money(lt)}</strong>` : gxMoney(0), 'text-align:right')}
+      ${td(esc((t.surveyor || '\u2014').split(/\s+/)[0]))}
+    </tr>`;
+  }).join('');
+  return `
+  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#17181a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px">
+      <div style="width:44px;height:44px;border-radius:11px;background:${GX_ACCENT};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:11px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:16px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:22px;height:3px;background:#fff;border-radius:1px;display:block"></span></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;letter-spacing:.3em;font-weight:800;color:#17181a">TRICE</div>
+        <div style="font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#98948a;font-weight:700;margin-top:1px">${esc(j.assessType || 'Post-loss tree damage assessment')}</div>
+        <div style="font-size:24px;font-weight:800;letter-spacing:-.01em;margin-top:5px;line-height:1.15">${esc(label)} \u2014 Asset Register</div>
+        <div style="font-size:9.5px;color:#5c584f;margin-top:5px">${[j.town && j.county ? j.town + ', ' + j.county + ' County' : (j.town || ''), j.operator ? 'Operated by ' + j.operator : '', j.dateOfLoss ? 'Date of loss ' + j.dateOfLoss : '', 'Exported from the Trice field register ' + today].filter(Boolean).map(esc).join(' \u00b7 ')}</div>
+      </div>
+    </div>
+    <div style="background:${GX_NAVY};border-radius:13px;padding:15px 18px;display:flex;gap:22px;flex-wrap:wrap;color:#fff;page-break-inside:avoid">
+      ${[['Assessment ID', `<span style="font-family:ui-monospace,Menlo,monospace">${idSlug}</span>`],
+         ['Line items', `${T.lines} \u00b7 ${T.specimens} specimens`],
+         ['Remediation', anyPriced ? money(T.total) + (T.unpriced ? ` <span style="color:#e8b64c;font-size:10px">\u00b7 ${T.unpriced} TBD</span>` : '') : '<span style="color:#e8b64c">To be determined</span>'],
+         ['High hazard', `${T.byHaz['High Hazard'].lines} items \u00b7 ${T.byHaz['High Hazard'].specimens} specimens`],
+         ['Cause of loss', causeTop ? esc(causeTop[0]) + ` \u2014 ${causeTop[1]} of ${T.lines}` : '\u2014']]
+        .map(kv => `<div><div style="font-size:7.5px;letter-spacing:.13em;text-transform:uppercase;color:#8fa0ae;font-weight:700">${kv[0]}</div><div style="font-size:12.5px;font-weight:700;margin-top:3px">${kv[1]}</div></div>`).join('')}
+    </div>
+    <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">01 \u00b7 Assessment at a glance</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${tile('Line items', T.lines, `across ${zoneKeys.length} hole${zoneKeys.length === 1 ? '' : 's'} / zones`)}
+      ${tile('Specimens', T.specimens, `${T.byIP.IP.lines} IP \u00b7 ${T.byIP.OP.lines} OP line items`)}
+      ${tile('High hazard', T.byHaz['High Hazard'].lines, `${T.byHaz['High Hazard'].specimens} specimens \u00b7 ${T.specimens ? Math.round(T.byHaz['High Hazard'].specimens / T.specimens * 100) : 0}% of register`)}
+      ${tile('Total DBH', dbhKnown ? Math.round(dbhTotal).toLocaleString() + ' in' : '\u2014', dbhKnown ? `${dbhKnown} of ${T.lines} rows sized` : 'no DBH recorded yet')}
+      ${tile('Remediation', anyPriced ? money(T.total) : '<span style="color:#b8842a;font-size:15px">TBD</span>', anyPriced ? `${priced} of ${T.lines} lines priced` : 'prune \u00b7 take-down \u00b7 debris \u00b7 stump')}
+    </div>
+    <div style="display:flex;height:9px;border-radius:99px;overflow:hidden;margin-top:12px">${['High Hazard','Moderate','Cleared'].map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${GX_HAZ(h)[0]}"></div>`).join('')}</div>
+    <div style="display:flex;gap:14px;margin-top:6px;font-size:8.5px;color:#86837b;font-weight:600">${['High Hazard','Moderate','Cleared'].map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${GX_HAZ(h)[0]};margin-right:4px"></span>${h} \u00b7 ${T.byHaz[h].specimens} specimens</span>`).join('')}</div>
+    <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">02 \u00b7 Damage profile</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${panel('Specimens by hole / zone', 'Where the volume is \u2014 the crew-sequencing read.', zoneKeys.map(z => bar(z, zones[z].spec, zMax, zones[z].spec, GX_NAVY)).join(''))}
+      ${panel('Remediation by hole / zone', anyPriced ? 'Accepted pricing only \u2014 predictions never print.' : 'To be determined \u2014 this panel populates as the cost columns fill in.', anyPriced ? (zoneKeys.filter(z => zones[z].cost).sort((a, b) => zones[b].cost - zones[a].cost).map(z => bar(z, zones[z].cost, zCostMax, money(zones[z].cost), GX_ACCENT)).join('') || '<div style="font-size:9.5px;color:#a8a49a">No priced lines in scope.</div>') : zoneKeys.map(z => bar(z, 0.02, 1, '<span style="color:#b8842a">TBD</span>', '#e7e4dc')).join(''))}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      ${panel('Specimens by species', species.length + ' species recorded' + (species.length && T.specimens ? ` \u00b7 ${esc(species[0][0])} alone is ${Math.round(species[0][1] / T.specimens * 100)}% of the damage.` : '.'), species.slice(0, 7).map(sp => bar(sp[0], sp[1], spMax, sp[1], GX_NAVY)).join(''))}
+      ${panel('Specimens by DBH band', 'Banded to the unit-price removal schedule \u2014 how the carrier calculates.', DBH_BANDS.map(b => bar(b, T.byBand[b].specimens || 0.02, bMax, T.byBand[b].specimens || '', GX_NAVY)).join('') + (failTop.length ? `<div style="font-size:10.5px;font-weight:800;margin:12px 0 2px">Mechanical failure mode</div>` + failTop.slice(0, 5).map(fl => bar(fl[0], fl[1], flMax, fl[1], '#2f7d55')).join('') : ''))}
+    </div>
+    <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">03 \u00b7 Asset register \u2014 ${T.lines} line items</div>
+    <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden">
+      <tr>${['#','Asset','Hole / zone','Species','DBH','Band','Ht','Qty','IP/OP','Hazard','Failure mode','Cause','Prune','Take-down','Debris','Stump','Line total','Assessor'].map(th).join('')}</tr>
+      ${rows}
+      <tr style="background:${GX_CREAM}">
+        <td colspan="7" style="padding:9px 7px;font-size:9.5px;font-weight:800">Total</td>
+        <td style="padding:9px 7px;font-size:9.5px;font-weight:800;text-align:right">${T.specimens}</td>
+        <td colspan="4"></td>
+        <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.prune ? money(T.prune) : '\u2014'}</td>
+        <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.removal ? money(T.removal) : '\u2014'}</td>
+        <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.disposal ? money(T.disposal) : '\u2014'}</td>
+        <td style="padding:9px 7px;text-align:right;font-size:9.5px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.stump ? money(T.stump) : '\u2014'}</td>
+        <td style="padding:9px 7px;text-align:right;font-size:10px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.total ? money(T.total) : '<span style="color:#b8842a">TBD</span>'}</td>
+        <td></td>
+      </tr>
+    </table>
+    ${T.unpriced || TS.some(hasPred) ? `<div style="margin-top:7px;font-size:8.5px;color:#86837b">TBD marks a line not yet priced. AI price predictions never appear on this exhibit \u2014 only accepted pricing prints.</div>` : ''}
+    <div style="margin-top:16px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 16px;page-break-inside:avoid">
+      <div style="font-size:11.5px;font-weight:800">Data quality</div>
+      <div style="font-size:9.5px;color:#5c584f;margin-top:5px;line-height:1.7">
+        ${gpsN} of ${T.lines} rows carry GPS captured at the trunk \u00b7 every row carries a device timestamp and a photograph bound to the record \u00b7
+        ${dbhKnown} of ${T.lines} rows carry DBH \u00b7 ${priced} of ${T.lines} lines priced${assessors.length ? ` \u00b7 assessed by ${assessors.map(esc).join(', ')}` : ''}.
+      </div>
+    </div>
+    <div style="margin-top:14px;padding-top:9px;border-top:1px solid #e7e4dc;font-size:8px;color:#a8a49a;line-height:1.6">
+      Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. Cost figures are estimates of remediation, not a bid. Not legal, tax or insurance advice.
+      Generated by Trice \u00b7 ${esc(label)} \u00b7 ${new Date().toLocaleString()} \u00b7 every figure on this page computed live from the ${T.lines} register rows in scope.
+    </div>
+  </div>`;
+}
+function gridExhibitScope() { return sheetSorted(sheetScope()); }
+function openGridExhibit() {
+  const TS = gridExhibitScope();
+  if (!TS.length) { toast('Nothing in this scope yet \u2014 log a capture or widen the filters'); return; }
+  const label = S.sheetProject || 'All projects';
+  document.getElementById('printReport').innerHTML = gridExhibitHTML(TS, label);
+  let w = document.getElementById('reviewWrap');
+  if (!w) {
+    const st = document.createElement('style');
+    st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media print{#reviewWrap{display:none !important}}';
+    document.head.appendChild(st);
+    w = document.createElement('div'); w.id = 'reviewWrap';
+    document.body.appendChild(w);
+  }
+  w.innerHTML = `<div class="bar"><span class="ttl">The grid \u2014 ${esc(label)}<span class="sub">Tap any text to edit. Edits go into this print / PDF only; the register stays untouched.</span></span>
+    <button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">XLSX</button>
+    <button class="go" onclick="reviewPrint()">Print / save PDF</button>
+    <button onclick="closeReview()">Close</button></div>
+    <div class="body"><div class="paper" id="reviewPaper" contenteditable="true" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
+  w.style.display = 'flex';
+}
+
+/* Mobile grid — the same rows as the spreadsheet, readable one-handed.
+   Grouped by capture date like a stack of field sheets; tap a row to edit it.
+   The full table lives behind the "Full grid" button. */
+function gridCards(list) {
+  const groups = {};
+  for (const t of list) {
+    const k = t.when ? new Date(t.when).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Undated';
+    (groups[k] = groups[k] || []).push(t);
+  }
+  const keys = Object.keys(groups).sort((a, b) => (groups[b][0].when || 0) - (groups[a][0].when || 0));
+  return keys.map(day => {
+    const g = groups[day];
+    const tot = g.reduce((s, t) => s + (lineTotal(t) || 0), 0);
+    return `
+    <div class="slab" style="margin:16px 2px 8px;display:flex;justify-content:space-between;align-items:baseline"><span>${esc(day)}</span><span style="letter-spacing:0;text-transform:none;font-weight:600;color:var(--muted)">${g.length} item${g.length > 1 ? 's' : ''}${tot ? ' · ' + money(tot) : ''}</span></div>
+    <div class="card" style="padding:3px 15px">${g.map(gridCardRow).join('')}</div>`;
+  }).join('') + `<div style="margin:14px 2px 0;font-size:11px;color:var(--faint);text-align:center">Tap a row to open and edit · ⛶ Full grid shows every column</div>`;
+}
+function gridCardRow(t) {
+  const a = t.ai || {};
+  const haz = t.hazard || 'Moderate';
+  const tag = haz === 'High Hazard' ? '<span class="hz bad">High</span>' : (haz === 'Cleared' ? '<span class="hz good">Cleared</span>' : '<span class="hz warn">Moderate</span>');
+  const priced = lineTotal(t);
+  const price = hasPred(t) ? `<span class="mono" style="font-size:12px;font-weight:700;color:#b8842a">≈${money(predTotal(t))}</span>`
+    : (priced ? `<span class="mono" style="font-size:12.5px;font-weight:700">${money(priced)}</span>` : `<span style="font-size:10.5px;color:var(--faint)">Unpriced</span>`);
+  return `
+  <button class="trow" onclick="openEdit('${t.id}')">
+    <span class="mid">
+      <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
+      ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
+      <span class="l3"><span class="mono">${t.id}</span>${t.dbhIn ? ' · ' + t.dbhIn + ' in' : ''}${t.zone ? ' · ' + esc(t.zone) : ''}${t.surveyor ? ' · ' + esc(t.surveyor.split(/\s+/)[0]) : ''}</span>
+    </span>
+    <span style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:3px">${price}${tag}</span>
+    <span style="flex:none;color:var(--faint);font-size:16px">›</span>
+  </button>`;
 }
 function gridTable(head, body, src) {
   const byId = {}; for (const t of (src || [])) byId[t.id] = t;
@@ -3423,6 +3641,10 @@ function reportView() {
     <div style="margin-top:14px;padding-top:13px;border-top:1px solid var(--hair);display:flex;gap:10px">${hazCard('High Hazard','▲')}${hazCard('Moderate','●')}${hazCard('Cleared','■')}</div>
   </div>
   ${vizCard(scoped, T)}
+  <div class="slab" style="margin:18px 0 8px">Register</div>
+  <div class="card" style="padding:9px 15px">
+    <button class="trow" onclick="go('trees')" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Asset register</span><span class="l2">${T.lines} line item${T.lines === 1 ? '' : 's'} · ${T.specimens} specimens · grouped by assessor · tap any record to open</span></span><span style="flex:none;display:flex;align-items:center;gap:9px">${T.byHaz['High Hazard'].lines ? `<span class="hz bad">${T.byHaz['High Hazard'].lines} High</span>` : ''}<span style="color:var(--faint);font-size:16px">›</span></span></button>
+  </div>
 
   ${projectsSection()}
   ${assessorsSection()}
@@ -3457,6 +3679,7 @@ function reportView() {
     <button class="trow" onclick="downloadArchive()"><span class="mid"><span class="l1">Download last archived job</span><span class="l2">The register as it stood before the last fresh start</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="startFresh()"><span class="mid"><span class="l1" style="color:var(--bad)">Archive &amp; start a fresh register</span><span class="l2">For the whole team — everything is saved to the server and each phone first</span></span><span style="color:var(--faint)">›</span></button>
     <label class="trow" style="cursor:pointer"><input type="file" accept="application/json" onchange="importJSON(this)" style="display:none"><span class="mid"><span class="l1">Restore / merge backup</span><span class="l2">Merges another device’s walk into this one</span></span><span style="color:var(--faint)">›</span></label>
+    <button class="trow" onclick="signOut()"><span class="mid"><span class="l1" style="color:var(--bad)">Sign out</span><span class="l2">Back to the landing page — records stay on this device, the team password unlocks it again</span></span><span style="color:var(--faint)">›</span></button>
   </div>
 
   ${(() => { return `
@@ -3505,7 +3728,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v21.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v22.0</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4086,6 +4309,15 @@ async function intakeSend() {
   }
   S.landStep = 'sent'; render();
 }
+/* Sign out — locks this device back to the landing page. Only the gate is cleared:
+   records, drafts, projects and the assessor name all stay on the device untouched. */
+function signOut() {
+  if (!confirm('Sign out of the WTR field module? Your records stay on this device — signing back in needs the team password.')) return;
+  try { localStorage.removeItem('trice_gate'); } catch (e) {}
+  S.landStep = null; S.detailId = null; S.editId = null; S.camOpen = false; S.zoomSrc = null;
+  render();
+  window.scrollTo(0, 0);
+}
 function gateTry() {
   const el = document.getElementById('gatePw'); const v = (el && el.value || '').trim();
   if (gateHash(v) === GATE_HASH) { try { localStorage.setItem('trice_gate', String(GATE_HASH)); } catch (e) {} S.landStep = null; toast('Welcome to the WTR field module'); render(); }
@@ -4179,19 +4411,19 @@ function render() {
   else if (S.tab === 'sheet') body = sheetView();
   else if (S.tab === 'team') body = teamView();
   else body = reportView();
-  const navBtn = (tab, label) => `<button class="${S.tab === tab ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${ICONS[tab]}<span>${label}</span>${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span class="ndot" title="Unsynced records on this device"></span>' : ''}</button>`;
+  const navBtn = (tab, label) => { const on = S.tab === tab || (tab === 'report' && S.tab === 'trees'); return `<button class="${on ? 'on' : ''}" onclick="go('${tab}')" style="position:relative">${ICONS[tab]}<span>${label}</span>${tab === 'report' && S.trees.some(t=>t.dirty) ? '<span class="ndot" title="Unsynced records on this device"></span>' : ''}</button>`; };
   const adjT = S.adjustId && S.trees.find(x => x.id === S.adjustId);
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v21.5</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v22.0</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div></div>${IS_DESKTOP()
-      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('trees','Register')}${navBtn('sheet','Sheets')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
-      : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('trees','Register')}${navBtn('report','Report')}`}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
+      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${ADMIN() ? navBtn('team','Team') : ''}`
+      : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
     ${S.camOpen ? camView() : ''}
@@ -4214,6 +4446,39 @@ function fabCapture() {
 }
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 function go(tab) { S.tab = tab; S.sheetSummary = false; S.gridFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+
+/* ---- Always the newest build ----
+   index.html is served no-cache and the service worker is network-first, but this is the
+   belt-and-braces: compare the running build against the server on boot, on every foreground,
+   and every 10 minutes. When a newer build is live: push any unsynced records first, purge
+   every cache, and reload. IndexedDB and localStorage are never touched — records, drafts,
+   projects and the team password all survive. An in-progress draft resumes after the reload. */
+const BUILD = (document.querySelector('meta[name="version"]') || {}).content || '';
+let VCHK_BUSY = false;
+async function checkBuild(force) {
+  if (VCHK_BUSY || !navigator.onLine || !gateOk()) return;
+  const last = +(sessionStorage.getItem('trice_vchk') || 0);
+  if (!force && Date.now() - last < 4 * 60 * 1000) return;
+  try { sessionStorage.setItem('trice_vchk', String(Date.now())); } catch (e) {}
+  let remote = '';
+  try {
+    const r = await fetch('/index.html?build=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const m = (await r.text()).match(/name="version" content="([^"]+)"/);
+    remote = m ? m[1] : '';
+  } catch (e) { return; }
+  if (!remote || remote === BUILD) return;
+  /* Newer build on the server. Never interrupt typing, an open camera, or a running analysis —
+     try again in 30 seconds instead. */
+  const ae = document.activeElement;
+  if ((ae && /input|textarea|select/i.test(ae.tagName)) || S.camOpen || (S.draft && S.draft.analyzing)) { setTimeout(() => checkBuild(true), 30000); return; }
+  VCHK_BUSY = true;
+  toast('A newer build is live — updating this device…');
+  try { await Promise.race([syncNow(), new Promise(res => setTimeout(res, 6000))]); } catch (e) {}
+  try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) {}
+  try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch (e) {}
+  setTimeout(() => location.reload(), 500);
+}
 
 /* ---- Boot (migrates v2/v3 records) ---- */
 function migrate(t) {
@@ -4257,10 +4522,15 @@ function migrate(t) {
   if (S.site && !localStorage.getItem('trice_joined')) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
-  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','report'].includes(lt)) S.tab = lt; }
+  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','sheet','report'].includes(lt)) S.tab = lt; }
   render();
   syncNow(); SYNC.timer = setInterval(syncNow, 25000 + Math.floor(Math.random() * 12000));
   window.addEventListener('online', syncNow);
+  /* Build watchdog — this device always runs what the server serves. */
+  setTimeout(() => checkBuild(true), 5000);
+  setInterval(() => checkBuild(), 10 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
+  window.addEventListener('online', () => checkBuild());
   // GPS only starts after the user has granted it once (readiness check / camera) — never a prompt on page load
   if (S.caps && S.caps.gps) startGPS();
 })();
