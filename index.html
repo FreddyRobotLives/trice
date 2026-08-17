@@ -3034,13 +3034,25 @@ function sheetView() {
     <button class="trow" onclick="exportCSV(sheetScope())" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export CSV — V5 field data</span><span class="l2">Exact V5 column order A–X</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="copyForSheets()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Copy for Google Sheets</span><span class="l2">Copies the whole grid — paste into a Sheet, columns intact</span></span><span style="color:var(--faint)">›</span></button>
   </div>
-  <div style="margin:14px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px" ><span class="slab">The grid · one row per line item</span><span style="font-size:11px;color:var(--faint)">Tap a row to edit any field</span></div>
-  ${body.length ? `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;max-height:58vh;-webkit-overflow-scrolling:touch">
+  <div style="margin:14px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px" ><span class="slab">The grid · one row per line item</span><span style="display:inline-flex;gap:12px;align-items:baseline"><span style="font-size:11px;color:var(--faint)">Tap a row to edit any field</span>${body.length ? `<button onclick="S.sheetFull=true;render()" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;color:var(--ink)">⤢ Full screen</button>` : ''}</span></div>
+  ${body.length ? gridTable(head, body, '58vh') : `<div class="card" style="text-align:center;padding:26px 16px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">No rows yet</div><div style="font-size:12px;color:var(--faint);margin-top:4px">Every capture writes a row here the moment it's logged — this is the spreadsheet, living.</div></div>`}
+  ${S.sheetFull && body.length ? `
+  <div style="position:fixed;inset:0;z-index:120;background:var(--bg);display:flex;flex-direction:column">
+    <div style="flex:none;display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top,0px) + 12px) 18px 12px;border-bottom:1px solid var(--line);background:#fff">
+      <span class="slab" style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">The grid · ${esc(label)} · ${body.length} row${body.length > 1 ? 's' : ''}</span>
+      ${ADMIN() ? '<span style="font-size:11px;color:var(--faint);flex:none">Every cell edits live</span>' : '<span style="font-size:11px;color:var(--faint);flex:none">Tap a row to edit</span>'}
+      <button onclick="S.sheetFull=false;render()" style="flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700">✕ Close&nbsp;·&nbsp;Esc</button>
+    </div>
+    <div style="flex:1;min-height:0;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 14px)">${gridTable(head, body, '100%')}</div>
+  </div>` : ''}`;
+}
+function gridTable(head, body, maxH) {
+  return `<div style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;${maxH === '100%' ? 'height:100%' : 'max-height:' + maxH};-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr>${head.map((h, ci) => `<th style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:8px 10px;white-space:nowrap">${esc(h)}</th>`).join('')}</tr>
       ${body.map((r, ri) => `<tr ${ADMIN() ? '' : `onclick="openEdit('${esc(String(r[0]))}')" style="cursor:pointer"`}>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && SHEET_EDIT[head[ci]] ? '3px 6px' : '7px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${ri % 2 ? '#faf9f5' : '#fff'};color:var(--body)">${ADMIN() ? shCell(String(r[0]), head[ci], c) : esc(String(c))}</td>`).join('')}</tr>`).join('')}
     </table>
-  </div>` : `<div class="card" style="text-align:center;padding:26px 16px"><div style="font-size:13.5px;font-weight:600;color:#5c584f">No rows yet</div><div style="font-size:12px;color:var(--faint);margin-top:4px">Every capture writes a row here the moment it's logged — this is the spreadsheet, living.</div></div>`}`;
+  </div>`;
 }
 
 /* ---- Report tab ---- */
@@ -3740,7 +3752,7 @@ try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => r
 const ADMIN = () => S.admin && IS_DESKTOP();
 function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && S.tab === 'team') S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
 function goHome() { S.tab = 'survey'; S.detailId = null; S.editId = null; S.zoomSrc = null; S.showCheck = false; try { localStorage.setItem('trice_tab', 'survey'); } catch (e) {} render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
-function go(tab) { S.tab = tab; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
+function go(tab) { S.tab = tab; S.sheetFull = false; try { localStorage.setItem('trice_tab', tab); } catch (e) {} if (tab === 'report') loadWeather(); if (tab !== 'trees') { S.detailId = null; S.editId = null; } S.zoomSrc = null; render(); const v = document.querySelector('.view'); if (v) v.scrollTop = 0; }
 
 /* ---- Boot (migrates v2/v3 records) ---- */
 function migrate(t) {
