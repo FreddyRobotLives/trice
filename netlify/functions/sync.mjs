@@ -920,6 +920,15 @@ var sync_src_default = async (req) => {
         if (data == null) return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: cors });
         return new Response(JSON.stringify({ key: ph, photo: data }), { headers: cors });
       }
+      const img = url.searchParams.get("img");
+      if (img && /^e\d+\/p\/[A-Za-z0-9_.:-]+![0-9]+$/.test(img)) {
+        const data = await safeGetText(img);
+        if (data == null) return new Response("not found", { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
+        const m = String(data).match(/^data:(image\/[a-z0-9+.-]+);base64,(.+)$/s);
+        if (!m) return new Response("unsupported", { status: 415, headers: { "Access-Control-Allow-Origin": "*" } });
+        const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+        return new Response(bytes, { headers: { "Content-Type": m[1], "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" } });
+      }
       if (url.searchParams.get("list") === "backups") {
         const out = [];
         for (let n = 1; n < EP.n; n++) out.push("epoch-" + n);
