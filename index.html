@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v23.5">
+<meta name="version" content="trice-v23.6">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -3783,7 +3783,7 @@ function reportView() {
     <button class="trow" onclick="downloadArchive()"><span class="mid"><span class="l1">Download last archived job</span><span class="l2">The register as it stood before the last fresh start</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="startFresh()"><span class="mid"><span class="l1" style="color:var(--bad)">Archive &amp; start a fresh register</span><span class="l2">For the whole team — everything is saved to the server and each phone first</span></span><span style="color:var(--faint)">›</span></button>
     <label class="trow" style="cursor:pointer"><input type="file" accept="application/json" onchange="importJSON(this)" style="display:none"><span class="mid"><span class="l1">Restore / merge backup</span><span class="l2">Merges another device’s walk into this one</span></span><span style="color:var(--faint)">›</span></label>
-    <button class="trow" onclick="signOut()"><span class="mid"><span class="l1" style="color:var(--bad)">Sign out</span><span class="l2">Back to the landing page — records stay on this device, the team password unlocks it again</span></span><span style="color:var(--faint)">›</span></button>
+
   </div>
 
   ${(() => { return `
@@ -3832,7 +3832,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v23.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4521,7 +4521,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.5</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v23.6</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
