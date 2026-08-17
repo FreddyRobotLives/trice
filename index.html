@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.1">
+<meta name="version" content="trice-v24.2">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -3781,7 +3781,7 @@ function gridTable(head, body, src) {
 /* ---- Report tab ---- */
 function setRepProject(p) { S.repProject = p; S.repZone = null; S.repUser = null; render(); }
 function setRepUser(u) { S.repUser = (S.repUser === u) ? null : u; render(); }
-const REP_SECS = [['charts','Charts'],['read','The read'],['money','Money summary'],['byhole','By-hole rollup'],['register','Asset register'],['photos','Photo journal'],['findings','Findings & open items'],['cert','Certification']];
+const REP_SECS = [['charts','Charts'],['sitemap','Site map'],['read','The read'],['money','Money summary'],['byhole','By-hole rollup'],['register','Asset register'],['photos','Photo journal'],['findings','Findings & open items'],['cert','Certification']];
 function toggleSec(k) { S.repSecs[k] = S.repSecs[k] === false; try { localStorage.setItem('trice_repsecs', JSON.stringify(S.repSecs)); } catch (e) {} render(); }
 function toggleViz(k) { S.repViz[k] = !S.repViz[k]; try { localStorage.setItem('trice_repviz', JSON.stringify(S.repViz)); } catch (e) {} render(); }
 function vizCard(scoped, T) {
@@ -3946,7 +3946,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.1</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4126,6 +4126,56 @@ function assessorsSection() {
 function toggleRep(name) { S.repOpen = S.repOpen || {}; S.repOpen[name] = !(S.repOpen[name] || false); render(); }
 
 let lastReviewScope = null;
+/* ---- Report site map ----
+   A printable map assembled from OpenStreetMap tiles with every scoped record
+   pinned at its captured GPS, colored by hazard. Builds itself from the register:
+   no drawing, no export from another tool. If the device is offline at print time
+   the pins still plot on a blank field with a note. */
+function reportMapHTML(TS) {
+  const pts = TS.filter(t => typeof t.lat === 'number' && typeof t.lng === 'number');
+  const box = inner => `<div style="margin-top:16px;page-break-inside:avoid"><div style="font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Site map</div>${inner}</div>`;
+  if (!pts.length) return box(`<div style="margin-top:10px;border:1px dashed #ccc;border-radius:10px;padding:18px;text-align:center;font-size:11px;color:#888">No GPS coordinates in this scope yet \u2014 pins appear here as records are captured at the trunk.</div>`);
+  const W = 760, H = 500, PAD = 46;
+  const merc = (lat, lng, z) => {
+    const s = 256 * Math.pow(2, z);
+    const x = (lng + 180) / 360 * s;
+    const r = lat * Math.PI / 180;
+    const y = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s;
+    return [x, y];
+  };
+  let z = 18;
+  while (z > 3) {
+    const ps = pts.map(p => merc(p.lat, p.lng, z));
+    const xs = ps.map(p => p[0]), ys = ps.map(p => p[1]);
+    if (Math.max(...xs) - Math.min(...xs) <= W - PAD * 2 && Math.max(...ys) - Math.min(...ys) <= H - PAD * 2) break;
+    z--;
+  }
+  const ps = pts.map(p => merc(p.lat, p.lng, z));
+  const xs = ps.map(p => p[0]), ys = ps.map(p => p[1]);
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const offX = cx - W / 2, offY = cy - H / 2;
+  const tx0 = Math.floor(offX / 256), tx1 = Math.floor((offX + W) / 256);
+  const ty0 = Math.floor(offY / 256), ty1 = Math.floor((offY + H) / 256);
+  let tiles = '';
+  for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
+    if (tx < 0 || ty < 0 || tx >= Math.pow(2, z) || ty >= Math.pow(2, z)) continue;
+    tiles += `<img src="https://tile.openstreetmap.org/${z}/${tx}/${ty}.png" style="position:absolute;left:${tx * 256 - offX}px;top:${ty * 256 - offY}px;width:256px;height:256px" alt="">`;
+  }
+  const hcol = h => h === 'High Hazard' ? '#b34b48' : (h === 'Cleared' ? '#2f7d55' : '#b8842a');
+  const label = pts.length <= 30;
+  const pins = pts.map((p, i) => {
+    const px = ps[i][0] - offX, py = ps[i][1] - offY;
+    return `<div style="position:absolute;left:${(px - 6).toFixed(1)}px;top:${(py - 6).toFixed(1)}px;width:12px;height:12px;border-radius:50%;background:${hcol(p.hazard)};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)"></div>${label ? `<div style="position:absolute;left:${(px + 8).toFixed(1)}px;top:${(py - 8).toFixed(1)}px;font-size:7.5px;font-weight:700;font-family:ui-monospace,Menlo,monospace;color:#16181d;background:rgba(255,255,255,.82);border-radius:3px;padding:0 3px;white-space:nowrap">${esc(p.id)}</div>` : ''}`;
+  }).join('');
+  return box(`
+    <div style="margin-top:10px;position:relative;width:${W}px;max-width:100%;height:${H}px;border:1px solid #ddd;border-radius:10px;overflow:hidden;background:#eef0ea">${tiles}${pins}</div>
+    <div style="display:flex;gap:14px;margin-top:6px;font-size:9px;color:#777;align-items:center;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#b34b48;margin-right:4px"></span>High Hazard</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#b8842a;margin-right:4px"></span>Moderate</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2f7d55;margin-right:4px"></span>Cleared</span>
+      <span style="margin-left:auto">${pts.length} of ${TS.length} records pinned at captured GPS \u00b7 basemap \u00a9 OpenStreetMap \u00b7 print with an internet connection for the basemap</span>
+    </div>`);
+}
 function printReport(scope) {
   scope = scope || {};
   if (scope.review) lastReviewScope = scope;
@@ -4218,6 +4268,7 @@ function printReport(scope) {
       </div>
     </div>`;
     })() : ''}
+    ${sec('sitemap') ? reportMapHTML(TS) : ''}
     ${sec('read') && S.execRead ? `<div style="margin-top:14px;padding:12px 14px;border:1px solid #ddd;border-left:3px solid #c8452c;border-radius:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#777;font-weight:700;margin-bottom:6px">The read</div><div style="font-size:11.5px;line-height:1.6;white-space:pre-wrap">${esc(S.execRead)}</div></div>` : ''}
     ${sec('money') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Where the money is</div>
     <table>
@@ -4636,7 +4687,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.1</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.2</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
