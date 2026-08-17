@@ -801,7 +801,7 @@ var sync_src_default = async (req) => {
         const err = new Error("blobs_not_configured"); err.hint = "Netlify Blobs is not active on this site. Add env vars NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN then redeploy."; throw err;
       }
     })();
-    const V = "12.0";
+    const V = "12.1";
     const T0 = Date.now();
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const safeGetJSON = async (k) => { try { return await store.get(k, { type: "json", consistency: "strong" }); } catch (e) { return null; } };
@@ -1032,6 +1032,13 @@ var sync_src_default = async (req) => {
       await lwwMap("meta/budgets", b.budgetLWW, (e) => ({
         hours: Math.max(0, +e.hours || 0), cost: Math.max(0, +e.cost || 0)
       }));
+      await lwwMap("meta/subs", b.subsLWW, (e) => ({
+        name: String(e.name || "").slice(0, 80), contact: String(e.contact || "").slice(0, 60),
+        trade: String(e.trade || "").slice(0, 60), phone: String(e.phone || "").slice(0, 30),
+        email: String(e.email || "").slice(0, 80), rateNote: String(e.rateNote || "").slice(0, 80),
+        coiExp: String(e.coiExp || "").slice(0, 10), project: String(e.project || "").slice(0, 80),
+        notes: String(e.notes || "").slice(0, 200), active: e.active !== false, del: e.del === true
+      }));
       if (b.user && typeof b.user === "string") {
         const un = b.user.trim().slice(0, 60);
         if (un) await metaMerge("meta/users", (cur) => { const u = cur[un] || { name: un, created: Date.now() }; const stale = !cur[un] || Date.now() - (u.lastSeen || 0) > 30000; u.lastSeen = Date.now(); cur[un] = u; return { next: cur, changed: stale }; });
@@ -1089,7 +1096,8 @@ var sync_src_default = async (req) => {
       const assign = (await safeGetJSON("meta/assign")) || {};
       const hours = (await safeGetJSON("meta/hours")) || {};
       const budgets = (await safeGetJSON("meta/budgets")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets,
+      const subs = (await safeGetJSON("meta/subs")) || {};
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
