@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v11.7">
+<meta name="version" content="trice-v12.0">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -398,7 +398,7 @@ async function applyRemoteReset(resetAt) {
     }
     const unsynced = S.trees.filter(t => t.dirty);
     S.trees = unsynced;
-    for (const t of unsynced) { try { await DB.putTree(stripRuntime(t)); } catch (e) {} }
+    for (const t of unsynced) { t.photoSent = null; t.photoKey = null; try { await DB.putTree(stripRuntime(t)); } catch (e) {} }
     if (!unsynced.length) S.seq = 1; try { await DB.setMeta('seq', 1); } catch (e) {}
     localStorage.setItem('trice_tombs', '[]');
     SYNC.last = 0; localStorage.setItem('trice_sync_last', '0');
@@ -502,195 +502,216 @@ function backupsSheet() {
 }
 
 
-/* ---------------- Push batching — one oversized record can never block the rest ----------------
-   The server caps request bodies (~6MB). Pushing every dirty record in one POST
-   means one fat photo, or simply a long backlog, silently bricks all pushes.
-   Now: oversized photos are shrunk in place, pushes go out in ~3.5MB batches,
-   failed batches retry record-by-record, and failures are named out loud. */
+/* ---------------- Sync v12 — list-diff, append-only ----------------
+   The server stores every record revision and photo as its own immutable
+   blob. Sync is a set comparison, not a stream of deltas:
+     1. PUT what this phone changed (metadata ~2KB each; a photo travels
+        exactly once, ever).
+     2. LIST the server's newest revision per id (a few KB, no photos).
+     3. GET the records this phone lacks; queue their photos in the
+        background.
+   No watermarks, no clocks to trust, nothing to drift. Two phones holding
+   the same key set hold identical data — and that is exactly what Verify
+   checks. Deletions are tombstones; nothing is ever destroyed. */
 const PUSH_BUDGET = 3500000;
 async function shrinkRecordPhoto(t) {
   try {
     if (!t.photo || t.photo.length < 1800000) return false;
     const blob = await (await fetch(t.photo)).blob();
     const smaller = await scaleImageFile(blob, 1280, 0.7);
-    if (smaller && smaller.length < t.photo.length) { t.photo = smaller; try { await DB.putTree(stripRuntime(t)); } catch (e) {} return true; }
+    if (smaller && smaller.length < t.photo.length) { t.photo = smaller; t.photoAt = Date.now(); try { await DB.putTree(stripRuntime(t)); } catch (e) {} return true; }
   } catch (e) {}
   return false;
 }
-function packBatches(list) {
-  const batches = []; let cur = [], size = 0;
-  for (const t of list) {
-    const len = JSON.stringify(t).length;
-    if (size + len > PUSH_BUDGET && cur.length) { batches.push(cur); cur = []; size = 0; }
-    cur.push(t); size += len;
-  }
-  if (cur.length) batches.push(cur);
-  return batches;
-}
-async function pushDirtyBatched(baseBody) {
-  let dirty = S.trees.filter(t => t.dirty);
-  for (const t of dirty) { if (JSON.stringify(t).length > 1800000) await shrinkRecordPhoto(t); }
+function ensurePhotoAt(t) { if (t.photo && !t.photoAt) t.photoAt = t.updated || Date.now(); return t; }
+async function putDirty() {
+  let dirty = S.trees.filter(t => t.dirty).map(ensurePhotoAt);
+  for (const t of dirty) { if (t.photo && t.photo.length > 1800000) await shrinkRecordPhoto(t); }
   dirty = S.trees.filter(t => t.dirty);
-  const batches = packBatches(dirty.map(stripRuntime));
   const failed = [];
-  let lastResponse = null;
-  if (!batches.length) batches.push([]);
-  for (let i = 0; i < batches.length; i++) {
-    const body = Object.assign({}, baseBody, { push: batches[i] });
-    if (i > 0) { body.deletes = []; body.dropProject = null; body.reviveProject = null; }
+  let i = 0;
+  const baseMeta = { parentsLWW: S.projectParents2, projects: S.projects, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '', dels: tombs() };
+  let metaSent = false;
+  while (i < dirty.length || !metaSent) {
+    const recs = [], photos = {};
+    let sz = 0;
+    while (i < dirty.length) {
+      const t = dirty[i];
+      const meta = stripRuntime(t); delete meta.photo; delete meta.photoSent;
+      const mlen = JSON.stringify(meta).length;
+      const needPhoto = t.photo && t.photoSent !== t.photoAt;
+      const plen = needPhoto ? t.photo.length : 0;
+      if (recs.length && sz + mlen + plen > PUSH_BUDGET) break;
+      recs.push(meta);
+      if (needPhoto) photos[t.id] = { at: t.photoAt, data: t.photo };
+      sz += mlen + plen; i++;
+    }
+    const body = Object.assign({ op: 'put', recs, photos }, metaSent ? { dels: [] } : baseMeta);
+    metaSent = true;
     try {
       const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error('http ' + r.status);
-      lastResponse = await r.json();
-      for (const t of batches[i]) { const x = S.trees.find(y => y.id === t.id); if (x && x.dirty) { delete x.dirty; try { DB.putTree(stripRuntime(x)); } catch (e) {} } }
-    } catch (e) {
-      // batch failed — retry each record alone so one poison record cannot sink the rest
-      for (const t of batches[i]) {
-        try {
-          const r2 = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.assign({}, baseBody, { push: [t], deletes: [], dropProject: null, reviveProject: null })) });
-          if (!r2.ok) throw new Error('http ' + r2.status);
-          lastResponse = await r2.json();
-          const x = S.trees.find(y => y.id === t.id); if (x && x.dirty) { delete x.dirty; try { DB.putTree(stripRuntime(x)); } catch (e2) {} }
-        } catch (e2) { failed.push(t.id); }
+      const j = await r.json();
+      if (!j.v) { SYNC.fnStale = true; throw new Error('old server function'); }
+      SYNC.fnStale = false;
+      const okIds = new Set(j.saved || []);
+      const okPh = new Set(j.savedPhotos || []);
+      for (const m of recs) {
+        const x = S.trees.find(y => y.id === m.id);
+        if (!x) continue;
+        if (okIds.has(m.id)) { delete x.dirty; }
+        else failed.push(m.id);
+        if (okPh.has(m.id)) x.photoSent = x.photoAt;
+        try { DB.putTree(stripRuntime(x)); } catch (e) {}
       }
+    } catch (e) {
+      for (const m of recs) failed.push(m.id);
+      if (SYNC.fnStale) break;
     }
+    if (i >= dirty.length && metaSent) break;
   }
-  return { lastResponse, failed };
+  return { failed };
 }
-
-/* ---------------- Verify & repair (anti-entropy) ----------------
-   Watermark sync is fast but can miss records after clock skew, an old build,
-   or an interrupted push. This is the guarantee underneath it: fetch the
-   server's full id list (tiny — no photos), then repair both directions.
-   Missing here → pulled. Missing on the server → re-sent. Nothing is ever
-   deleted by verification. Runs automatically when counts disagree, and by
-   hand from Report → Data → Verify team data. */
-async function reconcile(mode) {
-  if (SYNC.reconciling) return null;
-  SYNC.reconciling = true;
-  try {
-    const r = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ op:'manifest' }) });
-    if (!r.ok) throw new Error('http ' + r.status);
-    const m = await r.json();
-    if (!Array.isArray(m.ids)) { SYNC.fnStale = true; return { stale: true }; }
-    SYNC.fnStale = false;
-    const server = new Map(m.ids || []);
-    const serverDel = new Set(m.deletes || []);
-    const tombSet = new Set(tombs());
-    const localById = new Map(S.trees.map(t => [t.id, t]));
-    const want = [];
-    for (const [id, upd] of server) {
-      const loc = localById.get(id);
-      if (!loc) { if (!tombSet.has(id)) want.push(id); }
-      else if ((upd || 0) > (loc.updated || 0) && !loc.dirty) want.push(id);
-    }
-    let repushed = 0;
-    for (const t of S.trees) {
-      if (!server.has(t.id) && !t.dirty && !serverDel.has(t.id)) { t.dirty = true; repushed++; }
-    }
-    mergeRemote([], m.deletes || []);
-    let pulled = 0, pendIds = want, guard = 0;
-    while (pendIds.length && guard++ < 40) {
-      const rr = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ need: pendIds }) });
-      if (!rr.ok) break;
-      const jj = await rr.json();
-      mergeRemote(jj.trees || [], []);
-      pulled += (jj.trees || []).length;
-      pendIds = jj.pending || [];
-    }
-    SYNC.serverAssets = typeof m.assets === 'number' ? m.assets : SYNC.serverAssets;
-    if (repushed) queueSync();
-    return { server: m.assets, local: S.trees.length, pulled, repushed };
-  } catch (e) {
-    return null;
-  } finally {
-    SYNC.reconciling = false;
-    SYNC.lastReconcile = Date.now();
+async function pullList() {
+  const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'list', user: S.surveyor || '' }) });
+  if (!r.ok) throw new Error('http ' + r.status);
+  const j = await r.json();
+  if (!j.v || !Array.isArray(j.ids)) { SYNC.fnStale = true; throw new Error('old server function'); }
+  SYNC.fnStale = false;
+  return j;
+}
+async function getRecords(keys) {
+  let pend = keys, got = 0, guard = 0;
+  while (pend.length && guard++ < 40) {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'get', keys: pend }) });
+    if (!r.ok) break;
+    const j = await r.json();
+    for (const t of j.trees || []) { delete t.__key; }
+    mergeRemote(j.trees || [], []);
+    got += (j.trees || []).length;
+    pend = j.pending || [];
   }
+  return got;
+}
+/* Photos arrive in the background, a few per cycle, and are remembered on
+   this phone forever after — each photo crosses the network once. */
+const PHQ = { running: false };
+async function pumpPhotos() {
+  if (PHQ.running || !navigator.onLine) return;
+  PHQ.running = true;
+  try {
+    let moved = 0;
+    for (const t of S.trees) {
+      if (moved >= 4) break;
+      if (t.photo || !t.photoKey) continue;
+      try {
+        const r = await fetch('/api/sync?photo=' + encodeURIComponent(t.photoKey));
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && typeof j.photo === 'string' && j.photo.length > 50) {
+          t.photo = j.photo; t.photoAt = parseInt(t.photoKey.slice(t.photoKey.lastIndexOf('!') + 1), 10) || t.updated; t.photoSent = t.photoAt;
+          try { await DB.putTree(stripRuntime(t)); } catch (e) {}
+          moved++;
+        }
+      } catch (e) {}
+    }
+    if (moved) { const ae = document.activeElement; if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render(); }
+    if (S.trees.some(t => !t.photo && t.photoKey)) setTimeout(pumpPhotos, 1200);
+  } finally { PHQ.running = false; }
+}
+function applyListMeta(j) {
+  SYNC.serverAssets = j.assets;
+  SYNC.epoch = j.epoch;
+  SYNC.migrating = !!j.migrating;
+  const seenRaw = localStorage.getItem('trice_reset_seen');
+  if (seenRaw === null) { localStorage.setItem('trice_reset_seen', String(j.resetAt || 0)); return Promise.resolve(false); }
+  if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) return applyRemoteReset(j.resetAt).then(() => true);
+  return Promise.resolve(false);
+}
+function applySharedMeta(j) {
+  let parCh = false;
+  if (j.projectParents2) parCh = mergeParents(j.projectParents2);
+  let projChanged = false;
+  if (j.deletedProjects && j.deletedProjects.length) {
+    const before = S.projects.length;
+    S.projects = S.projects.filter(x => !j.deletedProjects.includes(x));
+    if (S.joined && j.deletedProjects.includes(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
+    projChanged = S.projects.length !== before;
+  }
+  if (Array.isArray(j.projects)) {
+    const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
+    if (add.length) { S.projects.push(...add); projChanged = true; }
+  }
+  if (projChanged) { try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {} }
+  if (Array.isArray(j.users)) {
+    const uadd = j.users.filter(u => u && !S.users.includes(u));
+    if (uadd.length) { S.users.push(...uadd); try { localStorage.setItem('trice_users', JSON.stringify(S.users)); } catch (e) {} }
+  }
+  if (Array.isArray(j.usersMeta)) S.usersMeta = j.usersMeta;
+  if (projChanged || parCh) {
+    const ae = document.activeElement;
+    if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render();
+  }
+}
+/* One sync cycle = put + list + diff + get. The cycle IS the consistency
+   check — Verify simply runs it and reports the two counts. */
+async function syncNow() {
+  if (!navigator.onLine) { SYNC.status = 'offline'; syncChip(); return; }
+  try {
+    const hadDirty = S.trees.filter(t => t.dirty).length;
+    const { failed } = await putDirty();
+    if (failed.length && !SYNC.fnStale) toast(failed.length + ' record(s) could not reach the server: ' + failed.slice(0, 3).join(', ') + (failed.length > 3 ? '…' : '') + ' — will retry');
+    else if (hadDirty && !failed.length) SYNC.lastPush = Date.now();
+    const j = await pullList();
+    SYNC.enabled = true;
+    const wasReset = await applyListMeta(j);
+    applySharedMeta(j);
+    if (!wasReset) {
+      const localById = new Map(S.trees.map(t => [t.id, t]));
+      const tombSet = new Set(tombs());
+      const need = [];
+      for (const [id, u, pk] of j.ids) {
+        const loc = localById.get(id);
+        if (!loc) { if (!tombSet.has(id)) need.push('e' + j.epoch + '/r/' + id + '!' + u); }
+        else {
+          if ((u || 0) > (loc.updated || 0) && !loc.dirty) need.push('e' + j.epoch + '/r/' + id + '!' + u);
+          if (pk && loc.photoKey !== pk && !loc.dirty) { loc.photoKey = pk; try { DB.putTree(stripRuntime(loc)); } catch (e) {} }
+        }
+      }
+      if (need.length) await getRecords(need);
+      const pkById = new Map(j.ids.map(([id, u, pk]) => [id, pk]));
+      for (const t of S.trees) { const pk = pkById.get(t.id); if (pk && !t.photoKey) { t.photoKey = pk; try { DB.putTree(stripRuntime(t)); } catch (e) {} } }
+      const delsApply = (j.dels || []).filter(([id, at]) => { const loc = S.trees.find(t => t.id === id); return loc && !loc.dirty && at > (loc.updated || 0); }).map(([id]) => id);
+      if (delsApply.length) mergeRemote([], delsApply);
+      // anything this phone holds that the server does not list goes back up
+      let repushed = 0;
+      const serverIds = new Set(j.ids.map(([id]) => id));
+      const serverDels = new Set((j.dels || []).map(([id]) => id));
+      for (const t of S.trees) { if (!serverIds.has(t.id) && !serverDels.has(t.id) && !t.dirty) { t.dirty = true; t.photoSent = null; repushed++; } }
+      if (repushed) { SYNC.repushPending = repushed; queueSync(); }
+      else SYNC.repushPending = 0;
+      pumpPhotos();
+    }
+    if (!failed.length) localStorage.setItem('trice_tombs', '[]');
+    SYNC.last = j.now || Date.now(); localStorage.setItem('trice_sync_last', String(SYNC.last)); SYNC.busyCount = 0;
+    SYNC.status = 'ok'; SYNC.lastOk = Date.now();
+  } catch (e) { if (SYNC.enabled !== true) SYNC.enabled = false; SYNC.status = 'err'; SYNC.lastErr = (e && e.message) || 'network'; }
+  syncChip();
 }
 async function verifyTeamData() {
   toast('Verifying against the server…');
-  const res = await reconcile('manual');
-  if (!res) { toast('Could not reach the server — try again with signal'); return; }
-  if (res.stale) { toast('The server is running an old sync function — commit netlify/functions/sync.mjs to GitHub and let Netlify redeploy, then verify again'); render(); return; }
-  const dirtyN = S.trees.filter(t => t.dirty).length;
-  if (dirtyN) { try { await syncNow(); } catch (e) {} }
-  const localN = S.trees.length;
-  const srvN = (typeof SYNC.serverAssets === 'number') ? SYNC.serverAssets : res.server;
-  if (!res.pulled && !res.repushed && localN === srvN) toast('Consistent — ' + localN + ' records here and on the server');
-  else toast('Repaired: pulled ' + res.pulled + ', re-sent ' + res.repushed + ' · this phone ' + localN + ' · server ' + (srvN + (res.repushed ? '+' : '')));
-  render();
-}
-
-async function syncNow(){
-  // Always try — a cold function start or blip must not disable team sync for the session.
-  if(!navigator.onLine){ SYNC.status='offline'; syncChip(); return; }
-  try{
-    const hadDirty = S.trees.filter(t=>t.dirty).length;
-    const { lastResponse, failed } = await pushDirtyBatched({ since: Math.max(0, SYNC.last - 120000), deletes: tombs(), projects: S.projects, parentsLWW: S.projectParents2, reviveProject: S.reviveNext ? (S.joined || null) : null, user: S.surveyor || '' });
-    if (!lastResponse) throw new Error('all pushes failed');
-    if (failed.length) toast(failed.length + ' record(s) could not reach the server: ' + failed.slice(0,3).join(', ') + (failed.length>3?'…':'') + ' — will retry');
-    else if (hadDirty) SYNC.lastPush = Date.now();
-    const j = lastResponse;
-    SYNC.enabled = true;
-    const seenRaw = localStorage.getItem('trice_reset_seen');
-    if (seenRaw === null) { localStorage.setItem('trice_reset_seen', String(j.resetAt || 0)); }
-    else if (j.resetAt && j.resetAt > parseInt(seenRaw, 10)) { await applyRemoteReset(j.resetAt); }
-    mergeRemote(j.trees, j.deletes);
-    S.reviveNext = false;
-    let parCh = false;
-    if (j.projectParents2) parCh = mergeParents(j.projectParents2);
-    else if (j.projectParents) { for (const [c, p] of Object.entries(j.projectParents)) { if (!S.projectParents2[c]) { S.projectParents2[c] = { p, at: 1 }; parCh = true; } } if (parCh) persistParents(); }
-    let projChanged = false;
-    if (j.deletedProjects && j.deletedProjects.length) {
-      const before = S.projects.length;
-      S.projects = S.projects.filter(x => !j.deletedProjects.includes(x));
-      if (S.joined && j.deletedProjects.includes(S.joined)) { S.joined = ''; localStorage.removeItem('trice_joined'); }
-      projChanged = S.projects.length !== before;
-    }
-    if (Array.isArray(j.projects)) {
-      const add = j.projects.filter(p => p && !S.projects.includes(p) && !(j.deletedProjects || []).includes(p));
-      if (add.length) { S.projects.push(...add); projChanged = true; }
-    }
-    if (projChanged || parCh) {
-      try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); } catch (e) {}
-      const ae = document.activeElement;
-      if (!S.draft && (!ae || !/input|textarea|select/i.test(ae.tagName))) render();
-    }
-    if (Array.isArray(j.users)) {
-      const uadd = j.users.filter(u => u && !S.users.includes(u));
-      if (uadd.length) { S.users.push(...uadd); try { localStorage.setItem('trice_users', JSON.stringify(S.users)); } catch (e) {} }
-    }
-    if (Array.isArray(j.usersMeta)) {
-      S.usersMeta = j.usersMeta;
-      if (S.tab === 'map' && !S.draft) { const ae2 = document.activeElement; if (!ae2 || !/input|textarea|select/i.test(ae2.tagName)) render(); }
-    }
-    if (!failed.length) localStorage.setItem('trice_tombs','[]');
-    /* Drain remaining pages — the server caps each response, so a long backlog
-       arrives in slices instead of one oversized reply that the gateway drops. */
-    let page = j, guard = 0;
-    while (page.more && guard++ < 40) {
-      const rp = await fetch('/api/sync', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ since: page.next, sinceId: page.nextId || '', push: [], user: S.surveyor || '' }) });
-      if (!rp.ok) break;
-      page = await rp.json();
-      mergeRemote(page.trees, page.deletes);
-    }
-    SYNC.last = page.more ? page.next : (page.now || Date.now());
-    localStorage.setItem('trice_sync_last', String(SYNC.last)); SYNC.busyCount = 0;
-    SYNC.status='ok'; SYNC.lastOk=Date.now();
-    if (typeof page.assets === 'number') {
-      SYNC.serverAssets = page.assets;
-      SYNC.fnStale = !page.v;
-      /* Belt and braces: if this phone and the server disagree on the record
-         count after a clean cycle, verify against the server id list. */
-      if (!page.more && !failed.length && page.assets !== S.trees.length && !SYNC.fnStale &&
-          Date.now() - (SYNC.lastReconcile || 0) > 90000 && !SYNC.reconciling) {
-        reconcile('auto').then(res => { if (res && (res.pulled || res.repushed)) { render(); } }).catch(()=>{});
-      }
-    }
-  }catch(e){ if(SYNC.enabled!==true) SYNC.enabled=false; SYNC.status='err'; SYNC.lastErr=(e&&e.message)||'network'; }
-  syncChip();
+  try {
+    const before = S.trees.length;
+    await syncNow();
+    if (SYNC.fnStale) { toast('The server is running an old sync function — commit netlify/functions/sync.mjs to GitHub and let Netlify redeploy, then verify again'); return; }
+    if (SYNC.status !== 'ok') { toast('Could not reach the server — try again with signal'); return; }
+    if (SYNC.repushPending) { await syncNow(); }
+    const pulled = Math.max(0, S.trees.length - before);
+    const localN = S.trees.length, srvN = SYNC.serverAssets;
+    if (SYNC.migrating) toast('Server is still upgrading older records — counts settle over the next few minutes. This phone ' + localN + ' · server ' + srvN);
+    else if (localN === srvN) toast('Consistent — ' + localN + ' records here and on the server');
+    else toast('Repaired: pulled ' + pulled + ' · this phone ' + localN + ' · server ' + srvN);
+  } finally { render(); }
 }
 function syncChip(){
   let txt, col;
@@ -2486,7 +2507,7 @@ function reportView() {
   <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Data</span><button id="syncChip" onclick="syncDiag()" style="font-size:10px;font-weight:700;border:0;background:none;padding:0;cursor:pointer" title="Tap to test team sync"></button></div>
   <div class="card" style="padding:9px 15px">
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
-    <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${SYNC.fnStale ? ' <span class="chip bad" style="margin-left:4px">server function out of date</span>' : ((typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : '')}</span><span class="l2">${SYNC.fnStale ? 'The site is serving an old netlify/functions/sync.mjs — commit the new one to GitHub and let Netlify redeploy. Records are safe on each phone meanwhile.' : `This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — checks every record id against the server and repairs both ways. Nothing is deleted.`}</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${SYNC.fnStale ? ' <span class="chip bad" style="margin-left:4px">server function out of date</span>' : ((typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : '')}</span><span class="l2">${SYNC.fnStale ? 'The site is serving an old netlify/functions/sync.mjs — commit the new one to GitHub and let Netlify redeploy. Records are safe on each phone meanwhile.' : `This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — compares every record id with the server and repairs both ways. Nothing is ever deleted.`}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${needsBackup() ? ` <span class="chip bad" style="margin-left:4px">${unbackedCount()} not backed up</span>` : ''}</span><span class="l2">${needsBackup() ? 'Do this before the phone leaves the site' : (lastBackupAt() ? `Everything, photos included · last backup ${fmtWhen(lastBackupAt())}` : 'Everything, photos included, as one file')}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="forceRefreshDevice()"><span class="mid"><span class="l1">Force refresh this device</span><span class="l2">Clears cached app &amp; local copies, re-pulls everything. Unsynced work is pushed first, never lost.</span></span><span style="color:var(--faint)">&#8250;</span></button>
@@ -2542,7 +2563,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v11.7</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v12.0</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';

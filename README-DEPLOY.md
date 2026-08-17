@@ -1,31 +1,28 @@
-# Trice Tree Survey — v11.7
+# Trice Tree Survey — v12.0 · sync rebuilt from the ground up
 
 ## Deploy — GitHub only. Never drag-and-drop.
-Commit EVERY file in this folder to FreddyRobotLives/trice, same layout. The two that matter most this round:
-- index.html
-- netlify/functions/sync.mjs  ← this one is easy to miss. If it doesn't reach GitHub, phones cannot pull past a large backlog and Verify shows "server function out of date."
-Also: sw.js, netlify.toml, manifest.webmanifest, icons, og.png. Push, and Netlify builds trice.live.
+Commit EVERY file to FreddyRobotLives/trice. Both index.html and netlify/functions/sync.mjs are required this round — they speak a new protocol together. Push; Netlify builds trice.live.
 
-## The stuck phone (37 vs 74) — what happened and the fix
-That phone is very likely talking to the OLD server function. The old function sends the whole backlog in one reply; with photos, a 37-record deficit exceeds the reply limit, the reply fails, and the phone can't pull. The new function pages replies, so this cannot happen. After this deploy, open the phone and tap Verify team data. If it says "server function out of date," sync.mjs never reached GitHub — commit it and redeploy.
+## What changed underneath — why sync is now exact
+The old design kept the whole register in one big server file that every phone rewrote on every sync. Phones could collide, replies could exceed size limits, and bookkeeping could drift — every sync problem you have seen traces to that one design.
 
-## v11.7 — projects and sub-projects, rebuilt
-The old method asked the server for permission on every move and could silently refuse. Gone. Filing is now data, like a tree record:
-- Tap Organize → Move on any project → tap where it belongs. Applies instantly on the phone, no signal needed.
-- Changes ride along with normal sync. Newest change wins, every device converges within a cycle.
-- Nesting goes multiple levels (site → course → hole). Map, Sheet, and reports roll up through every level.
-- Nothing can disappear: even a conflicting move made on two phones at once resolves cleanly, and every project always stays listed.
+v12 replaces it:
+- Every record revision and every photo is its own small, permanent server object. Nothing is ever overwritten or destroyed. Two phones can never collide, because nothing is shared-written.
+- Sync is a set comparison, not a stream of updates. The phone lists the server's record ids (a few KB), pulls exactly what it lacks, and re-sends anything the server lacks. Every 25-second cycle is a full consistency check and repair. There is no bookkeeping left to drift.
+- Photos travel exactly once each way, ever. Record data syncs in seconds even on one bar; photos fill in quietly in the background and are then kept on the phone.
+- Every edit revision is retained on the server — a full audit trail per tree, which matters for insurance work.
+- Fresh register = the server turns a page (an "epoch"). Everything before stays exactly where it is, forever, downloadable under Team backups. Wiping data is now structurally impossible.
+- Even if the server storage were emptied entirely, the phones re-seed it automatically — records and photos both.
 
-## Verify team data (Report → Data)
-- Shows "This phone: X · Server: Y" on every device. Same numbers everywhere = the team is consistent.
-- Tap it to repair both ways: missing here → pulled, missing on the server → re-sent. Never deletes.
-- Runs by itself whenever a phone's count disagrees with the server.
+## Migration — automatic, nothing to do
+The old server data file is read once, split into the new format in background slices over the first few minutes of use, and then left in place permanently as one more backup. Phones also re-contribute everything they hold. Verify will say "server is still upgrading older records" until it settles, then counts match everywhere.
 
-## Updates now reach phones by themselves
-The service worker and manifest are served with no-cache, the app checks for a new build on every open, every return-to-foreground, and every 20 minutes, and reloads itself once the moment a new version installs (never mid-capture or mid-typing). One old-version generation remains in the field: phones must load v11.7 once the old way (open the site or force refresh) — every deploy after that applies automatically.
+Old phones that haven't picked up the new app yet: their pushes are still accepted (nothing waits, nothing is lost), and they auto-update to v12 on next open.
+
+## The check that matters
+Report → Data → Verify team data on any two phones. Same "This phone / Server" number on both = the whole team is consistent. That is now guaranteed to converge on every cycle, not just when Verify is tapped.
 
 ## Standing rules
 - No Safari Private mode on crew phones.
 - Add to Home Screen on every crew phone.
 - ANTHROPIC_API_KEY lives only in Netlify env vars.
-- Team backups: download one weekly, keep it off-phone.
