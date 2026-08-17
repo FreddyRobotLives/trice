@@ -801,7 +801,7 @@ var sync_src_default = async (req) => {
         const err = new Error("blobs_not_configured"); err.hint = "Netlify Blobs is not active on this site. Add env vars NETLIFY_SITE_ID and NETLIFY_BLOBS_TOKEN then redeploy."; throw err;
       }
     })();
-    const V = "12.1";
+    const V = "12.2";
     const T0 = Date.now();
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const safeGetJSON = async (k) => { try { return await store.get(k, { type: "json", consistency: "strong" }); } catch (e) { return null; } };
@@ -1032,6 +1032,9 @@ var sync_src_default = async (req) => {
       await lwwMap("meta/budgets", b.budgetLWW, (e) => ({
         hours: Math.max(0, +e.hours || 0), cost: Math.max(0, +e.cost || 0)
       }));
+      await lwwMap("meta/projstate", b.projLWW, (e) => ({
+        done: e.done === true, by: String(e.by || "").slice(0, 60)
+      }));
       await lwwMap("meta/subs", b.subsLWW, (e) => ({
         name: String(e.name || "").slice(0, 80), contact: String(e.contact || "").slice(0, 60),
         trade: String(e.trade || "").slice(0, 60), phone: String(e.phone || "").slice(0, 30),
@@ -1097,7 +1100,8 @@ var sync_src_default = async (req) => {
       const hours = (await safeGetJSON("meta/hours")) || {};
       const budgets = (await safeGetJSON("meta/budgets")) || {};
       const subs = (await safeGetJSON("meta/subs")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs,
+      const projstate = (await safeGetJSON("meta/projstate")) || {};
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
