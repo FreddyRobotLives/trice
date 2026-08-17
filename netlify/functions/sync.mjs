@@ -905,6 +905,7 @@ var sync_src_default = async (req) => {
       return {
         projects: [...names].filter((n) => !(proj.deleted || {})[n]),
         deletedProjects: Object.keys(proj.deleted || {}),
+        archivedProjects: Object.keys(proj.archived || {}),
         projectParents: flat, projectParents2: parents,
         users: Object.keys(users), usersMeta: Object.values(users)
       };
@@ -975,16 +976,46 @@ var sync_src_default = async (req) => {
           return { next: cur, changed: ch };
         });
       }
-      if ((b.projects && b.projects.length) || b.dropProject || b.reviveProject) {
+      if ((b.projects && b.projects.length) || b.dropProject || b.reviveProject || b.archiveProject || b.unarchiveProject) {
         await metaMerge("meta/projects", (cur) => {
           cur.names = cur.names || {}; cur.deleted = cur.deleted || {};
           let ch = false;
           for (const p of b.projects || []) { const n = String(p || "").trim().slice(0, 80); if (n && !cur.names[n] && !cur.deleted[n]) { cur.names[n] = Date.now(); ch = true; } }
+          cur.archived = cur.archived || {};
           if (b.reviveProject) { const rn = String(b.reviveProject).trim().slice(0, 80); if (rn && cur.deleted[rn]) { delete cur.deleted[rn]; ch = true; } }
-          if (b.dropProject) { const dn = String(b.dropProject).trim().slice(0, 80); if (dn && cur.names[dn]) { delete cur.names[dn]; cur.deleted[dn] = Date.now(); ch = true; } }
+          if (b.dropProject) { const dn = String(b.dropProject).trim().slice(0, 80); if (dn && cur.names[dn]) { delete cur.names[dn]; cur.deleted[dn] = Date.now(); delete cur.archived[dn]; ch = true; } }
+          if (b.archiveProject) { const an = String(b.archiveProject).trim().slice(0, 80); if (an && cur.names[an] && !cur.archived[an]) { cur.archived[an] = Date.now(); ch = true; } }
+          if (b.unarchiveProject) { const un2 = String(b.unarchiveProject).trim().slice(0, 80); if (un2 && cur.archived[un2]) { delete cur.archived[un2]; ch = true; } }
           return { next: cur, changed: ch };
         });
       }
+      const lwwMap = async (key, incoming, mapEntry) => {
+        if (!incoming || !Object.keys(incoming).length) return;
+        await metaMerge(key, (cur) => {
+          let ch = false;
+          for (const [k0, e0] of Object.entries(incoming)) {
+            const kk = String(k0 || "").trim().slice(0, 120);
+            if (!kk || !e0 || typeof e0 !== "object") continue;
+            const at = +e0.at || 0;
+            if (!cur[kk] || at > (cur[kk].at || 0)) { cur[kk] = mapEntry(e0, cur[kk]); cur[kk].at = at; ch = true; }
+          }
+          return { next: cur, changed: ch };
+        });
+      };
+      await lwwMap("meta/users", b.empLWW, (e, cur) => Object.assign({}, cur || {}, {
+        name: String(e.name || "").slice(0, 60), role: String(e.role || "").slice(0, 60),
+        cert: String(e.cert || "").slice(0, 40), phone: String(e.phone || "").slice(0, 30),
+        email: String(e.email || "").slice(0, 80), rate: +e.rate || 0, active: e.active !== false
+      }));
+      await lwwMap("meta/assign", b.assignLWW, (e) => ({
+        user: String(e.user || "").slice(0, 60), project: String(e.project || "").slice(0, 80),
+        date: String(e.date || "").slice(0, 10), note: String(e.note || "").slice(0, 200), del: e.del === true
+      }));
+      await lwwMap("meta/hours", b.hoursLWW, (e) => ({
+        user: String(e.user || "").slice(0, 60), project: String(e.project || "").slice(0, 80),
+        date: String(e.date || "").slice(0, 10), hours: Math.max(0, Math.min(24, +e.hours || 0)),
+        note: String(e.note || "").slice(0, 200), approved: e.approved === true, del: e.del === true
+      }));
       if (b.user && typeof b.user === "string") {
         const un = b.user.trim().slice(0, 60);
         if (un) await metaMerge("meta/users", (cur) => { const u = cur[un] || { name: un, created: Date.now() }; const stale = !cur[un] || Date.now() - (u.lastSeen || 0) > 30000; u.lastSeen = Date.now(); cur[un] = u; return { next: cur, changed: stale }; });
@@ -1039,7 +1070,9 @@ var sync_src_default = async (req) => {
       const meta = await metaBundle(live);
       const mig = (await safeGetJSON("meta/mig")) || { done: false };
       const ids = Object.entries(live).map(([id, r]) => [id, r.u, photos[id] || null]);
-      return new Response(JSON.stringify(Object.assign({
+      const assign = (await safeGetJSON("meta/assign")) || {};
+      const hours = (await safeGetJSON("meta/hours")) || {};
+      return new Response(JSON.stringify(Object.assign({ assign, hours,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
