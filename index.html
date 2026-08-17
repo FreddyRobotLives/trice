@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#eef1f4">
-<meta name="version" content="trice-v19">
+<meta name="version" content="trice-v20">
 <meta property="og:title" content="Trice — every tree, on the record">
 <meta property="og:description" content="Photograph a tree. AI identifies it, rates the hazard, stamps GPS and time, and writes the row — live sheet, map, and a signed report from one walk.">
 <meta property="og:image" content="https://trice.live/og.png">
@@ -307,7 +307,7 @@ const S = {
   hoursMap: (() => { try { return JSON.parse(localStorage.getItem('trice_hours') || '{}'); } catch (e) { return {}; } })(),
   empDirty: {}, assignDirty: {}, hoursDirty: {}, budgetDirty: {},
   budgets: (() => { try { return JSON.parse(localStorage.getItem('trice_budgets') || '{}'); } catch (e) { return {}; } })(),
-  teamSec: 'clock',
+  teamSec: 'perf',
   deletedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_delproj') || '[]'); } catch (e) { return []; } })(),
   archivedProjects: (() => { try { return JSON.parse(localStorage.getItem('trice_archproj') || '[]'); } catch (e) { return []; } })(),
   teamWeek: 0,
@@ -1844,10 +1844,10 @@ async function restoreProject(name) {
    sub-project name is then removed. */
 async function subToLocation(name, silent) {
   const parent = parentOf(name);
-  if (!parent) { toast('"' + name + '" is a top-level project — file it under another project first'); return 0; }
+  if (!parent) { toast('"' + name + '" is not nested — only a project filed under another can convert to assets. Use Move first.'); return 0; }
   const scope = projScope(name);
   const affected = S.trees.filter(t => scope.includes(siteOfT(t)));
-  if (!silent && !confirm('Turn "' + name + '" into a location under "' + parent + '"?\n\n' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' will move to "' + parent + '" with "' + name + '" as their Hole / zone. Applies to the whole team.')) return 0;
+  if (!silent && !confirm('Convert "' + name + '" into assets under "' + parent + '"?\n\n' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' will move to "' + parent + '" with "' + name + '" as their Hole / zone. Applies to the whole team.')) return 0;
   for (const t of affected) {
     t.zone = normZone(siteOfT(t) === name ? name : siteOfT(t));
     t.site = parent;
@@ -1863,14 +1863,14 @@ async function subToLocation(name, silent) {
   try { localStorage.setItem('trice_projects', JSON.stringify(S.projects)); localStorage.setItem('trice_delproj', JSON.stringify(S.deletedProjects)); } catch (e) {}
   if (S.joined && !allProjects().includes(S.joined)) { S.joined = parent; try { localStorage.setItem('trice_joined', parent); } catch (e) {} }
   queueSync();
-  if (!silent) { toast('"' + name + '" is now a location under "' + parent + '" · ' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' moved'); render(); }
+  if (!silent) { toast('"' + name + '" converted — its assets now live in "' + parent + '" · ' + affected.length + ' asset' + (affected.length === 1 ? '' : 's') + ' moved'); render(); }
   return affected.length;
 }
 async function allSubsToLocations(parent) {
   const kids = allProjects().filter(p => parentOf(p) === parent);
   if (!kids.length) return;
   const total = S.trees.filter(t => visT(t) && projMatches(siteOfT(t), parent) && siteOfT(t) !== parent).length;
-  if (!confirm('Turn all ' + kids.length + ' sub-projects of "' + parent + '" into locations?\n\n' + total + ' asset' + (total === 1 ? '' : 's') + ' will move to "' + parent + '" carrying their sub-project name as Hole / zone. Applies to the whole team.')) return;
+  if (!confirm('Convert all ' + kids.length + ' nested projects of "' + parent + '" into assets?\n\n' + total + ' asset' + (total === 1 ? '' : 's') + ' will move to "' + parent + '" carrying their sub-project name as Hole / zone. Applies to the whole team.')) return;
   let moved = 0;
   for (const k of kids) moved += await subToLocation(k, true);
   toast(kids.length + ' sub-projects are now locations under "' + parent + '" · ' + moved + ' assets moved');
@@ -1998,8 +1998,10 @@ function pickerRows() {
     ${S.pickerEdit ? `
     <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 12px ${depth * 22}px;margin-top:-6px">
       <button onclick="moveStart(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">Move</button>
-      ${parentOf(pj) ? `<button onclick="pickToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">→ Location</button>` : ''}
-      ${nSubs ? `<button onclick="pickSubsToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">Subs → locations</button>` : ''}
+      ${parentOf(pj)
+        ? `<button onclick="pickToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">→ Assets</button>`
+        : `<button onclick="toast('Only a nested project can convert to assets — use Move to file &quot;' + window.__PICK[${i}] + '&quot; under a project first, then convert')" style="border:1px dashed var(--line);background:none;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--faint)">→ Assets 🔒</button>`}
+      ${nSubs ? `<button onclick="pickSubsToLoc(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--info)">Subs → assets</button>` : ''}
       <button onclick="pickArchive(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--muted)">Archive</button>
       <button onclick="pickDelete(${i})" style="border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:11px;font-weight:700;color:var(--bad)">Delete</button>
     </div>` : ''}`;
@@ -2696,12 +2698,76 @@ function exportHoursCSV(weekOnly) {
   download('trice-hours-' + (weekOnly ? dkey(ws) : 'all') + '.csv', 'text/csv', csv);
 }
 const TEAM_INP = 'border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;background:#fff;font-family:inherit;color:var(--ink)';
+function teamPerf() {
+  const now = Date.now();
+  const rng = S.perfRange == null ? 30 : S.perfRange;
+  const cut = rng ? now - rng * 864e5 : 0;
+  const vis = S.trees.filter(visT);
+  const names = [...new Set(vis.map(t => t.surveyor || 'Unassigned'))].sort();
+  const who = S.perfUser && names.includes(S.perfUser) ? S.perfUser : null;
+  const TS = vis.filter(t => (t.when || 0) >= cut && (!who || (t.surveyor || 'Unassigned') === who));
+  const spec = TS.reduce((s, t) => s + (t.qty || 1), 0);
+  const hi = TS.filter(t => t.hazard === 'High Hazard').length;
+  const priced = TS.reduce((s, t) => s + (lineTotal(t) || 0), 0);
+  const dset = new Set(TS.map(t => dkey(new Date(t.when))));
+  // streak: consecutive days ending today/yesterday with ≥1 capture (all-time, scoped to who)
+  const allD = new Set(vis.filter(t => !who || (t.surveyor || 'Unassigned') === who).map(t => dkey(new Date(t.when))));
+  let streak = 0; { const d = new Date(); if (!allD.has(dkey(d))) d.setDate(d.getDate() - 1); while (allD.has(dkey(d))) { streak++; d.setDate(d.getDate() - 1); } }
+  const in7 = vis.filter(t => t.when >= now - 7 * 864e5 && (!who || (t.surveyor || 'Unassigned') === who)).length;
+  const prev7 = vis.filter(t => t.when >= now - 14 * 864e5 && t.when < now - 7 * 864e5 && (!who || (t.surveyor || 'Unassigned') === who)).length;
+  const mom = prev7 ? Math.round((in7 - prev7) / prev7 * 100) : (in7 ? 100 : 0);
+  // hours this week from the punch clock
+  const ws = weekStart(0), we = new Date(ws); we.setDate(we.getDate() + 7);
+  const wkH = Object.values(S.hoursMap || {}).filter(e => e && !e.del && (e.kind || 'work') === 'work' && e.date >= dkey(ws) && e.date < dkey(we) && (!who || e.user === who)).reduce((s, e) => s + elapsedHrs(e), 0);
+  const K = 'font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700';
+  const V = 'font-size:31px;font-weight:800;letter-spacing:-.02em;color:var(--ink);margin-top:7px;line-height:1';
+  const tile = (k, v, sub) => `<div class="card" style="padding:18px 19px"><div style="${K}">${k}</div><div style="${V}">${v}</div>${sub ? `<div style="margin-top:7px;font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`;
+  // charts
+  const wdN = [0,0,0,0,0,0,0], wdL = ['S','M','T','W','T','F','S'];
+  for (const t of TS) wdN[new Date(t.when).getDay()]++;
+  const wdMax = Math.max(1, ...wdN);
+  const hrN = Array(15).fill(0); // 6:00–20:59
+  for (const t of TS) { const h = new Date(t.when).getHours(); if (h >= 6 && h <= 20) hrN[h - 6]++; }
+  const hrMax = Math.max(1, ...hrN);
+  const bar = (n, max, lab) => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0"><div style="font-size:9.5px;font-weight:700;color:${n ? 'var(--muted)' : 'transparent'}">${n || 0}</div><div style="width:62%;max-width:26px;height:${Math.max(3, Math.round(n / max * 62))}px;background:${n ? 'var(--ink)' : 'var(--hair)'};border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--faint)">${lab}</div></div>`;
+  // per-employee
+  const per = names.map(n => { const rows = vis.filter(t => (t.surveyor || 'Unassigned') === n && (t.when || 0) >= cut); return { n, c: rows.length, s: rows.reduce((s, t) => s + (t.qty || 1), 0), hi: rows.filter(t => t.hazard === 'High Hazard').length, $: rows.reduce((s, t) => s + (lineTotal(t) || 0), 0), last: rows.reduce((m, t) => Math.max(m, t.when || 0), 0) }; }).filter(e => e.c).sort((a, b) => b.c - a.c);
+  const pMax = Math.max(1, ...per.map(e => e.c));
+  const tone = e => { const r = e.c ? e.hi / e.c : 0; return r > .25 ? ['var(--bad-bg)', '#7d3330'] : r > .1 ? ['var(--warn-bg)', '#7a5a1d'] : ['var(--good-bg)', '#245c3c']; };
+  const rangeBtn = (d, l) => `<button onclick="S.perfRange=${d};render()" style="border:1px solid ${rng === d ? 'var(--ink)' : 'var(--line)'};background:${rng === d ? 'var(--ink)' : '#fff'};color:${rng === d ? '#fff' : 'var(--muted)'};border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700">${l}</button>`;
+  return `
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    ${names.length > 1 ? filterSel(S.perfUser, names, 'S.perfUser=this.value||null;render()', 'Everyone') : ''}
+    <span style="flex:1"></span>${rangeBtn(7, '7D')}${rangeBtn(30, '30D')}${rangeBtn(90, '90D')}${rangeBtn(0, 'All')}
+  </div>
+  ${TS.length || vis.length ? '' : '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Performance draws itself from the field — captures, hours and hazards appear here as the team works.</div>'}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+    ${tile('Captures', TS.length, `${spec} specimens`)}
+    ${tile('High hazard', hi, TS.length ? Math.round(hi / TS.length * 100) + '% of captures' : '')}
+    ${tile('Hours this week', wkH ? wkH.toFixed(1) : '0', 'from the punch clock')}
+    ${tile('Priced', priced ? money(priced) : '$0', 'remediation in range')}
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px">
+    <div class="card" style="padding:18px 19px"><div style="${K}">Capture streak</div><div style="${V}">${streak}<span style="font-size:15px;font-weight:700;color:var(--muted)"> day${streak === 1 ? '' : 's'}</span></div><div style="margin-top:7px;font-size:11px;color:var(--muted)">${streak ? 'Consecutive days with at least one capture' : 'Log a capture to start a streak'}</div></div>
+    <div class="card" style="padding:18px 19px"><div style="${K}">Weekly rhythm</div><div style="${V}">${in7}<span style="font-size:15px;font-weight:700;color:var(--muted)"> this week</span></div><div style="margin-top:7px;font-size:11px;color:${mom >= 0 ? 'var(--good)' : 'var(--bad)'};font-weight:700">${mom >= 0 ? '↑' : '↓'} ${Math.abs(mom)}% vs last week <span style="color:var(--muted);font-weight:500">· ${dset.size} active day${dset.size === 1 ? '' : 's'} in range</span></div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:10px">
+    <div class="card" style="padding:18px 19px"><div style="${K}">Captures by weekday</div><div style="display:flex;align-items:flex-end;gap:4px;margin-top:16px;height:92px">${wdN.map((n, i) => bar(n, wdMax, wdL[i])).join('')}</div></div>
+    <div class="card" style="padding:18px 19px"><div style="${K}">Captures by time of day</div><div style="display:flex;align-items:flex-end;gap:3px;margin-top:16px;height:92px">${hrN.map((n, i) => bar(n, hrMax, [0, 3, 6, 9, 12].includes(i) ? (i + 6) : '')).join('')}</div></div>
+  </div>
+  ${per.length ? `<div class="card" style="padding:18px 19px;margin-top:10px">
+    <div style="${K}">By assessor</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">${per.map(e => { const [bg, ink] = tone(e); return `<button onclick="S.perfUser='${esc(e.n.replace(/'/g, "\\'"))}';render()" style="flex:${e.c} 1 ${Math.max(110, Math.round(e.c / pMax * 240))}px;border:0;background:${bg};border-radius:14px;padding:15px 15px 13px;text-align:left;cursor:pointer;min-width:110px"><span style="display:block;font-size:24px;font-weight:800;letter-spacing:-.02em;color:${ink}">${e.c}</span><span style="display:block;margin-top:4px;font-size:11px;font-weight:700;color:${ink};opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.n)}</span></button>`; }).join('')}</div>
+    <div style="margin-top:14px">${per.map(e => `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px"><span style="width:132px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(e.n)}</span><span style="flex:1;height:7px;background:var(--bg);border-radius:99px;overflow:hidden"><span style="display:block;height:100%;width:${Math.round(e.c / pMax * 100)}%;background:var(--ink);border-radius:99px"></span></span><span style="flex:none;color:var(--muted)">${e.c} · ${e.s} spec${e.hi ? ` · <span style="color:var(--bad);font-weight:700">${e.hi} high</span>` : ''}${e.$ ? ` · ${money(e.$)}` : ''}</span></div>`).join('')}</div>
+    <div style="margin-top:10px;font-size:10.5px;color:var(--faint)">Tile size = captures in range · tint = high-hazard share. Tap a tile to focus one assessor.</div>
+  </div>` : ''}`;
+}
 function teamView() {
   if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Team management is an admin desktop tool — turn on Admin in the header on a desktop browser.</div>';
-  const secs = [['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees']];
+  const secs = [['perf','Performance'],['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees']];
   return `
   <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">${secs.map(([k, l]) => `<button onclick="S.teamSec='${k}';render()" style="border:1px solid ${S.teamSec === k ? 'var(--ink)' : 'var(--line)'};background:${S.teamSec === k ? 'var(--ink)' : '#fff'};color:${S.teamSec === k ? '#fff' : 'var(--ink)'};border-radius:999px;padding:9px 17px;font-size:12.5px;font-weight:700">${l}</button>`).join('')}</div>
-  ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : teamEmp()}`;
+  ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : S.teamSec === 'emp' ? teamEmp() : teamPerf()}`;
 }
 function activeEmps() { return Object.values(S.emp).filter(e => e && e.name && e.active !== false).sort((a, b) => a.name.localeCompare(b.name)); }
 function teamClock() {
@@ -3125,7 +3191,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v18</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v20</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3622,7 +3688,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR field module · v19</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR field module · v20</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <div class="site">${S.site ? `<div class="s1">${esc(S.site)}</div><div class="s2">${(S.job && S.job.propCode) ? esc(S.job.propCode) + ' · ' : ''}${S.trees.filter(t => siteOfT(t) === S.site).length} assets</div>` : `<div class="s1" style="color:var(--muted)">No project joined</div><div class="s2">Join one on Survey</div>`}<button id="syncTop" onclick="manualSync()" style="display:block;margin-left:auto;margin-top:3px;border:0;background:none;padding:2px 0;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;text-align:right"></button></div>
     </div>
