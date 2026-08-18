@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.2">
+<meta name="version" content="trice-v24.3">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -232,8 +232,8 @@ input,select,textarea{border-radius:11px}
 </head>
 <body>
 <!-- Netlify Forms registration — the build bot reads this at deploy time. Do not remove. -->
-<form name="trice-intake" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
-  <input type="text" name="name"><input type="text" name="company"><textarea name="problem"></textarea><input name="bot-field">
+<form name="trice-intake" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden aria-hidden="true">
+  <input type="text" name="name" autocomplete="off" tabindex="-1"><input type="text" name="company" autocomplete="off" tabindex="-1"><textarea name="problem" autocomplete="off" tabindex="-1"></textarea><input name="bot-field" autocomplete="off" tabindex="-1">
 </form>
 <div id="app"></div>
 <div id="printReport"></div>
@@ -769,6 +769,7 @@ function applySharedMeta(j) {
 /* One sync cycle = put + list + diff + get. The cycle IS the consistency
    check — Verify simply runs it and reports the two counts. */
 async function syncNow() {
+  if (!gateOk()) return; /* never touch the landing / password screen */
   if (!navigator.onLine) { SYNC.status = 'offline'; syncChip(); return; }
   try {
     const hadDirty = S.trees.filter(t => t.dirty).length;
@@ -3946,7 +3947,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.2</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.3</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -3971,7 +3972,114 @@ function saveSettings() {
 
 /* ---- WTR-format print report ---- */
 
-function exportXLSX(list, label) {
+/* ---- XLSX with embedded photos ----
+   The insurance package: every register row carries its photograph embedded IN the
+   workbook file — opens in any Excel, any version, offline, forwarded as a file.
+   Photos are downscaled to evidence thumbnails so a 150-row job stays a sane size;
+   the Photo URL column still links to the full-resolution image. Records whose
+   photo lives only on the server are fetched first. If anything in this path fails
+   (library, memory, offline photos), the export falls back to the classic workbook
+   with IMAGE() formulas and links — an export never fails outright. */
+let EXCELJS_P = null;
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve();
+  if (EXCELJS_P) return EXCELJS_P;
+  EXCELJS_P = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    s.onload = res; s.onerror = () => { EXCELJS_P = null; rej(new Error('ExcelJS failed to load')); };
+    document.head.appendChild(s);
+  });
+  return EXCELJS_P;
+}
+function thumbJPEG(dataUrl, maxW) {
+  return new Promise((res) => {
+    const im = new Image();
+    im.onload = () => {
+      try {
+        const sc = Math.min(1, maxW / im.width);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(im.width * sc));
+        c.height = Math.max(1, Math.round(im.height * sc));
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.72));
+      } catch (e) { res(null); }
+    };
+    im.onerror = () => res(null);
+    im.src = dataUrl;
+  });
+}
+async function fetchPhotoFor(t) {
+  if (t.photo) return t.photo;
+  if (!t.photoKey || !navigator.onLine) return null;
+  try {
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 9000);
+    const r = await fetch('/api/sync?photo=' + encodeURIComponent(t.photoKey), { signal: ctl.signal });
+    clearTimeout(to);
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && j.photo || null;
+  } catch (e) { return null; }
+}
+async function exportXLSX(list, label) {
+  const SRC = list || S.trees;
+  if (!SRC.length) { toast('Log some assets first'); return; }
+  toast('Building the workbook — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
+  try {
+    await loadExcelJS();
+    const j = S.job || {};
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Trice'; wb.created = new Date();
+    /* Summary sheet */
+    const sm = wb.addWorksheet('Summary');
+    const highs = SRC.filter(t => t.hazard === 'High Hazard').length, mods = SRC.filter(t => t.hazard === 'Moderate').length, clr = SRC.filter(t => t.hazard === 'Cleared').length;
+    [['Trice — Tree assessment'],[''],['Site', S.site || ''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor || ''],['ISA cert #', j.assessorCert || ''],['Carrier', j.carrier || ''],['Claim', j.claim || ''],['Event', j.stormName || ''],['Date of loss', j.dateOfLoss || ''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],[''],['Prune / repair ($)', SRC.reduce((s,t)=>s+num(t.prune),0)],['Take-down ($)', SRC.reduce((s,t)=>s+num(t.removal),0)],['Debris removal ($)', SRC.reduce((s,t)=>s+num(t.disposal),0)],['Stump removal ($)', SRC.reduce((s,t)=>s+num(t.stump),0)],['Total remediation ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],[''],['Photos','Embedded in the Photo column — they travel with this file, any Excel, offline. Photo URL opens full resolution.']].forEach(r => sm.addRow(r));
+    sm.getColumn(1).width = 24; sm.getColumn(2).width = 44;
+    sm.getRow(1).font = { bold: true, size: 14 };
+    /* Register sheet */
+    const ws = wb.addWorksheet('Register');
+    const heads = ['Asset ID','Photo','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','IP/OP','Hazard','Failure mode','Cause','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Assessed','Assessor','Cleared by','Cleared at','Photo URL'];
+    ws.addRow(heads);
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B2733' } };
+    ws.getRow(1).height = 22;
+    heads.forEach((h, i) => { ws.getColumn(i + 1).width = h === 'Photo' ? 17 : (h === 'Arborist notes' || h === 'Recommendation' ? 26 : Math.max(10, h.length + 2)); });
+    const imgUrl = t => t.photoKey ? location.origin + '/api/sync?img=' + encodeURIComponent(t.photoKey) : '';
+    for (const t of SRC) {
+      const a = t.ai || {};
+      ws.addRow([t.id, '', (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone || '', a.species || '', a.latin || '', t.qty || 1, t.dbhIn ?? a.dbh_in ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? a.height_ft ?? '', t.ip || '', t.hazard || '', (t.failures || []).join(' | '), t.cause || '', a.health ?? '', a.action || '', t.prune ?? '', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.priceSource || (lineTotal(t) ? 'Manual' : ''), t.notes || '', typeof t.lat === 'number' ? t.lat : '', typeof t.lng === 'number' ? t.lng : '', new Date(t.when).toLocaleString(), t.surveyor || '', t.clearedBy || '', t.clearedAt ? new Date(t.clearedAt).toLocaleString() : '', imgUrl(t)]);
+    }
+    /* Embed the photos — fetch server-only ones first, then thumbnail + anchor per row */
+    let embedded = 0, missing = 0;
+    for (let i = 0; i < SRC.length; i++) {
+      const t = SRC[i];
+      const rowIx = i + 2;
+      const src = await fetchPhotoFor(t);
+      if (!src) { missing++; continue; }
+      const th = await thumbJPEG(src, 440);
+      if (!th) { missing++; continue; }
+      const imgId = wb.addImage({ base64: th, extension: 'jpeg' });
+      ws.getRow(rowIx).height = 64;
+      ws.addImage(imgId, { tl: { col: 1.05, row: rowIx - 0.97 }, ext: { width: 110, height: 82 }, editAs: 'oneCell' });
+      const uCell = ws.getCell(rowIx, heads.length);
+      if (uCell.value) uCell.value = { text: 'Full photo', hyperlink: String(uCell.value) };
+      embedded++;
+      if (embedded % 25 === 0) toast('Embedding photos… ' + embedded + ' of ' + SRC.length);
+    }
+    const buf = await wb.xlsx.writeBuffer();
+    const name = `trice-register${label ? '-' + label : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+    toast('Workbook ready — ' + embedded + ' photo' + (embedded === 1 ? '' : 's') + ' embedded' + (missing ? ' · ' + missing + ' unavailable (offline?) — their URLs are in the sheet' : ''));
+  } catch (e) {
+    console.error('Embedded export failed, falling back', e);
+    toast('Embedded-photo export unavailable — exporting the classic workbook');
+    exportXLSXBasic(list, label);
+  }
+}
+function exportXLSXBasic(list, label) {
   const SRC = list || S.trees;
   if (!SRC.length) { toast('Log some assets first'); return; }
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
@@ -4687,7 +4795,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.2</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.3</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -4760,7 +4868,8 @@ function go(tab) { S.hdrMenu = false; if (S.tab === 'sheet' && tab !== 'sheet') 
 const BUILD = (document.querySelector('meta[name="version"]') || {}).content || '';
 let VCHK_BUSY = false;
 async function checkBuild(force) {
-  if (VCHK_BUSY || !navigator.onLine || !gateOk()) return;
+  if (VCHK_BUSY || !navigator.onLine || !gateOk() || document.visibilityState === 'hidden') return;
+  if (Date.now() - (+(sessionStorage.getItem('trice_lastreload') || 0)) < 3 * 60 * 1000) return;
   const last = +(sessionStorage.getItem('trice_vchk') || 0);
   if (!force && Date.now() - last < 4 * 60 * 1000) return;
   try { sessionStorage.setItem('trice_vchk', String(Date.now())); } catch (e) {}
@@ -4781,6 +4890,7 @@ async function checkBuild(force) {
   try { await Promise.race([syncNow(), new Promise(res => setTimeout(res, 6000))]); } catch (e) {}
   try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) {}
   try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch (e) {}
+  try { sessionStorage.setItem('trice_lastreload', String(Date.now())); } catch (e) {}
   setTimeout(() => location.reload(), 500);
 }
 
@@ -4850,23 +4960,11 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
       if (document.visibilityState === 'visible') { try { reg.update(); } catch(e){} }
     });
   }).catch(function(){});
-  /* When a new version installs, reload once so it takes effect immediately —
-     but never mid-capture or mid-typing, and never in a loop. */
-  var __reloaded = false;
-  function busyNow(){
-    var ae = document.activeElement;
-    if (ae && /input|textarea|select/i.test(ae.tagName)) return true;
-    var vids = document.querySelectorAll('video');
-    for (var i = 0; i < vids.length; i++) { if (vids[i].srcObject) return true; }
-    return false;
-  }
-  function applyUpdate(){
-    if (__reloaded) return;
-    if (busyNow()) { setTimeout(applyUpdate, 30000); return; }
-    __reloaded = true;
-    location.reload();
-  }
-  navigator.serviceWorker.addEventListener('controllerchange', applyUpdate);
+  /* NOTE: no reload on controllerchange. The build watchdog (checkBuild) is the
+     single reload authority — two competing reload paths caused reload cascades
+     (watchdog reload -> new SW claims -> controllerchange -> another reload). The
+     new service worker simply takes over silently; the shell it serves is applied
+     by the watchdog at a safe moment. */
 }
 </script>
 </body>
