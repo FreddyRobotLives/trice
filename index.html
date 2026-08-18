@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.2">
+<meta name="version" content="trice-v25.3">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -3603,16 +3603,16 @@ function assetDatabaseHTML(TS, label) {
   const hazDot = h => h === 'High Hazard' ? '#e0483e' : (h === 'Cleared' ? '#34a853' : '#e8a33d');
   const photod = TS.filter(t => t.photo).length;
   const spec = (k, v) => v ? `<div style="display:flex;justify-content:space-between;gap:18px;padding:9px 0;border-top:1px solid ${HAIR}"><span style="flex:none;font-size:11px;color:${GRAY}">${k}</span><span style="flex:1;text-align:right;font-size:11.5px;color:${INK};line-height:1.5">${v}</span></div>` : '';
-  const stat = (n, l) => `<div style="flex:1;min-width:110px;text-align:center;padding:4px 10px"><div style="font-size:34px;font-weight:600;letter-spacing:-.02em;color:${INK}">${n}</div><div style="font-size:11px;color:${GRAY};margin-top:2px">${l}</div></div>`;
+  const stat = (n, l) => `<div style="flex:1;min-width:86px;text-align:center;padding:4px 8px"><div style="font-size:clamp(22px, 6vw, 34px);font-weight:600;letter-spacing:-.02em;color:${INK};white-space:nowrap">${n}</div><div style="font-size:11px;color:${GRAY};margin-top:2px">${l}</div></div>`;
   const card = t => {
     const a = t.ai || {};
     const lt = lineTotal(t);
     const remed = lt > 0 ? money(lt) + (a.action ? ' \u00b7 ' + esc(a.action) : '')
       : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
     return `
-    <div style="flex:1;min-width:440px;max-width:calc(50% - 14px);page-break-inside:avoid">
-      ${t.photo ? `<img src="${t.photo}" style="display:block;width:100%;height:380px;object-fit:cover;border-radius:20px" alt="">`
-        : `<div style="height:380px;border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
+    <div style="flex:1 1 440px;min-width:0;max-width:560px;margin:0 auto;width:100%;page-break-inside:avoid">
+      ${t.photo ? `<img src="${t.photo}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px" alt="">`
+        : `<div style="height:min(380px, 78vw);border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
       <div style="padding:18px 6px 6px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
           <div style="font-size:21px;font-weight:600;letter-spacing:-.015em;color:${INK}">${esc(a.species || 'Pending analysis')}</div>
@@ -3637,13 +3637,13 @@ function assetDatabaseHTML(TS, label) {
   <div style="font-family:${FONT};background:${PAPER};color:${INK};-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:8px 2px">
     <div style="text-align:center;padding:34px 0 10px">
       <div style="font-size:11px;letter-spacing:.32em;font-weight:700;color:${GRAY}">TRICE</div>
-      <div style="font-size:44px;font-weight:600;letter-spacing:-.025em;margin-top:14px;line-height:1.08">${esc(site)} Asset Database</div>
+      <div style="font-size:clamp(27px, 7.5vw, 44px);font-weight:600;letter-spacing:-.025em;margin-top:14px;line-height:1.1">${esc(site)} Asset Database</div>
       <div style="font-size:14px;color:${GRAY};margin-top:12px">Every asset. Photographed, measured, and on the record. ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;max-width:860px;margin:30px auto 0;padding:18px 0;border-top:1px solid ${HAIR};border-bottom:1px solid ${HAIR}">
       ${stat(T.lines, 'assets')}${stat(T.specimens, 'specimens')}${stat(T.byHaz['High Hazard'].lines, 'high hazard')}${stat(photod, 'photographed')}${stat(T.total ? money(T.total) : '\u2014', 'remediation')}
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:28px;margin-top:38px">${TS.map(card).join('')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:34px;justify-content:center">${TS.map(card).join('')}</div>
     <div style="text-align:center;margin-top:44px;padding:18px 30px 8px;border-top:1px solid ${HAIR};font-size:10px;color:#aeaeb2;line-height:1.7;max-width:760px;margin-left:auto;margin-right:auto">
       Every photograph is bound to its record \u2014 species, dimensions, hazard, GPS and time travel with the image. Assessment by visual inspection from the ground, to ANSI A300 and Z133. Generated by Trice.
     </div>
@@ -3821,7 +3821,7 @@ function openGridExhibit() {
   let w = document.getElementById('reviewWrap');
   if (!w) {
     const st = document.createElement('style');
-    st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media print{#reviewWrap{display:none !important}}';
+    st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media(max-width:640px){#reviewWrap .paper{padding:14px 10px;border-radius:12px}#reviewWrap .body{padding:10px 6px 44px}}@media print{#reviewWrap{display:none !important}}';
     document.head.appendChild(st);
     w = document.createElement('div'); w.id = 'reviewWrap';
     document.body.appendChild(w);
@@ -3862,6 +3862,7 @@ function gridCardRow(t) {
     : (priced ? `<span class="mono" style="font-size:12.5px;font-weight:700">${money(priced)}</span>` : `<span style="font-size:10.5px;color:var(--faint)">Unpriced</span>`);
   return `
   <button class="trow" onclick="openEdit('${t.id}','sheet')">
+    ${t.photo ? `<img class="thumb" src="${t.photo}" alt="">` : `<span class="thumb" style="display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--faint);font-size:9px">—</span>`}
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -3876,8 +3877,8 @@ function gridTable(head, body, src) {
   const s = S.sheetSort || {};
   return `<div id="gridTableScroll" style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
-      <tr>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:0;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
-      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer">${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:0;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
+      <tr><th style="position:sticky;top:0;left:0;z-index:3;background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 8px">Photo</th>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:64px;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
+      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img src="${t.photo}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
     </table>
   </div>`;
 }
@@ -4052,7 +4053,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.2</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.3</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -5070,7 +5071,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.2</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.3</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
