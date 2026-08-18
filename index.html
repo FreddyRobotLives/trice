@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.3">
+<meta name="version" content="trice-v25.5">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -117,6 +117,7 @@ body{overflow-x:hidden}
 .shutter:active span{transform:scale(.86)}
 input:focus,textarea:focus,select:focus{outline:2px solid rgba(46,74,94,.35);outline-offset:1px}
 .chip{white-space:nowrap}
+.btn:active,button:active{opacity:.85}
 ::-webkit-scrollbar{height:6px;width:8px}
 ::-webkit-scrollbar-thumb{background:#d8d4ca;border-radius:99px}
 .camchip{background:rgba(11,14,18,.6);color:#fff;border-radius:999px;padding:6px 12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
@@ -2287,7 +2288,7 @@ function rowHTML(t) {
   const dbh = t.dbhIn ? t.dbhIn + ' in' : '';
   return `
   <button class="trow" onclick="openDetail('${t.id}')">
-    <img class="thumb" src="${t.photo}" alt="">
+    <img loading="lazy" decoding="async" class="thumb" src="${t.photo}" alt="">
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -2432,7 +2433,7 @@ function detailView(t) {
   <button onclick="S.detailId=null;render()" style="border:0;background:none;color:var(--info);font-weight:600;font-size:13px;padding:0;margin-bottom:10px">‹ Register</button>
   <div style="border:1px solid var(--hair);border-radius:16px;overflow:hidden;background:#fff">
     <button onclick="openZoom('${t.id}', false)" style="display:block;width:100%;height:190px;position:relative;border:0;padding:0;background:#ecebe4;overflow:hidden">
-      <img src="${t.photo}" alt="${esc(t.id)}" style="width:100%;height:100%;object-fit:cover;display:block">
+      <img loading="lazy" decoding="async" src="${t.photo}" alt="${esc(t.id)}" style="width:100%;height:100%;object-fit:cover;display:block">
       <span style="position:absolute;right:9px;bottom:9px;background:rgba(11,14,18,.72);color:#fff;font-size:10.5px;font-weight:600;border-radius:999px;padding:4px 10px">Tap to enlarge</span>
       <span class="mono" style="position:absolute;left:9px;bottom:9px;background:rgba(11,14,18,.72);color:#fff;font-size:10px;border-radius:6px;padding:4px 8px">${t.id}</span>
     </button>
@@ -2784,10 +2785,10 @@ function projectsView() {
           </div>
           <div style="font-size:12px;color:var(--muted);margin-top:5px">${T.lines} line item${T.lines === 1 ? '' : 's'} · ${T.specimens} specimens · ${money(T.total)} priced${T.byHaz['High Hazard'].lines ? ` · <span style="color:var(--bad);font-weight:700">${T.byHaz['High Hazard'].lines} high hazard</span>` : ''}${last ? ' · last capture ' + fmtWhen(last) : ' · no captures yet'}</div>
           ${s.done ? `<div style="margin-top:7px;font-size:12px;font-weight:700;color:var(--good)">✓ Marked complete by ${esc(s.by || 'Unknown')} · ${fmtWhen(s.at)}</div>` : ''}
-          <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <div style="margin-top:9px;display:flex;gap:5px;flex-wrap:nowrap;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px">
             <span class="slab" style="flex:none">Workers</span>
-            ${workers.length ? workers.map(w => `<span class="chip info">${esc(w)}</span>`).join('') : '<span style="font-size:11.5px;color:var(--faint)">none assigned</span>'}
-            ${!s.done && emps.length ? `<select id="${selId}" style="${TEAM_INP};width:150px;margin-left:4px"><option value="">Assign worker…</option>${emps.filter(e => !workers.includes(e.name)).map(e => `<option>${esc(e.name)}</option>`).join('')}</select><button onclick="projAssignWorker('${esc(k)}')" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;cursor:pointer">Assign</button>` : ''}
+            ${workers.length ? workers.map(w => `<span class="chip info" style="flex:none;font-size:10px;padding:4px 9px;letter-spacing:0">${esc(w)}</span>`).join('') : '<span style="flex:none;font-size:11.5px;color:var(--faint)">none assigned</span>'}
+            ${!s.done && emps.length ? `<select id="${selId}" style="${TEAM_INP};width:150px;margin-left:4px;flex:none"><option value="">Assign worker…</option>${emps.filter(e => !workers.includes(e.name)).map(e => `<option>${esc(e.name)}</option>`).join('')}</select><button onclick="projAssignWorker('${esc(k)}')" style="border:0;background:var(--ink);color:#fff;border-radius:999px;padding:8px 14px;font-size:11.5px;font-weight:700;cursor:pointer">Assign</button>` : ''}
           </div>
         </div>
         <div style="flex:none;display:flex;flex-direction:column;gap:8px;min-width:170px">
@@ -3579,7 +3580,7 @@ function gridHero(TS, label) {
       </div>
     </div>
     <div onclick="openGridExhibit()" style="margin:14px 18px 0;height:${previewH}px;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#f3f1ec;position:relative;cursor:pointer">
-      <div style="width:${docW}px;transform:scale(${sc});transform-origin:0 0;padding:22px;pointer-events:none">${gridExhibitHTML(TS, label)}</div>
+      <div style="width:${docW}px;transform:scale(${sc});transform-origin:0 0;padding:22px;pointer-events:none">${gridExhibitHTML(TS, label, 10)}</div>
       <div style="position:absolute;inset:auto 0 0 0;height:70px;background:linear-gradient(transparent,#f3f1ec)"></div>
       <span style="position:absolute;right:10px;bottom:10px;background:rgba(23,24,26,.78);color:#fff;font-size:10.5px;font-weight:700;border-radius:999px;padding:6px 12px">Tap to open full preview</span>
     </div>
@@ -3611,7 +3612,7 @@ function assetDatabaseHTML(TS, label) {
       : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
     return `
     <div style="flex:1 1 440px;min-width:0;max-width:560px;margin:0 auto;width:100%;page-break-inside:avoid">
-      ${t.photo ? `<img src="${t.photo}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px" alt="">`
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
         : `<div style="height:min(380px, 78vw);border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
       <div style="padding:18px 6px 6px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
@@ -3653,17 +3654,13 @@ function openAssetDatabase() {
   const TS = gridExhibitScope();
   if (!TS.length) { toast('Nothing in this scope yet \u2014 widen the filters'); return; }
   const label = S.sheetProject || 'All projects';
-  let w = document.getElementById('reviewWrap');
-  if (!w) { openGridExhibit(); closeReview(); w = document.getElementById('reviewWrap'); }
-  document.getElementById('printReport').innerHTML = assetDatabaseHTML(TS, label);
   const site = label === 'All projects' ? (S.site || 'Trice') : label;
-  w.innerHTML = `<div class="bar"><span class="ttl">${esc(site)} Asset Database<span class="sub">${TS.length} assets \u00b7 big photography, full descriptions \u00b7 the photos live in the document.</span></span>
-    <button class="go" onclick="reviewPrint()">Print / save PDF</button>
-    <button onclick="closeReview()">Close</button></div>
-    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="max-width:1120px;background:#fbfbfd">${document.getElementById('printReport').innerHTML}</div></div>`;
-  w.style.display = 'flex';
+  showDocLoading(
+    `${esc(site)} Asset Database<span class="sub">${TS.length} assets \u00b7 big photography, full descriptions \u00b7 the photos live in the document.</span>`,
+    `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
+    'max-width:1120px;background:#fbfbfd', TS.length);
+  setTimeout(() => { docReady(assetDatabaseHTML(TS, label)); }, 40);
 }
-
 /* ---- The Grid Exhibit ----
    The register rendered as a carrier-ready document in the Trice design language:
    branded header, navy stat band, glance tiles, CSS charts, the full register table
@@ -3673,7 +3670,8 @@ function openAssetDatabase() {
 const GX_NAVY = '#1b2733', GX_CREAM = '#f3f1ec', GX_ACCENT = '#c8452c';
 const GX_HAZ = h => h === 'High Hazard' ? ['#b34b48', '\u25b2', 'HIGH HAZARD'] : (h === 'Cleared' ? ['#2f7d55', '\u25a0', 'CLEARED'] : ['#b8842a', '\u25cf', 'MODERATE']);
 const gxMoney = (v, pv) => v > 0 ? money(v) : (pv > 0 ? `<span style="color:#b8842a;font-weight:700;font-family:ui-monospace,Menlo,monospace">\u2248${money(pv)}</span>` : '<span style="color:#b8842a;font-weight:700;font-size:9px;letter-spacing:.04em">TBD</span>');
-function gridExhibitHTML(TS, label) {
+function gridExhibitHTML(TS, label, capRows) {
+  const CAP = capRows && TS.length > capRows ? capRows : 0;
   const j = S.job || {};
   const T = totals(TS);
   const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -3704,7 +3702,7 @@ function gridExhibitHTML(TS, label) {
   const bMax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
   const th = t => `<th style="background:${GX_NAVY};color:#fff;font-size:7.5px;letter-spacing:.09em;text-transform:uppercase;text-align:left;padding:8px 7px;white-space:nowrap;font-weight:700">${t}</th>`;
   const td = (v, extra) => `<td style="padding:7px;border-bottom:1px solid #efece5;font-size:9.5px;color:#403d37;vertical-align:top;${extra || ''}">${v}</td>`;
-  const rows = TS.map((t, i) => {
+  const rows = (CAP ? TS.slice(0, CAP) : TS).map((t, i) => {
     const a = t.ai || {};
     const hz = GX_HAZ(t.hazard || 'Moderate');
     const lt = lineTotal(t);
@@ -3712,7 +3710,7 @@ function gridExhibitHTML(TS, label) {
     return `<tr style="background:${i % 2 ? '#faf9f5' : '#fff'}">
       ${td(i + 1, 'color:#a8a49a;font-size:8.5px')}
       ${td(`<span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span>`)}
-      ${td(t.photo ? `<img src="${t.photo}" style="width:52px;height:38px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#c9c5bc">\u2014</span>', 'padding:4px 5px')}
+      ${td(t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:52px;height:38px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#c9c5bc">\u2014</span>', 'padding:4px 5px')}
       ${td(esc(t.zone || '\u2014'), 'white-space:nowrap')}
       ${td(`<strong>${esc(a.species || 'Pending')}</strong>${a.latin ? `<br><em style="color:#86837b;font-size:8.5px">${esc(a.latin)}</em>` : ''}`)}
       ${td(t.dbhIn ? t.dbhIn + '\u2033' : '\u2014', 'text-align:right;font-family:ui-monospace,Menlo,monospace')}
@@ -3730,7 +3728,7 @@ function gridExhibitHTML(TS, label) {
       ${td(lt > 0 ? `<strong style="font-family:ui-monospace,Menlo,monospace">${money(lt)}</strong>` : gxMoney(0, hasPred(t) ? predTotal(t) : 0), 'text-align:right')}
       ${td(esc((t.surveyor || '\u2014').split(/\s+/)[0]))}
     </tr>`;
-  }).join('');
+  }).join('') + (CAP ? `<tr><td colspan="19" style="padding:9px 7px;font-size:9px;color:#98948a;background:#faf9f5">+ ${TS.length - CAP} more rows in the full document \u2014 this is a preview sample</td></tr>` : '');
   return `
   <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#17181a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
     <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px">
@@ -3813,31 +3811,48 @@ function lockPaperEditing() {
   });
 }
 function gridExhibitScope() { return sheetSorted(sheetScope()); }
+function ensureReviewWrap() {
+  let w = document.getElementById('reviewWrap');
+  if (w) return w;
+  const st = document.createElement('style');
+  st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper [style*=page-break-inside]{content-visibility:auto;contain-intrinsic-size:auto 620px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media(max-width:640px){#reviewWrap .paper{padding:14px 10px;border-radius:12px}#reviewWrap .body{padding:10px 6px 44px}}@media print{#reviewWrap{display:none !important}}';
+  document.head.appendChild(st);
+  w = document.createElement('div'); w.id = 'reviewWrap';
+  document.body.appendChild(w);
+  return w;
+}
+/* Heavy documents open in two beats: the overlay appears INSTANTLY with a spinner
+   (the tap is acknowledged the same frame), then the document builds and swaps in.
+   Action buttons stay disabled until the content they act on actually exists. */
+function showDocLoading(titleHtml, buttonsHtml, paperStyle, count) {
+  const w = ensureReviewWrap();
+  w.innerHTML = `<div class="bar"><span class="ttl">${titleHtml}</span><span id="docBtns" style="display:flex;gap:8px;opacity:.35;pointer-events:none">${buttonsHtml}</span><button onclick="closeReview()">Close</button></div>
+    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="${paperStyle || ''}">
+      <div style="text-align:center;padding:90px 20px;color:#8a8f96">
+        <span class="spinner ink" style="width:24px;height:24px;border-width:3px;display:inline-block"></span>
+        <div style="margin-top:16px;font-size:13px;font-weight:700;color:#5c584f">Building the document\u2026</div>
+        <div style="margin-top:5px;font-size:11.5px;color:#a8a49a">${count} asset${count === 1 ? '' : 's'} \u00b7 photographs load as you scroll</div>
+      </div></div></div>`;
+  w.style.display = 'flex';
+  return w;
+}
+function docReady(docHtml) {
+  const p = document.getElementById('reviewPaper');
+  if (p) p.innerHTML = docHtml;
+  document.getElementById('printReport').innerHTML = docHtml;
+  const b = document.getElementById('docBtns');
+  if (b) { b.style.opacity = '1'; b.style.pointerEvents = 'auto'; }
+}
 function openGridExhibit() {
   const TS = gridExhibitScope();
   if (!TS.length) { toast('Nothing in this scope yet \u2014 log a capture or widen the filters'); return; }
   const label = S.sheetProject || 'All projects';
-  document.getElementById('printReport').innerHTML = gridExhibitHTML(TS, label);
-  let w = document.getElementById('reviewWrap');
-  if (!w) {
-    const st = document.createElement('style');
-    st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media(max-width:640px){#reviewWrap .paper{padding:14px 10px;border-radius:12px}#reviewWrap .body{padding:10px 6px 44px}}@media print{#reviewWrap{display:none !important}}';
-    document.head.appendChild(st);
-    w = document.createElement('div'); w.id = 'reviewWrap';
-    document.body.appendChild(w);
-  }
-  w.innerHTML = `<div class="bar"><span class="ttl">The grid \u2014 ${esc(label)}<span class="sub">Line items are editable \u2014 tap a row. Summary figures are computed from the register and locked.</span></span>
-    <button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
-    <button class="go" onclick="reviewPrint()">Print / save PDF</button>
-    <button onclick="closeReview()">Close</button></div>
-    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
-  w.style.display = 'flex';
-  lockPaperEditing();
+  showDocLoading(
+    `The grid \u2014 ${esc(label)}<span class="sub">Line items are editable \u2014 tap a row. Summary figures are computed from the register and locked.</span>`,
+    `<button onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button><button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
+    'max-width:1060px;background:' + GX_CREAM, TS.length);
+  setTimeout(() => { docReady(gridExhibitHTML(TS, label)); const p = document.getElementById('reviewPaper'); if (p) p.contentEditable = 'false'; lockPaperEditing(); }, 40);
 }
-
-/* Mobile grid — the same rows as the spreadsheet, readable one-handed.
-   Grouped by capture date like a stack of field sheets; tap a row to edit it.
-   The full table lives behind the "Full grid" button. */
 function gridCards(list) {
   const groups = {};
   for (const t of list) {
@@ -3862,7 +3877,7 @@ function gridCardRow(t) {
     : (priced ? `<span class="mono" style="font-size:12.5px;font-weight:700">${money(priced)}</span>` : `<span style="font-size:10.5px;color:var(--faint)">Unpriced</span>`);
   return `
   <button class="trow" onclick="openEdit('${t.id}','sheet')">
-    ${t.photo ? `<img class="thumb" src="${t.photo}" alt="">` : `<span class="thumb" style="display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--faint);font-size:9px">—</span>`}
+    ${t.photo ? `<img loading="lazy" decoding="async" class="thumb" src="${t.photo}" alt="">` : `<span class="thumb" style="display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--faint);font-size:9px">—</span>`}
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -3878,7 +3893,7 @@ function gridTable(head, body, src) {
   return `<div id="gridTableScroll" style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr><th style="position:sticky;top:0;left:0;z-index:3;background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 8px">Photo</th>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:64px;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
-      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img src="${t.photo}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
+      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
     </table>
   </div>`;
 }
@@ -4053,7 +4068,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.3</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.5</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4579,7 +4594,7 @@ function printReport(scope) {
     ${sec('register') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Asset register</div>
     <table>
       <tr><th>ID</th><th>Photo</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Failure mode</th><th style="text-align:right">Prune</th><th style="text-align:right">Take-down</th><th style="text-align:right">Debris</th><th style="text-align:right">Stump</th><th style="text-align:right">Line total</th></tr>
-      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="14" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="15" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td style="padding:3px 4px">${t.photo ? `<img src="${t.photo}" style="width:56px;height:42px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#bbb">—</span>'}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
+      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="14" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="15" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td style="padding:3px 4px">${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:56px;height:42px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#bbb">—</span>'}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
       <tr><td colspan="10" style="font-weight:700;background:#16181d;color:#fff">TOTAL — ${TS.length} line items · ${T.specimens} specimens</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
     </table>
     <div style="margin-top:5px;font-size:9.5px;color:#888">The totals row is computed from every line above, not from a filtered view. ≈ marks an unaccepted AI prediction — never included in any total.</div>
@@ -4668,7 +4683,7 @@ function photoExhibitHTML(TS, label) {
         <span style="font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px;letter-spacing:.04em">${esc(t.id)}</span>
         <span style="color:${hz[0]};background:rgba(255,255,255,.94);border-radius:999px;padding:3px 10px;font-size:8.5px;font-weight:800;letter-spacing:.08em">${hz[1]} ${hz[2]}</span>
       </div>
-      ${t.photo ? `<img src="${t.photo}" style="display:block;width:100%;height:330px;object-fit:cover" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="display:block;width:100%;height:330px;object-fit:cover;background:#efece5" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
       <div style="padding:12px 14px 13px">
         <div style="font-size:13px;font-weight:800">${esc(a.species || 'Pending analysis')}${a.latin ? ` <em style="font-weight:400;color:#86837b;font-size:11px">(${esc(a.latin)})</em>` : ''}</div>
         ${line('Qty / size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 \u00b7 ' + DBH_BAND(t.dbhIn) : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
@@ -4710,14 +4725,11 @@ function openPhotoExhibit() {
   const TS = repScope();
   if (!TS.length) { toast('Nothing in this scope \u2014 widen the Report filters'); return; }
   const label = S.repProject || 'All projects';
-  let w = document.getElementById('reviewWrap');
-  if (!w) { openGridExhibit(); closeReview(); w = document.getElementById('reviewWrap'); }
-  document.getElementById('printReport').innerHTML = photoExhibitHTML(TS, label);
-  w.innerHTML = `<div class="bar"><span class="ttl">Photo exhibit \u2014 ${esc(label)}<span class="sub">${TS.length} assets \u00b7 big photographs with full descriptions \u00b7 photos and computed data are locked; notes in the print are editable per card.</span></span>
-    <button class="go" onclick="reviewPrint()">Print / save PDF</button>
-    <button onclick="closeReview()">Close</button></div>
-    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
-  w.style.display = 'flex';
+  showDocLoading(
+    `Photo exhibit \u2014 ${esc(label)}<span class="sub">${TS.length} assets \u00b7 big photographs with full descriptions \u00b7 photos and computed data are locked.</span>`,
+    `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
+    'max-width:1060px;background:' + GX_CREAM, TS.length);
+  setTimeout(() => { docReady(photoExhibitHTML(TS, label)); }, 40);
 }
 function printSubScope() {
   const TS = repScope().filter(t => t.hazard !== 'Cleared');
@@ -4758,14 +4770,7 @@ function printSubScope() {
 function submitPackage() { const sc = S.repProject ? { site: S.repProject } : { all: true }; if (S.repZone) sc.zone = S.repZone; if (ADMIN() && S.repUser) sc.assessor = S.repUser; sc.sections = S.repSecs; sc.review = true; printReport(sc); }
 function reviewFilter(k, v) { if (!lastReviewScope) return; if (v) lastReviewScope[k] = v; else delete lastReviewScope[k]; printReport(lastReviewScope); }
 function openReview() {
-  let w = document.getElementById('reviewWrap');
-  if (!w) {
-    const st = document.createElement('style');
-    st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media print{#reviewWrap{display:none !important}}';
-    document.head.appendChild(st);
-    w = document.createElement('div'); w.id = 'reviewWrap';
-    document.body.appendChild(w);
-  }
+  let w = ensureReviewWrap();
   const cur = lastReviewScope || {};
   const pool = S.trees.filter(t => visT(t) && (!cur.site || (t.site || S.site || 'Unassigned site') === cur.site));
   const zs = [...new Set(pool.map(t => t.zone || ''))].filter(Boolean).sort(zoneSort);
@@ -4787,6 +4792,7 @@ async function reviewPrint() {
   const p = document.getElementById('reviewPaper');
   if (p) document.getElementById('printReport').innerHTML = p.innerHTML;
   const imgs = Array.from(document.querySelectorAll('#printReport img'));
+  for (const im of imgs) { im.loading = 'eager'; im.decoding = 'sync'; const s = im.src; im.src = ''; im.src = s; }
   if (imgs.length) {
     toast('Preparing ' + imgs.length + ' image' + (imgs.length === 1 ? '' : 's') + ' for print…');
     await Promise.race([
@@ -5071,7 +5077,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.3</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.5</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
