@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.5">
+<meta name="version" content="trice-v25.6">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -1806,6 +1806,27 @@ function projHidden(p) {
   return false;
 }
 const visT = t => !projHidden(siteOfT(t));
+/* Display photos by reference, not by value. Inlining base64 into HTML meant a
+   147-asset document carried ~200MB of markup — enough to crash mobile Safari on
+   open. Each record's photo becomes one cached blob: URL; every img in lists and
+   documents points at it. The underlying photo data lives once, in the record. */
+const PHOTO_URLS = new Map();
+function photoURL(t) {
+  if (!t || !t.photo) return '';
+  const hit = PHOTO_URLS.get(t.id);
+  if (hit && hit.at === (t.photoAt || 0) && hit.len === t.photo.length) return hit.url;
+  try {
+    const ci = t.photo.indexOf(',');
+    const mime = (t.photo.slice(5, ci).split(';')[0]) || 'image/jpeg';
+    const bin = atob(t.photo.slice(ci + 1));
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: mime }));
+    if (hit) { try { URL.revokeObjectURL(hit.url); } catch (e) {} }
+    PHOTO_URLS.set(t.id, { url, at: t.photoAt || 0, len: t.photo.length });
+    return url;
+  } catch (e) { return t.photo; }
+}
 function persistParents() { try { localStorage.setItem('trice_parents2', JSON.stringify(S.projectParents2)); } catch (e) {} }
 function setParentLocal(child, parent) {
   if (parent && (parent === child || isUnder(parent, child))) { toast("Can't file a project under its own sub-project"); return false; }
@@ -2288,7 +2309,7 @@ function rowHTML(t) {
   const dbh = t.dbhIn ? t.dbhIn + ' in' : '';
   return `
   <button class="trow" onclick="openDetail('${t.id}')">
-    <img loading="lazy" decoding="async" class="thumb" src="${t.photo}" alt="">
+    <img loading="lazy" decoding="async" class="thumb" src="${photoURL(t)}" alt="">
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -2433,7 +2454,7 @@ function detailView(t) {
   <button onclick="S.detailId=null;render()" style="border:0;background:none;color:var(--info);font-weight:600;font-size:13px;padding:0;margin-bottom:10px">‹ Register</button>
   <div style="border:1px solid var(--hair);border-radius:16px;overflow:hidden;background:#fff">
     <button onclick="openZoom('${t.id}', false)" style="display:block;width:100%;height:190px;position:relative;border:0;padding:0;background:#ecebe4;overflow:hidden">
-      <img loading="lazy" decoding="async" src="${t.photo}" alt="${esc(t.id)}" style="width:100%;height:100%;object-fit:cover;display:block">
+      <img loading="lazy" decoding="async" src="${photoURL(t)}" alt="${esc(t.id)}" style="width:100%;height:100%;object-fit:cover;display:block">
       <span style="position:absolute;right:9px;bottom:9px;background:rgba(11,14,18,.72);color:#fff;font-size:10.5px;font-weight:600;border-radius:999px;padding:4px 10px">Tap to enlarge</span>
       <span class="mono" style="position:absolute;left:9px;bottom:9px;background:rgba(11,14,18,.72);color:#fff;font-size:10px;border-radius:6px;padding:4px 8px">${t.id}</span>
     </button>
@@ -3612,7 +3633,7 @@ function assetDatabaseHTML(TS, label) {
       : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
     return `
     <div style="flex:1 1 440px;min-width:0;max-width:560px;margin:0 auto;width:100%;page-break-inside:avoid">
-      ${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
         : `<div style="height:min(380px, 78vw);border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
       <div style="padding:18px 6px 6px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
@@ -3710,7 +3731,7 @@ function gridExhibitHTML(TS, label, capRows) {
     return `<tr style="background:${i % 2 ? '#faf9f5' : '#fff'}">
       ${td(i + 1, 'color:#a8a49a;font-size:8.5px')}
       ${td(`<span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span>`)}
-      ${td(t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:52px;height:38px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#c9c5bc">\u2014</span>', 'padding:4px 5px')}
+      ${td(t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="width:52px;height:38px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#c9c5bc">\u2014</span>', 'padding:4px 5px')}
       ${td(esc(t.zone || '\u2014'), 'white-space:nowrap')}
       ${td(`<strong>${esc(a.species || 'Pending')}</strong>${a.latin ? `<br><em style="color:#86837b;font-size:8.5px">${esc(a.latin)}</em>` : ''}`)}
       ${td(t.dbhIn ? t.dbhIn + '\u2033' : '\u2014', 'text-align:right;font-family:ui-monospace,Menlo,monospace')}
@@ -3838,8 +3859,7 @@ function showDocLoading(titleHtml, buttonsHtml, paperStyle, count) {
 }
 function docReady(docHtml) {
   const p = document.getElementById('reviewPaper');
-  if (p) p.innerHTML = docHtml;
-  document.getElementById('printReport').innerHTML = docHtml;
+  if (p) p.innerHTML = docHtml; /* print container fills at print time, not before */
   const b = document.getElementById('docBtns');
   if (b) { b.style.opacity = '1'; b.style.pointerEvents = 'auto'; }
 }
@@ -3877,7 +3897,7 @@ function gridCardRow(t) {
     : (priced ? `<span class="mono" style="font-size:12.5px;font-weight:700">${money(priced)}</span>` : `<span style="font-size:10.5px;color:var(--faint)">Unpriced</span>`);
   return `
   <button class="trow" onclick="openEdit('${t.id}','sheet')">
-    ${t.photo ? `<img loading="lazy" decoding="async" class="thumb" src="${t.photo}" alt="">` : `<span class="thumb" style="display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--faint);font-size:9px">—</span>`}
+    ${t.photo ? `<img loading="lazy" decoding="async" class="thumb" src="${photoURL(t)}" alt="">` : `<span class="thumb" style="display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--faint);font-size:9px">—</span>`}
     <span class="mid">
       <span class="l1">${esc(a.species || 'Pending analysis')}${(t.qty||1) > 1 ? ' × ' + t.qty : ''}</span>
       ${a.latin ? `<span class="l2"><em>${esc(a.latin)}</em></span>` : ''}
@@ -3893,7 +3913,7 @@ function gridTable(head, body, src) {
   return `<div id="gridTableScroll" style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
     <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr><th style="position:sticky;top:0;left:0;z-index:3;background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 8px">Photo</th>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:64px;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
-      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
+      ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
     </table>
   </div>`;
 }
@@ -4068,7 +4088,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4594,14 +4614,14 @@ function printReport(scope) {
     ${sec('register') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Asset register</div>
     <table>
       <tr><th>ID</th><th>Photo</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Failure mode</th><th style="text-align:right">Prune</th><th style="text-align:right">Take-down</th><th style="text-align:right">Debris</th><th style="text-align:right">Stump</th><th style="text-align:right">Line total</th></tr>
-      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="14" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="15" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td style="padding:3px 4px">${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="width:56px;height:42px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#bbb">—</span>'}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
+      ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="14" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="15" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td style="padding:3px 4px">${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="width:56px;height:42px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#bbb">—</span>'}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
       <tr><td colspan="10" style="font-weight:700;background:#16181d;color:#fff">TOTAL — ${TS.length} line items · ${T.specimens} specimens</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
     </table>
     <div style="margin-top:5px;font-size:9.5px;color:#888">The totals row is computed from every line above, not from a filtered view. ≈ marks an unaccepted AI prediction — never included in any total.</div>
     ` : ''}${sec('photos') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Photo journal — every asset, on the record</div>
     ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => (sk ? `<div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(sk)}</div>` : '') + TS.filter(t => !sk || (multiSite ? groupKey(t) === sk : zKey(t) === sk)).map(t => { const a = t.ai||{}; return `
       <div class="ptree">
-        <img src="${t.photo}" alt="${esc(t.id)}">
+        <img loading="lazy" decoding="async" src="${photoURL(t)}" alt="${esc(t.id)}">
         <div style="flex:1;min-width:0">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span> · <strong>${esc(a.species||'Pending analysis')}</strong> <em style="color:#777">${esc(a.latin||'')}</em></div><div style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</div></div>
           <div style="color:#555;margin-top:2px;font-size:11px">${t.qty||1} specimen${(t.qty||1)>1?'s':''} · ${t.dbhIn ? t.dbhIn + '″ · ' + DBH_BAND(t.dbhIn) : 'DBH —'} · ${t.heightFt ? '~' + t.heightFt + ' ft' : ''} · ${esc(t.zone||'')} · ${esc(t.ip||'IP')}</div>
@@ -4683,7 +4703,7 @@ function photoExhibitHTML(TS, label) {
         <span style="font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px;letter-spacing:.04em">${esc(t.id)}</span>
         <span style="color:${hz[0]};background:rgba(255,255,255,.94);border-radius:999px;padding:3px 10px;font-size:8.5px;font-weight:800;letter-spacing:.08em">${hz[1]} ${hz[2]}</span>
       </div>
-      ${t.photo ? `<img loading="lazy" decoding="async" src="${t.photo}" style="display:block;width:100%;height:330px;object-fit:cover;background:#efece5" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="display:block;width:100%;height:330px;object-fit:cover;background:#efece5" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
       <div style="padding:12px 14px 13px">
         <div style="font-size:13px;font-weight:800">${esc(a.species || 'Pending analysis')}${a.latin ? ` <em style="font-weight:400;color:#86837b;font-size:11px">(${esc(a.latin)})</em>` : ''}</div>
         ${line('Qty / size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 \u00b7 ' + DBH_BAND(t.dbhIn) : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
@@ -4754,7 +4774,7 @@ function printSubScope() {
       <div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(z)} · ${TS.filter(t => zKey(t) === z).length} line items</div>
       ${TS.filter(t => zKey(t) === z).map(t => { const a = t.ai || {}; return `
       <div class="ptree">
-        <img src="${t.photo}" alt="${esc(t.id)}">
+        <img loading="lazy" decoding="async" src="${photoURL(t)}" alt="${esc(t.id)}">
         <div style="flex:1;min-width:0">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span> · <strong>${esc(a.species || 'Species pending')}</strong></div><div style="font-weight:700;color:${HAZ_INK(t.hazard || 'Moderate')}">${esc(t.hazard || '')}</div></div>
           <div style="color:#555;margin-top:2px;font-size:11px">${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''} · ${t.dbhIn ? t.dbhIn + '″ DBH' : 'DBH —'}${t.heightFt ? ' · ~' + t.heightFt + ' ft' : ''} · ${esc(t.ip || 'IP')}${(t.failures || []).length ? ' · ' + esc(t.failures.join(', ')) : ''}${t.cause ? ' · ' + esc(t.cause) : ''}</div>
@@ -4858,7 +4878,7 @@ function rulerView() {
       <button onclick="S.ruler=null;render()" style="border:0;background:none;color:#fff;font-size:24px;width:44px;height:44px">×</button>
     </div>
     <div class="rimg" id="rulerBox" onpointerdown="rulerPointer(event,'down')" onpointermove="rulerPointer(event,'move')" onpointerup="rulerPointer(event,'up')" onpointercancel="rulerPointer(event,'up')">
-      <img src="${t.photo}" alt="">
+      <img loading="lazy" decoding="async" src="${photoURL(t)}" alt="">
       <div class="rline" id="rl2" style="top:${r.y2*100}%"><span class="rgrab">BASE</span></div>
       <div class="rline" id="rl1" style="top:${r.y1*100}%"><span class="rgrab">TOP</span></div>
     </div>
@@ -5077,7 +5097,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.5</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.6</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
