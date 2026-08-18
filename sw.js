@@ -1,5 +1,5 @@
 /* Trice offline shell — after one online visit, the app loads with no signal. */
-const CACHE = 'trice-shell-v62';
+const CACHE = 'trice-shell-v63';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js'];
 
 self.addEventListener('install', (e) => {
