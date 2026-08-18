@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v26.2">
+<meta name="version" content="trice-v26.4">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -3608,7 +3608,7 @@ function gridHero(TS, label) {
     </div>
     <div style="display:flex;gap:8px;padding:14px 18px 16px;flex-wrap:wrap">
       <button class="btn primary" style="flex:1.4;min-width:150px" onclick="openGridExhibit()">Preview &amp; export PDF</button>
-      <button class="btn ghost" style="flex:1.4;min-width:150px;border-color:#d6d3ca;font-weight:800" onclick="openAssetDatabase()">Asset Database PDF</button>
+      <button class="btn ghost" style="flex:1.4;min-width:150px;border-color:#d6d3ca;font-weight:800" onclick="openAssetDatabase()">Admin Asset Database PDF</button>
       <button class="btn ghost" style="flex:1.4;min-width:150px;border-color:#d6d3ca;font-weight:800" onclick="openAssetDatabase(true)">Client Asset Database PDF</button>
       <button class="btn ghost" style="flex:1;min-width:120px" onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
     </div>
@@ -3658,12 +3658,11 @@ function assetDatabaseHTML(TS, label, clientSafe) {
     </div>`;
   };
   return `
-  ${pdfCover('Asset Database', site, FONT)}
+  ${pdfCover(clientSafe ? 'Asset Database' : 'Admin Asset Database', site, FONT)}
   <div style="font-family:${FONT};background:${PAPER};color:${INK};-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:8px 2px">
     <div style="text-align:center;padding:34px 0 10px">
       <div style="font-size:11px;letter-spacing:.32em;font-weight:700;color:${GRAY}">TRICE</div>
-      <div style="font-size:clamp(27px, 7.5vw, 44px);font-weight:600;letter-spacing:-.025em;margin-top:14px;line-height:1.1">${esc(site)} Asset Database</div>
-      <div style="font-size:14px;color:${GRAY};margin-top:12px">Every asset. Photographed, measured, and on the record. ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</div>
+      <div style="font-size:clamp(27px, 7.5vw, 44px);font-weight:600;letter-spacing:-.025em;margin-top:14px;line-height:1.1">${esc(site)} ${clientSafe ? '' : 'Admin '}Asset Database</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;max-width:860px;margin:30px auto 0;padding:18px 0;border-top:1px solid ${HAIR};border-bottom:1px solid ${HAIR}">
       ${stat(T.lines, 'assets')}${stat(T.specimens, 'specimens')}${stat(T.byHaz['High Hazard'].lines, 'high hazard')}${stat(photod, 'photographed')}${clientSafe ? '' : stat(T.total ? money(T.total) : '\u2014', 'remediation')}
@@ -3680,7 +3679,7 @@ function openAssetDatabase(clientSafe) {
   const label = S.sheetProject || 'All projects';
   const site = label === 'All projects' ? (S.site || 'Trice') : label;
   showDocLoading(
-    `${esc(site)} Asset Database${clientSafe ? ' \u00b7 client copy' : ''}<span class="sub">${TS.length} assets \u00b7 ${clientSafe ? 'client-safe: no internal notes, no pricing, no crew names. The document itself carries no client marking' : 'big photography, full descriptions \u00b7 the photos live in the document'}.</span>`,
+    `${esc(site)} ${clientSafe ? 'Asset Database \u00b7 client copy' : 'Admin Asset Database'}<span class="sub">${TS.length} assets \u00b7 ${clientSafe ? 'client-safe: no internal notes, no pricing, no crew names. The document itself carries no client marking' : 'big photography, full descriptions \u00b7 the photos live in the document'}.</span>`,
     `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
     'max-width:1120px;background:#fbfbfd', TS.length);
   setTimeout(() => { docReady(assetDatabaseHTML(TS, label, !!clientSafe)); }, 40);
@@ -4106,7 +4105,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v26.2</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v26.4</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -5117,7 +5116,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v26.2</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v26.4</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
