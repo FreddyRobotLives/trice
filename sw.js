@@ -1,6 +1,6 @@
 /* Trice offline shell — after one online visit, the app loads with no signal. */
-const CACHE = 'trice-shell-v57';
-const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
+const CACHE = 'trice-shell-v58';
+const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -22,8 +22,8 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
-  // CDN libraries (map engine, spreadsheet engine): cache after first use so Map works offline
-  if (url.hostname === 'cdnjs.cloudflare.com' || CORE.includes(url.pathname)) {
+  // Vendored engines (map, spreadsheets): cache-first so Map and exports work offline
+  if (url.pathname.startsWith('/vendor/') || CORE.includes(url.pathname)) {
     e.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((r) => { const copy = r.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return r; }))
     );

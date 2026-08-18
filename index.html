@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.7">
+<meta name="version" content="trice-v24.8">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=28">
 <meta name="description" content="One system: capture, sync, map, report.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css">
+<script src="/vendor/leaflet.min.js"></script>
+<script src="/vendor/xlsx.full.min.js"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -3977,7 +3977,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.7</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.8</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4016,7 +4016,7 @@ function loadExcelJS() {
   if (EXCELJS_P) return EXCELJS_P;
   EXCELJS_P = new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+    s.src = '/vendor/exceljs.min.js';
     s.onload = res; s.onerror = () => { EXCELJS_P = null; rej(new Error('ExcelJS failed to load')); };
     document.head.appendChild(s);
   });
@@ -4054,7 +4054,7 @@ async function fetchPhotoFor(t) {
 async function exportXLSX(list, label) {
   const SRC = list || S.trees;
   if (!SRC.length) { toast('Log some assets first'); return; }
-  toast('Building the workbook — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
+  toast('Building the workbook (' + BUILD.replace('trice-', '') + ') — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
   try {
     await loadExcelJS();
     const j = S.job || {};
@@ -4063,7 +4063,7 @@ async function exportXLSX(list, label) {
     /* Summary sheet */
     const sm = wb.addWorksheet('Summary');
     const highs = SRC.filter(t => t.hazard === 'High Hazard').length, mods = SRC.filter(t => t.hazard === 'Moderate').length, clr = SRC.filter(t => t.hazard === 'Cleared').length;
-    [['Trice — Tree assessment'],[''],['Site', S.site || ''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor || ''],['ISA cert #', j.assessorCert || ''],['Carrier', j.carrier || ''],['Claim', j.claim || ''],['Event', j.stormName || ''],['Date of loss', j.dateOfLoss || ''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],[''],['Prune / repair ($)', SRC.reduce((s,t)=>s+num(t.prune),0)],['Take-down ($)', SRC.reduce((s,t)=>s+num(t.removal),0)],['Debris removal ($)', SRC.reduce((s,t)=>s+num(t.disposal),0)],['Stump removal ($)', SRC.reduce((s,t)=>s+num(t.stump),0)],['Total remediation ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],[''],['Photos','Embedded in the Photo column — they travel with this file, any Excel, offline. Photo URL opens full resolution.']].forEach(r => sm.addRow(r));
+    [['Trice — Tree assessment'],[''],['Site', S.site || ''],['Prepared', new Date().toLocaleString()],['Lead assessor', S.surveyor || ''],['ISA cert #', j.assessorCert || ''],['Carrier', j.carrier || ''],['Claim', j.claim || ''],['Event', j.stormName || ''],['Date of loss', j.dateOfLoss || ''],[''],['Assets', SRC.length],['High Hazard', highs],['Moderate', mods],['Cleared', clr],[''],['Prune / repair ($)', SRC.reduce((s,t)=>s+num(t.prune),0)],['Take-down ($)', SRC.reduce((s,t)=>s+num(t.removal),0)],['Debris removal ($)', SRC.reduce((s,t)=>s+num(t.disposal),0)],['Stump removal ($)', SRC.reduce((s,t)=>s+num(t.stump),0)],['Total remediation ($)', SRC.reduce((s,t)=>s+lineTotal(t),0)],[''],['Generated by', 'Trice ' + BUILD.replace('trice-', '')],['Photos','Embedded in the Photo column — they travel with this file, any Excel, offline. Photo URL opens full resolution.']].forEach(r => sm.addRow(r));
     sm.getColumn(1).width = 24; sm.getColumn(2).width = 44;
     sm.getRow(1).font = { bold: true, size: 14 };
     /* Register sheet */
@@ -4936,7 +4936,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.7</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.8</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
