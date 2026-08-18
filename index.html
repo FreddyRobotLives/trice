@@ -8,17 +8,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.6">
-<meta property="og:title" content="Trice — Field data. Clear decisions.">
-<meta property="og:description" content="One system: capture, sync, map, report.">
-<meta property="og:image" content="https://trice.live/og.png?v=28">
+<meta name="version" content="trice-v25.9">
+<meta property="og:title" content="Trice — Complex processes, made simple.">
+<meta property="og:description" content="We build technology for operations too complex for spreadsheets. Capture, sync, map, decide. One system.">
+<meta property="og:image" content="https://trice.live/og.png?v=31">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
 <meta property="og:url" content="https://trice.live/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://trice.live/og.png?v=28">
-<meta name="description" content="One system: capture, sync, map, report.">
+<meta name="twitter:image" content="https://trice.live/og.png?v=31">
+<meta name="description" content="Trice builds technology for operations too complex for spreadsheets. One system: capture, sync, map, decide.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="/vendor/leaflet.min.css">
 <script src="/vendor/leaflet.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
@@ -34,7 +34,8 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
 input,select,button,textarea{font-family:inherit;font-size:16px}
@@ -129,13 +130,13 @@ input:focus,textarea:focus,select:focus{outline:2px solid rgba(46,74,94,.35);out
 .mapctl{position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
 .mapctl button{border:0;border-radius:10px;background:rgba(255,255,255,.95);box-shadow:0 4px 14px -6px rgba(8,12,18,.4);font-size:11.5px;font-weight:700;padding:8px 12px;color:var(--ink)}
 .mapctl button.on{background:var(--ink);color:#fff}
-.projpin{width:40px;height:40px;border-radius:50%;background:var(--ink);border:2px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
+.projpin{width:40px;height:40px;border-radius:50%;background:var(--ink);border:2px solid #fff;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:'Inter',-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;cursor:pointer}
 .projpin>span:first-child{font-size:12px;font-weight:800;letter-spacing:.02em;line-height:1}
 .projpin .projn{font-size:8px;font-weight:700;color:rgba(255,255,255,.75);margin-top:1.5px;line-height:1}
-.pin2{position:relative;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(8,12,18,.6),0 4px 14px rgba(8,12,18,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+.pin2{position:relative;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(8,12,18,.6),0 4px 14px rgba(8,12,18,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;line-height:1;font-family:'Inter',-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif}
 .pin2 .qty{position:absolute;right:-7px;top:-7px;min-width:17px;height:17px;border-radius:999px;background:#16181d;color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff}
 .leaflet-popup-content-wrapper{border-radius:12px;box-shadow:0 10px 30px -14px rgba(8,12,18,.4)}
-.leaflet-popup-content{margin:12px 14px;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:12.5px;line-height:1.45}
+.leaflet-popup-content{margin:12px 14px;font-family:'Inter',-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:12.5px;line-height:1.45}
 
 /* rows */
 .trow{display:flex;gap:11px;align-items:center;padding:12px 0;border-top:1px solid var(--hair);width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;color:var(--ink)}
@@ -4088,7 +4089,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.9</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -5069,8 +5070,8 @@ function gateView() {
     <div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:26px 22px 0">
       <div style="display:flex;justify-content:center"><div class="logo" style="width:66px;height:66px;border-radius:17px;gap:5px"><span style="height:3.5px;width:16px"></span><span style="height:3.5px;width:24px"></span><span style="height:3.5px;width:32px"></span></div></div>
       <div style="font-size:36px;font-weight:800;letter-spacing:.3em;margin-top:22px;color:var(--ink);text-indent:.3em">TRICE</div>
-      <div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:36px;letter-spacing:-.01em">Field data.<br>Clear decisions.</div>
-      <div style="font-size:13.5px;color:var(--muted);margin-top:12px;line-height:1.65">Assess. Document. Act.<br>All your fieldwork, in one place.</div>
+      <div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:36px;letter-spacing:-.01em">Complex processes,<br>made simple.</div>
+      <div style="font-size:13.5px;color:var(--muted);margin-top:12px;line-height:1.65">We build technology for operations too complex for spreadsheets.<br>Capture, sync, map, decide. One system.</div>
     </div>
     <div style="flex:none;margin-top:22px">${LAND_MTNS}</div>
     <div style="flex:none;padding:6px 22px calc(env(safe-area-inset-bottom,0px) + 8px);max-width:420px;margin:0 auto;width:100%;box-sizing:border-box">
@@ -5097,7 +5098,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.6</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.9</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
