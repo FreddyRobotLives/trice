@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.6">
+<meta name="version" content="trice-v24.7">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -115,6 +115,10 @@ body{overflow-x:hidden}
 .shutter{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;padding:0}
 .shutter span{width:56px;height:56px;border-radius:50%;background:#fff;display:block;transition:transform .1s}
 .shutter:active span{transform:scale(.86)}
+input:focus,textarea:focus,select:focus{outline:2px solid rgba(46,74,94,.35);outline-offset:1px}
+.chip{white-space:nowrap}
+::-webkit-scrollbar{height:6px;width:8px}
+::-webkit-scrollbar-thumb{background:#d8d4ca;border-radius:99px}
 .camchip{background:rgba(11,14,18,.6);color:#fff;border-radius:999px;padding:6px 12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
 .camchip .liv{width:6px;height:6px;border-radius:50%;background:#7ee2a8;animation:adpulse 1.6s infinite}
 
@@ -333,6 +337,7 @@ const S = {
   emp: (() => { try { return JSON.parse(localStorage.getItem('trice_emp') || '{}'); } catch (e) { return {}; } })(),
   subs: (() => { try { return JSON.parse(localStorage.getItem('trice_subs') || '{}'); } catch (e) { return {}; } })(),
   subsDirty: {},
+  predAdjust: (() => { try { return localStorage.getItem('trice_predadjust') || ''; } catch (e) { return ''; } })(),
   projState: (() => { try { return JSON.parse(localStorage.getItem('trice_projstate') || '{}'); } catch (e) { return {}; } })(),
   projStateDirty: {},
   assign: (() => { try { return JSON.parse(localStorage.getItem('trice_assign') || '{}'); } catch (e) { return {}; } })(),
@@ -2018,7 +2023,8 @@ function homeGlance() {
     <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="slab">Remediation pricing</span><span style="font-size:13px;font-weight:700">${money(T.total)}</span></div>
     <div style="margin-top:9px;font-size:12.5px;color:var(--body);line-height:1.6">${T.unpriced ? `<strong>${T.unpriced}</strong> line${T.unpriced > 1 ? 's' : ''} unpriced. ` : ''}${preds ? `<strong style="color:#b8842a">${preds}</strong> AI prediction pricing (≈${money(T.predTotal)}) awaiting review. ` : ''}${!ADMIN() ? 'Pricing is reviewed and accepted on the admin desktop.' : ''}</div>
     ${ADMIN() ? `<div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
-      ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : (preds ? '↻ Re-run predictions' : '⚡ Predict pricing')}</button>` : ''}
+      ${T.unpriced ? `<button class="btn dark" style="flex:1;min-width:150px;padding:11px" onclick="setPredAdjust((document.getElementById('adjHome')||{}).value);go('sheet');setTimeout(predictPricing,80)" ${S.predBusy ? 'disabled' : ''}>${S.predBusy ? '<span class="spinner"></span> Predicting…' : (preds ? '↻ Re-run predictions' : '⚡ Predict pricing')}</button>` : ''}
+      ${T.unpriced || preds ? `<input id="adjHome" value="${esc(S.predAdjust || '')}" placeholder="Are the numbers off? Tell me how to adjust — e.g. reduce 30%, or reduce 15% on high hazard only" onchange="setPredAdjust(this.value)" style="flex-basis:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff;color:var(--ink);font-size:12.5px;margin-top:2px">` : ''}
       <button class="btn ghost" style="flex:1;min-width:130px;padding:11px" onclick="go('sheet')">Open the grid</button>
     </div>` : `<button class="btn ghost" style="margin-top:11px;padding:11px" onclick="go('sheet')">Open the live grid</button>`}
   </div>` : ''}
@@ -2998,7 +3004,7 @@ function teamView() {
   if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Team management is an admin desktop tool — turn on Admin in the header on a desktop browser.</div>';
   const secs = [['perf','Performance'],['clock','Clock'],['time','Timesheets'],['sched','Schedule'],['cost','Job costing'],['emp','Employees'],['subs','Subcontractors']];
   return `
-  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">${secs.map(([k, l]) => `<button onclick="S.teamSec='${k}';render()" style="border:1px solid ${S.teamSec === k ? 'var(--ink)' : 'var(--line)'};background:${S.teamSec === k ? 'var(--ink)' : '#fff'};color:${S.teamSec === k ? '#fff' : 'var(--ink)'};border-radius:999px;padding:9px 17px;font-size:12.5px;font-weight:700">${l}</button>`).join('')}</div>
+  <div style="display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin-bottom:14px;padding-bottom:2px">${secs.map(([k, l]) => `<button onclick="S.teamSec='${k}';render()" style="flex:none;border:1px solid ${S.teamSec === k ? 'var(--ink)' : 'var(--line)'};background:${S.teamSec === k ? 'var(--ink)' : '#fff'};color:${S.teamSec === k ? '#fff' : 'var(--ink)'};border-radius:999px;padding:8px 13px;font-size:11.5px;font-weight:700;white-space:nowrap">${l}</button>`).join('')}</div>
   ${S.teamSec === 'clock' ? teamClock() : S.teamSec === 'time' ? teamTime() : S.teamSec === 'sched' ? teamSched() : S.teamSec === 'cost' ? teamCost() : S.teamSec === 'emp' ? teamEmp() : S.teamSec === 'subs' ? teamSubs() : teamPerf()}`;
 }
 function activeEmps() { return Object.values(S.emp).filter(e => e && e.name && e.active !== false).sort((a, b) => a.name.localeCompare(b.name)); }
@@ -3351,9 +3357,28 @@ async function callClaudeBig(prompt, maxTok) {
   if (!resp.ok) throw new Error('AI ' + resp.status);
   return (await readClaudeText(resp)).trim();
 }
+function setPredAdjust(v) { S.predAdjust = (v || '').trim().slice(0, 200); try { localStorage.setItem('trice_predadjust', S.predAdjust); } catch (e) {} }
+/* Best-effort local application of simple adjustment phrases ("reduce 30%",
+   "cut 15% on high hazard") so the instruction works even when the AI is
+   unreachable and the rate card prices the run. */
+function localAdjust(d, hazard) {
+  const s = (S.predAdjust || '').toLowerCase();
+  const m = s.match(/(reduce|lower|cut|decrease|increase|raise|add)\s+(?:by\s+)?(\d{1,2})\s*%/);
+  if (!m) return d;
+  let f = (+m[2]) / 100;
+  if (/reduce|lower|cut|decrease/.test(m[1])) f = 1 - f; else f = 1 + f;
+  const hazOnly = /high\s*hazard|hazard\s*only/.test(s);
+  const modOnly = /moderate\s*only|on\s*moderate/.test(s);
+  if (hazOnly && hazard !== 'High Hazard') return d;
+  if (modOnly && hazard !== 'Moderate') return d;
+  const sc = v => v == null ? v : Math.max(0, Math.round(v * f / 10) * 10);
+  return { ...d, prune: sc(d.prune), removal: sc(d.removal), disposal: sc(d.disposal), stump: sc(d.stump) };
+}
 async function aiPredictBatch(rows, priced) {
+  const adj = (S.predAdjust || '').trim();
   const prompt = `You are the pricing arborist for WTR Group finishing a storm-damage claim register. Predict remediation pricing for each unpriced line item below. Dollars are EXTENDED FOR THE LINE (unit price × qty).
-Rules, in order of authority:
+${adj ? `OPERATOR ADJUSTMENT — this overrides every rule below wherever it applies. Apply it exactly and note it in each basis: "${adj.replace(/`/g, "'")}"
+` : ''}Rules, in order of authority:
 1. Rate card: crew $${RATE.crew}/man-hour, debris $${RATE.debrisYd}/cu yd, stump $${RATE.stumpHr}/hr. Policy debris sublimit $${RATE.sublimit} per specimen.
 2. Hours implied by the already-priced rows on THIS job (match their level, they are the ground truth): ${JSON.stringify(priced)}
 3. Precedent schedule: ${LEX_SCHEDULE}
@@ -3393,12 +3418,12 @@ async function predictPricing() {
     const m = aiMap[t.id];
     t.pred = m
       ? { prune: numOr(m.prune, d.prune), removal: numOr(m.takedown, d.removal), disposal: numOr(m.debris, d.disposal), stump: numOr(m.stump, d.stump), basis: m.basis ? String(m.basis).slice(0, 220) : d.basis, by: 'AI', at: Date.now() }
-      : { prune: d.prune, removal: d.removal, disposal: d.disposal, stump: d.stump, basis: d.basis, by: 'Rate card', at: Date.now() };
+      : (dd => ({ prune: dd.prune, removal: dd.removal, disposal: dd.disposal, stump: dd.stump, basis: dd.basis + (S.predAdjust && dd !== d ? ' · adjusted: ' + S.predAdjust : ''), by: 'Rate card', at: Date.now() }))(localAdjust(d, t.hazard));
     if (m) ai++; n++;
     markDirty(t); try { DB.putTree(stripRuntime(t)); } catch (e) {}
   }
   S.predBusy = false;
-  toast(n ? `${n} lines predicted${ai ? ` — ${ai} by AI` : ' from the rate card' + (navigator.onLine ? ' (AI unavailable)' : ' (offline)')}. Amber until accepted or edited.` : 'Nothing to predict');
+  toast(n ? `${n} lines predicted${ai ? ` — ${ai} by AI` : ' from the rate card' + (navigator.onLine ? ' (AI unavailable)' : ' (offline)')}${S.predAdjust ? ' · adjustment applied: "' + S.predAdjust + '"' : ''}. Amber until accepted or edited.` : 'Nothing to predict');
   render();
 }
 function applyPred(t) {
@@ -3479,6 +3504,9 @@ function sheetView() {
       ${preds ? `<button onclick="clearAllPreds()" style="${pill}">✕ Clear predictions</button>` : ''}` : `<span style="font-size:11px;color:var(--faint)">Tap any row to open and edit the record</span>`}
       <span style="flex:1"></span>
       <button onclick="S.gridFull=true;render()" style="${pill}" title="The full spreadsheet — every column, sortable">⛶ Full grid</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:stretch">
+      <input id="adjGrid" value="${esc(S.predAdjust || '')}" placeholder="Are the numbers off? Tell me how to adjust — e.g. reduce 30%, or reduce 15% on high hazard only" onchange="setPredAdjust(this.value)" style="flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 13px;background:#fff;color:var(--ink);font-size:12px;min-width:0">
       <button onclick="S.sheetSummary=!S.sheetSummary;render()" style="${pill}">${S.sheetSummary ? '✕ Close summary' : '☰ Summary & exports'}</button>
     </div>
   </div>
@@ -3949,7 +3977,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.7</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4051,12 +4079,19 @@ async function exportXLSX(list, label) {
       const a = t.ai || {};
       ws.addRow([t.id, '', (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone || '', a.species || '', a.latin || '', t.qty || 1, t.dbhIn ?? a.dbh_in ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? a.height_ft ?? '', t.ip || '', t.hazard || '', (t.failures || []).join(' | '), t.cause || '', a.health ?? '', a.action || '', t.prune ?? '', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.priceSource || (lineTotal(t) ? 'Manual' : ''), t.notes || '', typeof t.lat === 'number' ? t.lat : '', typeof t.lng === 'number' ? t.lng : '', new Date(t.when).toLocaleString(), t.surveyor || '', t.clearedBy || '', t.clearedAt ? new Date(t.clearedAt).toLocaleString() : '', imgUrl(t)]);
     }
-    /* Embed the photos — fetch server-only ones first, then thumbnail + anchor per row */
+    /* Embed the photos — server-only ones fetched 6 at a time, then thumbnail + anchor per row */
     let embedded = 0, missing = 0;
+    const srcs = new Array(SRC.length);
+    for (let i = 0; i < SRC.length; i += 6) {
+      const batch = SRC.slice(i, i + 6);
+      const got = await Promise.all(batch.map(fetchPhotoFor));
+      got.forEach((g, k) => { srcs[i + k] = g; });
+      if (SRC.length > 30) toast('Gathering photos… ' + Math.min(i + 6, SRC.length) + ' of ' + SRC.length);
+    }
     for (let i = 0; i < SRC.length; i++) {
       const t = SRC[i];
       const rowIx = i + 2;
-      const src = await fetchPhotoFor(t);
+      const src = srcs[i];
       if (!src) { missing++; continue; }
       const th = await thumbJPEG(src, 440);
       if (!th) { missing++; continue; }
@@ -4072,6 +4107,7 @@ async function exportXLSX(list, label) {
       if (embedded % 25 === 0) toast('Embedding photos… ' + embedded + ' of ' + SRC.length);
     }
     const buf = await wb.xlsx.writeBuffer();
+    if (!buf || (buf.byteLength ?? buf.length) < 2000) throw new Error('workbook came out empty');
     const name = `trice-register${label ? '-' + label : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -4080,8 +4116,15 @@ async function exportXLSX(list, label) {
     toast('Workbook ready — ' + embedded + ' photo' + (embedded === 1 ? '' : 's') + ' embedded' + (missing ? ' · ' + missing + ' unavailable (offline?) — their URLs are in the sheet' : ''));
   } catch (e) {
     console.error('Embedded export failed, falling back', e);
-    toast('Embedded-photo export unavailable — exporting the classic workbook');
-    exportXLSXBasic(list, label);
+    toast('Embedded-photo export failed (' + (e && e.message || 'unknown') + ') — exporting the classic workbook');
+    try {
+      if (typeof XLSX === 'undefined') throw new Error('spreadsheet engine unavailable');
+      exportXLSXBasic(list, label);
+    } catch (e2) {
+      /* Last resort: an export must always produce a file. */
+      toast('Spreadsheet engines unavailable — downloading CSV instead');
+      try { exportCSV(SRC); } catch (e3) { toast('Export failed: ' + (e3 && e3.message || 'unknown')); }
+    }
   }
 }
 function exportXLSXBasic(list, label) {
@@ -4893,7 +4936,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.6</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.7</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5039,6 +5082,7 @@ function migrate(t) {
   syncNow(); SYNC.timer = setInterval(syncNow, 25000 + Math.floor(Math.random() * 12000));
   window.addEventListener('online', syncNow);
   /* Build watchdog — this device always runs what the server serves. */
+  setTimeout(() => { try { loadExcelJS().catch(() => {}); } catch (e) {} }, 7000);
   setTimeout(() => checkBuild(true), 5000);
   setInterval(() => checkBuild(), 10 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
