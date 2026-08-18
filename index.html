@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.9">
+<meta name="version" content="trice-v24.10">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -3920,6 +3920,7 @@ function reportView() {
   <div class="slab" style="margin:18px 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span>Data</span><button id="syncChip" onclick="syncDiag()" style="font-size:10px;font-weight:700;border:0;background:none;padding:0;cursor:pointer" title="Tap to test team sync"></button></div>
   <div class="card" style="padding:9px 15px">
     <button class="trow" onclick="runDeviceCheck()"><span class="mid"><span class="l1">Device readiness check</span><span class="l2">${S.caps ? `Last run ${fmtWhen(S.caps.when)} · ${S.caps.camera === 'live' ? 'live camera' : 'system camera'} · ${S.caps.compass ? 'compass' : 'no compass'} · GPS ${S.caps.gps ? '±' + (S.caps.gpsAcc || '?') + ' m' : 'failed'} · ${S.caps.ai ? 'AI live' : 'AI unverified'}` : 'Never run — do this tonight, outdoors, on the crew phone'}</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="exportSelfTest()"><span class="mid"><span class="l1">Export self-test</span><span class="l2">Downloads a 2-row sample workbook with an embedded photo — proves this browser can build the insurance file</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="verifyTeamData()"><span class="mid"><span class="l1">Verify team data${SYNC.fnStale ? ' <span class="chip bad" style="margin-left:4px">server function out of date</span>' : ((typeof SYNC.serverAssets === 'number' && SYNC.serverAssets !== S.trees.length) ? ' <span class="chip bad" style="margin-left:4px">counts differ</span>' : '')}</span><span class="l2">${SYNC.fnStale ? 'The site is serving an old netlify/functions/sync.mjs — commit the new one to GitHub and let Netlify redeploy. Records are safe on each phone meanwhile.' : `This phone: ${S.trees.length}${typeof SYNC.serverAssets === 'number' ? ' · Server: ' + SYNC.serverAssets : ''} — compares every record id with the server and repairs both ways. Nothing is ever deleted.`}</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="fullResync()"><span class="mid"><span class="l1">Pull all team data — full re-sync</span><span class="l2">Fetches every record &amp; project anyone has logged to the server</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportJSON()"><span class="mid"><span class="l1">Back up assessment${S.trees.some(t=>t.dirty) ? ` <span class="chip bad" style="margin-left:4px">${S.trees.filter(t=>t.dirty).length} not on the server yet</span>` : ''}</span><span class="l2">${S.trees.some(t=>t.dirty) ? 'These records exist only on this phone until sync completes — export a file now if leaving signal' : (lastBackupAt() ? `Optional offsite copy · everything is already on the server · last file ${fmtWhen(lastBackupAt())}` : 'Optional offsite copy as one file — everything is already on the server')}</span></span><span style="color:var(--faint)">›</span></button>
@@ -3977,7 +3978,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.9</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.10</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4051,11 +4052,46 @@ async function fetchPhotoFor(t) {
     return j && j.photo || null;
   } catch (e) { return null; }
 }
+/* One-tap proof that this exact browser can produce a data+photo workbook.
+   Builds a 2-row sample with an embedded test image and downloads it. If this
+   succeeds and a real export doesn't, the problem is the data path, not the engine. */
+async function exportSelfTest() {
+  const px = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAL/2wBDAQL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AKp//2Q==';
+  const report = [];
+  report.push('build ' + BUILD);
+  try { const r = await fetch('/vendor/exceljs.min.js', { method: 'HEAD' }); report.push('/vendor/exceljs: ' + (r.ok ? 'served' : 'HTTP ' + r.status)); } catch (e) { report.push('/vendor/exceljs: unreachable'); }
+  report.push('SheetJS: ' + (typeof XLSX !== 'undefined' ? 'loaded' : 'MISSING'));
+  try {
+    await loadExcelJS();
+    report.push('ExcelJS: loaded');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('SelfTest');
+    ws.addRow(['Asset', 'Photo', 'Species']);
+    ws.addRow(['TEST-1', '', 'Live Oak']);
+    const th = await thumbJPEG(px, 200);
+    const b64 = th ? (th.indexOf(',') > -1 ? th.slice(th.indexOf(',') + 1) : th) : null;
+    report.push('canvas thumbnail: ' + (th ? 'ok' : 'FAILED'));
+    if (b64) { const id = wb.addImage({ base64: b64, extension: 'jpeg' }); ws.getRow(2).height = 60; ws.addImage(id, 'B2:B2'); report.push('image embed: ok'); }
+    const buf = await wb.xlsx.writeBuffer();
+    report.push('workbook: ' + (buf.byteLength ?? buf.length) + ' bytes');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = 'trice-export-selftest-' + BUILD.replace('trice-', '') + '.xlsx';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 600);
+    toast('SELF-TEST PASSED — ' + report.join(' · '), 12000);
+  } catch (e) {
+    toast('SELF-TEST FAILED at: ' + report.join(' · ') + ' · error: ' + (e && e.message || e), 15000);
+  }
+}
 async function exportXLSX(list, label) {
   const SRC = list || S.trees;
   if (!SRC.length) { toast('Log some assets first'); return; }
   toast('Building the workbook (' + BUILD.replace('trice-', '') + ') — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
   try {
+    if (navigator.onLine && !window.ExcelJS) {
+      try { const pf = await fetch('/vendor/exceljs.min.js', { method: 'HEAD' }); if (!pf.ok) throw new Error('http ' + pf.status); }
+      catch (pe) { toast('THE /vendor FOLDER IS NOT DEPLOYED (' + (pe.message || pe) + ') — commit the whole trice folder including /vendor and redeploy', 12000); }
+    }
     await loadExcelJS();
     const j = S.job || {};
     const wb = new ExcelJS.Workbook();
@@ -4110,7 +4146,8 @@ async function exportXLSX(list, label) {
     }
     const buf = await wb.xlsx.writeBuffer();
     if (!buf || (buf.byteLength ?? buf.length) < 2000) throw new Error('workbook came out empty');
-    const name = `trice-register${label ? '-' + label : ''}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const hm = new Date(); const stamp = BUILD.replace('trice-', '') + '-' + String(hm.getHours()).padStart(2, '0') + String(hm.getMinutes()).padStart(2, '0');
+    const name = `trice-register${label ? '-' + label : ''}-${stamp}.xlsx`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     a.download = name; document.body.appendChild(a); a.click();
@@ -4161,7 +4198,8 @@ function exportXLSXBasic(list, label) {
   }
   ws['!rows'] = rowsMeta;
   XLSX.utils.book_append_sheet(wb, ws, 'Register');
-  XLSX.writeFile(wb, `trice-assessment-${label ? label + '-' : ''}${new Date().toISOString().slice(0,10)}.xlsx`);
+  const bh = new Date();
+  XLSX.writeFile(wb, `trice-assessment-${label ? label + '-' : ''}${BUILD.replace('trice-','')}-fallback-${String(bh.getHours()).padStart(2,'0')}${String(bh.getMinutes()).padStart(2,'0')}.xlsx`);
 }
 
 /* ---------------- Site weather (Open-Meteo, no key) ---------------- */
@@ -4939,7 +4977,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.9</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.10</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
