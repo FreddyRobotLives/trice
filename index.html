@@ -8,17 +8,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.9">
-<meta property="og:title" content="Trice — Complex processes, made simple.">
-<meta property="og:description" content="We build technology for operations too complex for spreadsheets. Capture, sync, map, decide. One system.">
-<meta property="og:image" content="https://trice.live/og.png?v=31">
+<meta name="version" content="trice-v26.2">
+<meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
+<meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
+<meta property="og:image" content="https://trice.live/og.png?v=32">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
 <meta property="og:url" content="https://trice.live/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://trice.live/og.png?v=31">
-<meta name="description" content="Trice builds technology for operations too complex for spreadsheets. One system: capture, sync, map, decide.">
+<meta name="twitter:image" content="https://trice.live/og.png?v=32">
+<meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="/vendor/leaflet.min.css">
 <script src="/vendor/leaflet.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
@@ -3609,6 +3609,7 @@ function gridHero(TS, label) {
     <div style="display:flex;gap:8px;padding:14px 18px 16px;flex-wrap:wrap">
       <button class="btn primary" style="flex:1.4;min-width:150px" onclick="openGridExhibit()">Preview &amp; export PDF</button>
       <button class="btn ghost" style="flex:1.4;min-width:150px;border-color:#d6d3ca;font-weight:800" onclick="openAssetDatabase()">Asset Database PDF</button>
+      <button class="btn ghost" style="flex:1.4;min-width:150px;border-color:#d6d3ca;font-weight:800" onclick="openAssetDatabase(true)">Client Asset Database PDF</button>
       <button class="btn ghost" style="flex:1;min-width:120px" onclick="exportXLSX(gridExhibitScope(), (S.sheetProject || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+/, '').toLowerCase())">Download XLSX</button>
     </div>
   </div>`;
@@ -3618,7 +3619,7 @@ function gridHero(TS, label) {
    The gallery counterpart to the carrier exhibit: near-white paper, San Francisco
    type, huge rounded imagery, hairline spec tables, air everywhere. Same live data,
    same honesty rules (accepted black, predicted \u2248, TBD), zero hand-typed captions. */
-function assetDatabaseHTML(TS, label) {
+function assetDatabaseHTML(TS, label, clientSafe) {
   const T = totals(TS);
   const site = label === 'All projects' ? (S.site || 'Trice') : label;
   const INK = '#1d1d1f', GRAY = '#6e6e73', HAIR = '#e8e8ed', PAPER = '#fbfbfd';
@@ -3630,15 +3631,15 @@ function assetDatabaseHTML(TS, label) {
   const card = t => {
     const a = t.ai || {};
     const lt = lineTotal(t);
-    const remed = lt > 0 ? money(lt) + (a.action ? ' \u00b7 ' + esc(a.action) : '')
-      : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
+    const remed = clientSafe ? '' : (lt > 0 ? money(lt) + (a.action ? ' \u00b7 ' + esc(a.action) : '')
+      : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`));
     return `
     <div style="flex:1 1 440px;min-width:0;max-width:560px;margin:0 auto;width:100%;page-break-inside:avoid">
       ${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
         : `<div style="height:min(380px, 78vw);border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
       <div style="padding:18px 6px 6px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
-          <div style="font-size:21px;font-weight:600;letter-spacing:-.015em;color:${INK}">${esc(a.species || 'Pending analysis')}</div>
+          <div style="font-size:21px;font-weight:600;letter-spacing:-.015em;color:${INK}">${esc(a.species || (clientSafe ? 'Under assessment' : 'Pending analysis'))}</div>
           <div style="flex:none;display:flex;align-items:center;gap:6px;font-size:11px;color:${GRAY}"><span style="width:8px;height:8px;border-radius:50%;background:${hazDot(t.hazard || 'Moderate')}"></span>${esc(t.hazard || 'Moderate')}</div>
         </div>
         ${a.latin ? `<div style="font-size:12.5px;color:${GRAY};font-style:italic;margin-top:1px">${esc(a.latin)}</div>` : ''}
@@ -3649,14 +3650,15 @@ function assetDatabaseHTML(TS, label) {
           ${spec('Condition', esc(a.description || ''))}
           ${spec('Failure', esc((t.failures || []).join(' \u00b7 ')))}
           ${spec('Cause', esc(t.cause || ''))}
-          ${t.notes ? spec('Notes', esc(t.notes)) : ''}
-          ${spec('Remediation', remed)}
-          ${spec('Captured', `${new Date(t.when).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}${t.surveyor ? ' \u00b7 ' + esc(t.surveyor) : ''}${typeof t.lat === 'number' ? ' \u00b7 GPS on record' : ''}`)}
+          ${t.notes && !clientSafe ? spec('Notes', esc(t.notes)) : ''}
+          ${clientSafe ? spec('Recommended', esc(a.action || '')) : spec('Remediation', remed)}
+          ${spec('Captured', `${new Date(t.when).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}${!clientSafe && t.surveyor ? ' \u00b7 ' + esc(t.surveyor) : ''}${typeof t.lat === 'number' ? ' \u00b7 GPS on record' : ''}`)}
         </div>
       </div>
     </div>`;
   };
   return `
+  ${pdfCover('Asset Database', site, FONT)}
   <div style="font-family:${FONT};background:${PAPER};color:${INK};-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:8px 2px">
     <div style="text-align:center;padding:34px 0 10px">
       <div style="font-size:11px;letter-spacing:.32em;font-weight:700;color:${GRAY}">TRICE</div>
@@ -3664,7 +3666,7 @@ function assetDatabaseHTML(TS, label) {
       <div style="font-size:14px;color:${GRAY};margin-top:12px">Every asset. Photographed, measured, and on the record. ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;max-width:860px;margin:30px auto 0;padding:18px 0;border-top:1px solid ${HAIR};border-bottom:1px solid ${HAIR}">
-      ${stat(T.lines, 'assets')}${stat(T.specimens, 'specimens')}${stat(T.byHaz['High Hazard'].lines, 'high hazard')}${stat(photod, 'photographed')}${stat(T.total ? money(T.total) : '\u2014', 'remediation')}
+      ${stat(T.lines, 'assets')}${stat(T.specimens, 'specimens')}${stat(T.byHaz['High Hazard'].lines, 'high hazard')}${stat(photod, 'photographed')}${clientSafe ? '' : stat(T.total ? money(T.total) : '\u2014', 'remediation')}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:34px;justify-content:center">${TS.map(card).join('')}</div>
     <div style="text-align:center;margin-top:44px;padding:18px 30px 8px;border-top:1px solid ${HAIR};font-size:10px;color:#aeaeb2;line-height:1.7;max-width:760px;margin-left:auto;margin-right:auto">
@@ -3672,28 +3674,42 @@ function assetDatabaseHTML(TS, label) {
     </div>
   </div>`;
 }
-function openAssetDatabase() {
+function openAssetDatabase(clientSafe) {
   const TS = gridExhibitScope();
   if (!TS.length) { toast('Nothing in this scope yet \u2014 widen the filters'); return; }
   const label = S.sheetProject || 'All projects';
   const site = label === 'All projects' ? (S.site || 'Trice') : label;
   showDocLoading(
-    `${esc(site)} Asset Database<span class="sub">${TS.length} assets \u00b7 big photography, full descriptions \u00b7 the photos live in the document.</span>`,
+    `${esc(site)} Asset Database${clientSafe ? ' \u00b7 client copy' : ''}<span class="sub">${TS.length} assets \u00b7 ${clientSafe ? 'client-safe: no internal notes, no pricing, no crew names. The document itself carries no client marking' : 'big photography, full descriptions \u00b7 the photos live in the document'}.</span>`,
     `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
     'max-width:1120px;background:#fbfbfd', TS.length);
-  setTimeout(() => { docReady(assetDatabaseHTML(TS, label)); }, 40);
+  setTimeout(() => { docReady(assetDatabaseHTML(TS, label, !!clientSafe)); }, 40);
 }
 /* ---- The Grid Exhibit ----
-   The register rendered as a carrier-ready document in the Trice design language:
-   branded header, navy stat band, glance tiles, CSS charts, the full register table
-   with totals, and a data-quality footer. Everything is computed live from the rows
-   in the current Grid scope (project + search + hazard filters). Predictions never
-   appear — unpriced and predicted lines print as TBD, the way an honest exhibit reads. */
+   The register rendered as a carrier-ready document in the Trice design language.
+   Everything is computed live from the rows in scope; predictions print amber. */
 const GX_NAVY = '#1b2733', GX_CREAM = '#f3f1ec', GX_ACCENT = '#c8452c';
 const GX_HAZ = h => h === 'High Hazard' ? ['#b34b48', '\u25b2', 'HIGH HAZARD'] : (h === 'Cleared' ? ['#2f7d55', '\u25a0', 'CLEARED'] : ['#b8842a', '\u25cf', 'MODERATE']);
 const gxMoney = (v, pv) => v > 0 ? money(v) : (pv > 0 ? `<span style="color:#b8842a;font-weight:700;font-family:ui-monospace,Menlo,monospace">\u2248${money(pv)}</span>` : '<span style="color:#b8842a;font-weight:700;font-size:9px;letter-spacing:.04em">TBD</span>');
+/* Every PDF opens on a branded cover: the Trice mark and the slogan, alone on
+   page one. Neutral enough to sit ahead of the cream exhibits and the Apple-white
+   Asset Database alike. Skipped in the Grid hero preview (capRows) so the live
+   thumbnail still shows the document itself. */
+function pdfCover(docTitle, label, fontStack) {
+  return `<div style="page-break-after:always;min-height:95vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-family:${fontStack || "'Inter',-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif"};-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div style="width:76px;height:76px;border-radius:19px;background:#c8452c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px"><span style="width:18px;height:4px;background:#fff;border-radius:2px;display:block"></span><span style="width:26px;height:4px;background:#fff;border-radius:2px;display:block"></span><span style="width:36px;height:4px;background:#fff;border-radius:2px;display:block"></span></div>
+    <div style="font-size:17px;letter-spacing:.34em;font-weight:800;color:#17181a;margin-top:26px;padding-left:.34em">TRICE</div>
+    <div style="font-size:32px;font-weight:700;letter-spacing:-.02em;color:#17181a;margin-top:34px;line-height:1.3">The field changes fast.<br>Your data should keep up.</div>
+    <div style="font-size:13px;color:#86837b;margin-top:16px;max-width:420px;line-height:1.6">Purpose-built technology designed for your operation, your teams, and the decisions they make.</div>
+    <div style="margin-top:64px;padding-top:18px;border-top:1px solid #e7e4dc;min-width:300px">
+      <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#98948a;font-weight:700">${esc(docTitle)}</div>
+      <div style="font-size:13.5px;font-weight:700;color:#17181a;margin-top:5px">${esc(label)} \u00b7 ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+    </div>
+  </div>`;
+}
 function gridExhibitHTML(TS, label, capRows) {
-  const CAP = capRows && TS.length > capRows ? capRows : 0;
+  const PREVIEW = !!capRows;
+  const CAP = PREVIEW && TS.length > capRows ? capRows : 0;
   const j = S.job || {};
   const T = totals(TS);
   const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -3752,6 +3768,7 @@ function gridExhibitHTML(TS, label, capRows) {
     </tr>`;
   }).join('') + (CAP ? `<tr><td colspan="19" style="padding:9px 7px;font-size:9px;color:#98948a;background:#faf9f5">+ ${TS.length - CAP} more rows in the full document \u2014 this is a preview sample</td></tr>` : '');
   return `
+  ${PREVIEW ? '' : pdfCover('Asset Register Exhibit', label, "'Helvetica Neue',Helvetica,Arial,sans-serif")}
   <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#17181a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
     <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px">
       <div style="width:44px;height:44px;border-radius:11px;background:${GX_ACCENT};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:11px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:16px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:22px;height:3px;background:#fff;border-radius:1px;display:block"></span></div>
@@ -4089,7 +4106,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.9</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v26.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4527,6 +4544,7 @@ function printReport(scope) {
   const byHole = !scope.zone && !multiSite && zGroups.length > 1;
   const hazRow = (h, g) => `<div style="flex:1;border:1px solid #ddd;border-radius:9px;padding:10px 12px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${HAZ_INK(h)}">${g} ${h.toUpperCase()}</div><div style="font-size:20px;font-weight:700">${T.byHaz[h].lines}</div><div style="font-size:10px;color:#777">${T.byHaz[h].specimens} specimens${T.byHaz[h].cost ? ' · ' + money(T.byHaz[h].cost) : ''}</div></div>`;
   el.innerHTML = `
+    ${pdfCover(esc(j.assessType || 'Field Assessment Report'), scope.site || (scope.all ? 'All projects' : (S.site || 'Site assessment')), "'Helvetica Neue',Helvetica,Arial,sans-serif")}
     <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px;border-bottom:3px solid #c8452c">
       <div style="width:40px;height:40px;border-radius:10px;background:#c8452c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:10px;height:2.5px;background:#fff;border-radius:1px;display:block"></span><span style="width:15px;height:2.5px;background:#fff;border-radius:1px;display:block"></span><span style="width:20px;height:2.5px;background:#fff;border-radius:1px;display:block"></span></div>
       <div style="flex:1;min-width:0">
@@ -4721,6 +4739,7 @@ function photoExhibitHTML(TS, label) {
     </div>`;
   };
   return `
+  ${pdfCover('Photographic Exhibit', label, "'Helvetica Neue',Helvetica,Arial,sans-serif")}
   <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#17181a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
     <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px">
       <div style="width:44px;height:44px;border-radius:11px;background:${GX_ACCENT};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:11px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:16px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:22px;height:3px;background:#fff;border-radius:1px;display:block"></span></div>
@@ -5070,8 +5089,8 @@ function gateView() {
     <div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:26px 22px 0">
       <div style="display:flex;justify-content:center"><div class="logo" style="width:66px;height:66px;border-radius:17px;gap:5px"><span style="height:3.5px;width:16px"></span><span style="height:3.5px;width:24px"></span><span style="height:3.5px;width:32px"></span></div></div>
       <div style="font-size:36px;font-weight:800;letter-spacing:.3em;margin-top:22px;color:var(--ink);text-indent:.3em">TRICE</div>
-      <div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:36px;letter-spacing:-.01em">Complex processes,<br>made simple.</div>
-      <div style="font-size:13.5px;color:var(--muted);margin-top:12px;line-height:1.65">We build technology for operations too complex for spreadsheets.<br>Capture, sync, map, decide. One system.</div>
+      <div style="font-size:25px;font-weight:700;line-height:1.28;margin-top:36px;letter-spacing:-.02em;text-wrap:balance">The field changes&nbsp;fast.<br>Your data should keep&nbsp;up.</div>
+      <div style="font-size:13.5px;color:var(--muted);margin-top:14px;line-height:1.65;max-width:340px;margin-left:auto;margin-right:auto;text-wrap:pretty">Purpose-built technology designed for your operation, your teams, and the decisions they&nbsp;make.</div>
     </div>
     <div style="flex:none;margin-top:22px">${LAND_MTNS}</div>
     <div style="flex:none;padding:6px 22px calc(env(safe-area-inset-bottom,0px) + 8px);max-width:420px;margin:0 auto;width:100%;box-sizing:border-box">
@@ -5098,7 +5117,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.9</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v26.2</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
