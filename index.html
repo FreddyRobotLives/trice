@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.8">
+<meta name="version" content="trice-v24.9">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -373,10 +373,10 @@ const S = {
    carrier, policy, claim, adjuster, assessorCert, exposure */
 
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms) {
   document.querySelectorAll('.toast').forEach(e => e.remove());
   const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg; document.body.appendChild(el);
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 3000);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), ms || 3000);
 }
 
 /* ---------------- GPS ---------------- */
@@ -3977,7 +3977,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.8</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.9</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4079,32 +4079,34 @@ async function exportXLSX(list, label) {
       const a = t.ai || {};
       ws.addRow([t.id, '', (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone || '', a.species || '', a.latin || '', t.qty || 1, t.dbhIn ?? a.dbh_in ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? a.height_ft ?? '', t.ip || '', t.hazard || '', (t.failures || []).join(' | '), t.cause || '', a.health ?? '', a.action || '', t.prune ?? '', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.priceSource || (lineTotal(t) ? 'Manual' : ''), t.notes || '', typeof t.lat === 'number' ? t.lat : '', typeof t.lng === 'number' ? t.lng : '', new Date(t.when).toLocaleString(), t.surveyor || '', t.clearedBy || '', t.clearedAt ? new Date(t.clearedAt).toLocaleString() : '', imgUrl(t)]);
     }
-    /* Embed the photos — server-only ones fetched 6 at a time, then thumbnail + anchor per row */
-    let embedded = 0, missing = 0;
+    /* Embed the photos — server-only ones fetched 6 at a time, then thumbnail + anchor
+       per row. Failures are counted BY REASON so the final toast says exactly what
+       happened; the anchor uses the range-string form, ExcelJS's most-tested path. */
+    let embedded = 0, noPhoto = 0, fetchFail = 0, thumbFail = 0, embedFail = 0;
     const srcs = new Array(SRC.length);
     for (let i = 0; i < SRC.length; i += 6) {
       const batch = SRC.slice(i, i + 6);
       const got = await Promise.all(batch.map(fetchPhotoFor));
       got.forEach((g, k) => { srcs[i + k] = g; });
-      if (SRC.length > 30) toast('Gathering photos… ' + Math.min(i + 6, SRC.length) + ' of ' + SRC.length);
+      if (SRC.length > 30) toast('Gathering photos\u2026 ' + Math.min(i + 6, SRC.length) + ' of ' + SRC.length);
     }
     for (let i = 0; i < SRC.length; i++) {
       const t = SRC[i];
       const rowIx = i + 2;
       const src = srcs[i];
-      if (!src) { missing++; continue; }
+      if (!src) { (t.photo || t.photoKey) ? fetchFail++ : noPhoto++; continue; }
       const th = await thumbJPEG(src, 440);
-      if (!th) { missing++; continue; }
+      if (!th) { thumbFail++; continue; }
       try {
         const b64 = th.indexOf(',') > -1 ? th.slice(th.indexOf(',') + 1) : th;
         const imgId = wb.addImage({ base64: b64, extension: 'jpeg' });
         ws.getRow(rowIx).height = 64;
-        ws.addImage(imgId, { tl: { col: 1.05, row: rowIx - 0.97 }, ext: { width: 110, height: 82 }, editAs: 'oneCell' });
-      } catch (e) { missing++; continue; }
+        ws.addImage(imgId, 'B' + rowIx + ':B' + rowIx);
+      } catch (e) { console.error('embed row', t.id, e); embedFail++; continue; }
       const uCell = ws.getCell(rowIx, heads.length);
       if (uCell.value) uCell.value = { text: 'Full photo', hyperlink: String(uCell.value) };
       embedded++;
-      if (embedded % 25 === 0) toast('Embedding photos… ' + embedded + ' of ' + SRC.length);
+      if (embedded % 25 === 0) toast('Embedding photos\u2026 ' + embedded + ' of ' + SRC.length);
     }
     const buf = await wb.xlsx.writeBuffer();
     if (!buf || (buf.byteLength ?? buf.length) < 2000) throw new Error('workbook came out empty');
@@ -4113,7 +4115,8 @@ async function exportXLSX(list, label) {
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
-    toast('Workbook ready — ' + embedded + ' photo' + (embedded === 1 ? '' : 's') + ' embedded' + (missing ? ' · ' + missing + ' unavailable (offline?) — their URLs are in the sheet' : ''));
+    const reasons = [fetchFail ? fetchFail + ' fetch-failed' : '', thumbFail ? thumbFail + ' decode-failed' : '', embedFail ? embedFail + ' embed-failed' : '', noPhoto ? noPhoto + ' have no photo' : ''].filter(Boolean).join(' \u00b7 ');
+    toast('Workbook ready (' + BUILD.replace('trice-', '') + ') \u2014 ' + embedded + ' photo' + (embedded === 1 ? '' : 's') + ' embedded in the file' + (reasons ? ' \u00b7 ' + reasons : ''), 9000);
   } catch (e) {
     console.error('Embedded export failed, falling back', e);
     toast('Embedded-photo export failed (' + (e && e.message || 'unknown') + ') — exporting the classic workbook');
@@ -4936,7 +4939,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.8</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.9</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
