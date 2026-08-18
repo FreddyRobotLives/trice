@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v25.0">
+<meta name="version" content="trice-v25.1">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -21,8 +21,8 @@
 <meta name="description" content="One system: capture, sync, map, report.">
 <title>Trice · Tree survey</title>
 <link rel="stylesheet" href="/vendor/leaflet.min.css">
-<script src="/vendor/leaflet.min.js"></script>
-<script src="/vendor/xlsx.full.min.js"></script>
+<script src="/vendor/leaflet.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script src="/vendor/xlsx.full.min.js" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -3978,7 +3978,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.0</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v25.1</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4012,16 +4012,23 @@ function saveSettings() {
    (library, memory, offline photos), the export falls back to the classic workbook
    with IMAGE() formulas and links — an export never fails outright. */
 let EXCELJS_P = null;
+function loadScriptChain(urls) {
+  return urls.reduce((p, u) => p.catch(() => new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = u; s.onload = () => res(u); s.onerror = () => rej(new Error('failed ' + u));
+    document.head.appendChild(s);
+  })), Promise.reject());
+}
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = '/vendor/exceljs.min.js';
-    s.onload = res; s.onerror = () => { EXCELJS_P = null; rej(new Error('ExcelJS failed to load')); };
-    document.head.appendChild(s);
-  });
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+    .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
+}
+function ensureSheetJS() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve();
+  return loadScriptChain(['/vendor/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -4094,16 +4101,37 @@ function deliverFile(name, blob) {
   d.id = 'dlReady';
   d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:400;background:#17181a;color:#fff;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 14px 38px rgba(8,12,18,.3);max-width:560px;margin:0 auto';
   d.innerHTML = '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">Your file is ready</div><div style="font-size:11px;color:#b8bcc2;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + name + '</div></div>' +
-    '<button id="dlGo" style="flex:none;border:0;background:#c8452c;color:#fff;border-radius:999px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer">\u2b07 Download</button>' +
+    '<button id="dlGo" style="flex:none;border:0;background:#c8452c;color:#fff;border-radius:999px;padding:11px 18px;font-size:13px;font-weight:800;cursor:pointer">\u2b07 Download</button>' + copyReportBtnHTML() +
     '<button id="dlX" style="flex:none;border:0;background:none;color:#8a8f96;font-size:18px;cursor:pointer;padding:4px">\u00d7</button>';
   document.body.appendChild(d);
+  wireCopyReport(d);
   const cleanup = () => { d.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); };
   d.querySelector('#dlGo').onclick = () => { fire(); setTimeout(cleanup, 1200); };
   d.querySelector('#dlX').onclick = cleanup;
   setTimeout(() => { if (document.getElementById('dlReady') === d) cleanup(); }, 120000);
 }
+let EXPLOG = [];
+function elog(stage, detail) { EXPLOG.push(stage + (detail != null ? ': ' + detail : '')); }
+function expReport() {
+  return ['TRICE EXPORT REPORT', 'build ' + BUILD, 'ua ' + navigator.userAgent, 'online ' + navigator.onLine,
+    'SheetJS ' + (typeof XLSX !== 'undefined' ? 'loaded' : 'missing'), 'ExcelJS ' + (window.ExcelJS ? 'loaded' : 'missing'),
+    'time ' + new Date().toISOString(), '---'].concat(EXPLOG).join('\n');
+}
+function copyReportBtnHTML() { return '<button id="dlRep" style="flex:none;border:1px solid #3a3d42;background:none;color:#b8bcc2;border-radius:999px;padding:10px 14px;font-size:11.5px;font-weight:700;cursor:pointer">Copy report</button>'; }
+function wireCopyReport(root) { const b = root.querySelector('#dlRep'); if (b) b.onclick = () => { try { navigator.clipboard.writeText(expReport()); toast('Diagnostic report copied \u2014 paste it to support'); } catch (e) { prompt('Copy this report:', expReport()); } }; }
+function failBar(msg) {
+  const old = document.getElementById('dlReady'); if (old) old.remove();
+  const d = document.createElement('div'); d.id = 'dlReady';
+  d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:400;background:#5c1f1c;color:#fff;border-radius:16px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 14px 38px rgba(8,12,18,.3);max-width:560px;margin:0 auto;flex-wrap:wrap';
+  d.innerHTML = '<div style="flex:1;min-width:180px;font-size:12px;font-weight:700;line-height:1.4">' + msg + '</div>' + copyReportBtnHTML() + '<button id="dlX" style="flex:none;border:0;background:none;color:#d9b3b0;font-size:18px;cursor:pointer">\u00d7</button>';
+  document.body.appendChild(d);
+  wireCopyReport(d);
+  d.querySelector('#dlX').onclick = () => d.remove();
+}
 async function exportXLSX(list, label) {
+  EXPLOG = [];
   const SRC = list || S.trees;
+  elog('scope rows', SRC.length);
   if (!SRC.length) { toast('Log some assets first'); return; }
   toast('Building the workbook (' + BUILD.replace('trice-', '') + ') — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
   try {
@@ -4112,6 +4140,7 @@ async function exportXLSX(list, label) {
       catch (pe) { toast('THE /vendor FOLDER IS NOT DEPLOYED (' + (pe.message || pe) + ') — commit the whole trice folder including /vendor and redeploy', 12000); }
     }
     await loadExcelJS();
+    elog('ExcelJS', 'loaded');
     const j = S.job || {};
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Trice'; wb.created = new Date();
@@ -4163,7 +4192,9 @@ async function exportXLSX(list, label) {
       embedded++;
       if (embedded % 25 === 0) toast('Embedding photos\u2026 ' + embedded + ' of ' + SRC.length);
     }
+    elog('photos', 'embedded ' + embedded + ', noPhoto ' + noPhoto + ', fetchFail ' + fetchFail + ', thumbFail ' + thumbFail + ', embedFail ' + embedFail);
     const buf = await wb.xlsx.writeBuffer();
+    elog('workbook bytes', (buf.byteLength ?? buf.length));
     if (!buf || (buf.byteLength ?? buf.length) < 2000) throw new Error('workbook came out empty');
     const hm = new Date(); const stamp = BUILD.replace('trice-', '') + '-' + String(hm.getHours()).padStart(2, '0') + String(hm.getMinutes()).padStart(2, '0');
     const name = `trice-register${label ? '-' + label : ''}-${stamp}.xlsx`;
@@ -4172,9 +4203,10 @@ async function exportXLSX(list, label) {
     toast('Workbook ready (' + BUILD.replace('trice-', '') + ') \u2014 ' + embedded + ' photo' + (embedded === 1 ? '' : 's') + ' embedded in the file' + (reasons ? ' \u00b7 ' + reasons : ''), 9000);
   } catch (e) {
     console.error('Embedded export failed, falling back', e);
-    toast('Embedded-photo export failed (' + (e && e.message || 'unknown') + ') — exporting the classic workbook');
+    elog('EMBED FAILED', (e && e.message) + ' | ' + String(e && e.stack).split('\n')[1]);
+    failBar('Embedded-photo export failed: ' + (e && e.message || 'unknown') + ' — trying the classic workbook. Tap Copy report and send it to support.');
     try {
-      if (typeof XLSX === 'undefined') throw new Error('spreadsheet engine unavailable');
+      await ensureSheetJS();
       exportXLSXBasic(list, label);
     } catch (e2) {
       /* Last resort: an export must always produce a file. */
@@ -4993,7 +5025,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.0</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v25.1</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
