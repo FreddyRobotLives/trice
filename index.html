@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v27.1">
+<meta name="version" content="trice-v27.3">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -292,7 +292,7 @@ const havM = (la1, lo1, la2, lo2) => { const R = 6371000, dLa = (la2-la1)*Math.P
 /* C11 — the "instant geofenced PDF": stamp where the report was generated relative to the surveyed assets */
 function geofenceStamp() {
   const g = S.gpsWatch;
-  const pts = S.trees.filter(t => typeof t.lat === 'number');
+  const pts = S.trees.filter(t => visT(t) && typeof t.lat === 'number');
   if (!g.ok) return 'Report generated without a live GPS fix at time of generation.';
   const here = `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)} (±${Math.round(g.acc)} m)`;
   if (!pts.length) return `Report generated at ${here}.`;
@@ -1291,7 +1291,7 @@ const clamp01 = v => { v = parseFloat(v); return isFinite(v) ? Math.max(0, Math.
 
 /* The app learns from its users: signed overrides feed the next analysis as calibration. */
 function correctionsDigest() {
-  const cs = S.trees.filter(t => t.reviewed && t.aiOriginal).slice(-12).map(t => {
+  const cs = S.trees.filter(t => visT(t) && t.reviewed && t.aiOriginal).slice(-12).map(t => {
     const o = t.aiOriginal || {}, d = [];
     if (o.species && t.ai && t.ai.species && o.species !== t.ai.species) d.push(`species ${o.species} → ${t.ai.species}`);
     if (o.dbh_in != null && t.dbhIn != null && o.dbh_in !== t.dbhIn) d.push(`DBH ${o.dbh_in}″ → ${t.dbhIn}″`);
@@ -1576,7 +1576,7 @@ function download(name, mime, content) {
 }
 /* CSV in the exact V5 FIELD DATA column order, A through X */
 function exportCSV(list) {
-  const src = list || S.trees;
+  const src = list || S.trees.filter(visT);
   const rows = [['Tree ID / Key','Property Name','GPS Location (Lat, Long)','Date / Time Stamp','Hole # / Area Zone','Qty','Species (Common)','Species (Scientific)','Size / DBH (in)','Hazard Rating','Cause of Loss','Location Details','IP / OP','MGD','Salvageable (Y/N)','Prune / Repair ($)','Removal ($)','Disposal Method','Disposal ($)','Stump Method','Stump ($)','Arborist Notes','Field Photo Link','Line Total ($)','DBH Band']];
   for (const t of src) {
     const a = t.ai || {};
@@ -1778,7 +1778,7 @@ function saveName() {
 }
 function knownUsers() {
   const s = new Set(S.users);
-  for (const t of S.trees) if (t.surveyor) s.add(t.surveyor);
+  for (const t of S.trees) if (visT(t) && t.surveyor) s.add(t.surveyor);
   if (S.surveyor) s.add(S.surveyor);
   return [...s].sort((a, b) => a.localeCompare(b));
 }
@@ -1786,7 +1786,7 @@ function selectUser(name) {
   S.surveyor = name; localStorage.setItem('trice_surveyor', name);
   if (!S.users.includes(name)) { S.users.push(name); try { localStorage.setItem('trice_users', JSON.stringify(S.users)); } catch (e) {} }
   queueSync();
-  const mine = S.trees.filter(t => t.surveyor === name).sort((a, b) => (b.when || 0) - (a.when || 0));
+  const mine = S.trees.filter(t => visT(t) && t.surveyor === name).sort((a, b) => (b.when || 0) - (a.when || 0));
   const last = mine[0] && siteOfT(mine[0]);
   if (last && S.site !== last) {
     S.site = last; localStorage.setItem('trice_site', last); localStorage.setItem('trice_joined', '1');
@@ -2052,7 +2052,7 @@ function nameCard() {
     <div class="card" style="padding:24px 18px;margin-top:12px">
       <div style="font-size:17px;font-weight:700">Who's assessing?</div>
       <div style="font-size:12.5px;color:var(--muted);margin-top:4px">Pick your profile — your work follows you to any phone or desktop, and your name signs every record.</div>
-      ${us.length ? `<div style="margin-top:14px;text-align:left;border:1px solid var(--hair);border-radius:13px;overflow:hidden">${us.map(u => { const k = u.replace(/'/g, "\\'"); const mine = S.trees.filter(t => t.surveyor === u).sort((a, b) => (b.when || 0) - (a.when || 0)); const last = mine[0]; return `<button class="trow" style="padding-left:14px;padding-right:14px" onclick="selectUser('${esc(k)}')"><span style="width:30px;height:30px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex:none">${esc(u.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span><span class="mid"><span class="l1">${esc(u)}</span><span class="l2">${mine.length ? `${mine.length} record${mine.length > 1 ? 's' : ''}${last && siteOfT(last) ? ' · last at ' + esc(siteOfT(last)) : ''}` : 'No records yet'}</span></span><span class="chip info">That's me ›</span></button>`; }).join('')}</div>` : ''}
+      ${us.length ? `<div style="margin-top:14px;text-align:left;border:1px solid var(--hair);border-radius:13px;overflow:hidden">${us.map(u => { const k = u.replace(/'/g, "\\'"); const mine = S.trees.filter(t => visT(t) && t.surveyor === u).sort((a, b) => (b.when || 0) - (a.when || 0)); const last = mine[0]; return `<button class="trow" style="padding-left:14px;padding-right:14px" onclick="selectUser('${esc(k)}')"><span style="width:30px;height:30px;border-radius:50%;background:var(--soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex:none">${esc(u.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase())}</span><span class="mid"><span class="l1">${esc(u)}</span><span class="l2">${mine.length ? `${mine.length} record${mine.length > 1 ? 's' : ''}${last && siteOfT(last) ? ' · last at ' + esc(siteOfT(last)) : ''}` : 'No records yet'}</span></span><span class="chip info">That's me ›</span></button>`; }).join('')}</div>` : ''}
       <div class="field" style="margin-top:14px;text-align:left"><label>${us.length ? 'Or add a new name' : 'Your name'}</label><input id="obName" placeholder="Amy Cushman" value="${esc(S.surveyor)}" autocomplete="name"></div>
       <button class="btn primary" style="margin-top:14px" onclick="saveName()">Continue</button>
     </div>
@@ -2361,7 +2361,7 @@ function rowHTML(t) {
 
 /* ---- Trees tab ---- */
 function regFilter() {
-  let list = S.trees.slice().reverse();
+  let list = S.trees.filter(visT).reverse();
   const q = S.regQ.trim().toLowerCase();
   if (q) list = list.filter(t => { const a = t.ai || {}; return `${t.id} ${a.species||''} ${a.latin||''} ${t.zone||''} ${t.locDetails||''} ${t.cause||''} ${(a.action||'')}`.toLowerCase().includes(q); });
   if (S.regHaz !== 'all') list = S.regHaz === 'pending' ? list.filter(t => t.pending) : list.filter(t => t.hazard === S.regHaz);
@@ -2646,7 +2646,7 @@ function pinIcon(t) {
 }
 function mapUsers(src) {
   const m = {};
-  for (const t of (src || S.trees).filter(x => typeof x.lat === 'number')) {
+  for (const t of (src || S.trees.filter(visT)).filter(x => typeof x.lat === 'number')) {
     const k = t.surveyor || 'Unassigned';
     if (!m[k]) m[k] = { n: 0 };
     m[k].n++;
@@ -2823,7 +2823,7 @@ function projCreateDesk() {
   toast('"' + name + '" created' + (picks.length ? ' · ' + picks.length + ' worker' + (picks.length > 1 ? 's' : '') + ' assigned — see Team › Schedule' : ' — crews can join it from any phone'));
 }
 function projectsView() {
-  if (!IS_DESKTOP()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Projects management is a desktop tool — on the phone, create and join projects from Home.</div>';
+  if (!IS_DESKTOP()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Projects management is a desktop tool. On the phone: create, join, archive and restore projects from Home — open the project list and tap Organize.</div>';
   const emps = activeEmps();
   const names = topProjects();
   const st = n => S.projState[n] || {};
@@ -2858,6 +2858,7 @@ function projectsView() {
             ? `<button class="btn ghost" style="margin:0;padding:11px" onclick="projMark('${esc(k)}', false)">Reopen project</button>`
             : `<button class="btn primary" style="margin:0;padding:11px" onclick="projMark('${esc(k)}', true)">✓ Mark complete</button>`}
           <button class="btn ghost" style="margin:0;padding:11px" onclick="S.projectId='${esc(k)}';render()">Details ›</button>
+          <button class="btn ghost" style="margin:0;padding:11px;color:var(--muted)" onclick="archiveProject('${esc(k)}')">Archive</button>
         </div>
       </div>
     </div>`;
@@ -2875,6 +2876,12 @@ function projectsView() {
   <div class="slab" style="margin-bottom:10px">Active projects · ${active.length}</div>
   ${active.length ? active.map(projRow).join('') : '<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;margin-bottom:10px">No active projects — create one above.</div>'}
   ${doneL.length ? `<div class="slab" style="margin:20px 0 10px">Completed · ${doneL.length}</div>${doneL.map(projRow).join('')}` : ''}
+  ${S.archivedProjects.length ? `<div class="slab" style="margin:20px 0 10px">Archived · ${S.archivedProjects.length}</div>
+  ${S.archivedProjects.slice().sort().map(a => { const ak = a.replace(/'/g, "\\'"); const an = S.trees.filter(t => siteOfT(t) === a || isUnder(siteOfT(t), a)).length; return `
+  <div class="card" style="margin-bottom:8px;display:flex;align-items:center;gap:14px">
+    <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a)}</span><span style="display:block;font-size:11px;color:var(--faint);margin-top:2px">${an ? an + ' asset' + (an > 1 ? 's' : '') + ' hidden with it — restore brings them back everywhere' : 'Empty'}</span></span>
+    <button class="btn ghost" style="width:auto;margin:0;padding:10px 18px;flex:none;color:var(--info)" onclick="restoreProject('${esc(ak)}')">Restore</button>
+  </div>`; }).join('')}` : ''}
   <div style="margin-top:6px;font-size:11px;color:var(--faint);line-height:1.55">Completion is a status, not a deletion — the register, map and reports keep every record. Marking complete is signed with your assessor name and syncs to the whole team.</div>`;
 }
 
@@ -3462,7 +3469,7 @@ async function predictPricing() {
   const scope = sheetScope().filter(t => t.hazard !== 'Cleared' && t.prune == null && t.removal == null && t.disposal == null && t.stump == null);
   if (!scope.length) { toast('Every line in scope already carries a price or is Cleared'); return; }
   S.predBusy = true; render();
-  const priced = S.trees.filter(t => lineTotal(t) > 0).slice(0, 40).map(t => ({ species: (t.ai || {}).species, dbh: t.dbhIn, qty: t.qty || 1, hazard: t.hazard, prune: t.prune, takedown: t.removal, debris: t.disposal, stump: t.stump }));
+  const priced = S.trees.filter(t => visT(t) && lineTotal(t) > 0).slice(0, 40).map(t => ({ species: (t.ai || {}).species, dbh: t.dbhIn, qty: t.qty || 1, hazard: t.hazard, prune: t.prune, takedown: t.removal, debris: t.disposal, stump: t.stump }));
   let aiMap = {}, aiOk = false;
   if (navigator.onLine) {
     try {
@@ -4145,7 +4152,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v27.1</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v27.3</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4268,7 +4275,7 @@ function deliverFile(name, blob) {
 }
 async function exportXLSX(list, label) {
   EXPLOG = [];
-  const SRC = list || S.trees;
+  const SRC = list || S.trees.filter(visT);
   elog('scope rows', SRC.length);
   if (!SRC.length) { toast('Log some assets first'); return; }
   toast('Building the workbook (' + BUILD.replace('trice-', '') + ') — embedding ' + SRC.length + ' photo' + (SRC.length === 1 ? '' : 's') + '…');
@@ -4354,7 +4361,7 @@ async function exportXLSX(list, label) {
   }
 }
 function exportXLSXBasic(list, label) {
-  const SRC = list || S.trees;
+  const SRC = list || S.trees.filter(visT);
   if (!SRC.length) { toast('Log some assets first'); return; }
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
   const j = S.job || {};
@@ -4456,7 +4463,7 @@ function projectsSection() {
       <span style="color:var(--faint)">›</span>
     </button>`; }).join('')}
   </div>
-  ${S.trees.length ? `<div class="card" style="padding:9px 15px;margin-top:8px"><button class="trow" onclick="printReport({all:true})"><span class="mid"><span class="l1">Consolidated report — everything</span><span class="l2">Every project, every assessor, one document grouped by site</span></span><span style="color:var(--faint)">›</span></button></div>` : ''}`;
+  ${S.trees.some(visT) ? `<div class="card" style="padding:9px 15px;margin-top:8px"><button class="trow" onclick="printReport({all:true})"><span class="mid"><span class="l1">Consolidated report — everything</span><span class="l2">Every project, every assessor, one document grouped by site</span></span><span style="color:var(--faint)">›</span></button></div>` : ''}`;
 }
 function projectSheet(site) {
   const list = projTrees(site);
@@ -5156,7 +5163,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v27.1</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v27.3</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
