@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v24.4">
+<meta name="version" content="trice-v24.6">
 <meta property="og:title" content="Trice — Field data. Clear decisions.">
 <meta property="og:description" content="One system: capture, sync, map, report.">
 <meta property="og:image" content="https://trice.live/og.png?v=28">
@@ -3885,6 +3885,7 @@ function reportView() {
     <button class="trow" onclick="printScoped()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Inspection report — print / save as PDF</span><span class="l2">${esc(scopeLabel)} · glance, charts, register, photo journal, certification</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportScopedXLSX()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export XLSX — carrier workbook</span><span class="l2">${esc(scopeLabel)} · summary + full register, Exhibit-A columns</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="exportScopedCSV()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Export V5 field data (CSV)</span><span class="l2">${esc(scopeLabel)} · exact V5 column order A–X</span></span><span style="color:var(--faint)">›</span></button>
+    <button class="trow" onclick="openPhotoExhibit()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Photo exhibit — every tree, big photo, full description</span><span class="l2">${esc(scopeLabel)} · the Exhibit B the carrier expects, assembled live — no hand-typed captions</span></span><span style="color:var(--faint)">›</span></button>
     <button class="trow" onclick="printSubScope()" ${T.lines ? '' : 'disabled'}><span class="mid"><span class="l1">Sub work scope — print / send</span><span class="l2">${esc(scopeLabel)} · photos, damage &amp; recommendations only — no pricing</span></span><span style="color:var(--faint)">›</span></button>
   </div>
   ${weatherCard()}
@@ -3948,7 +3949,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.4</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v24.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4059,9 +4060,12 @@ async function exportXLSX(list, label) {
       if (!src) { missing++; continue; }
       const th = await thumbJPEG(src, 440);
       if (!th) { missing++; continue; }
-      const imgId = wb.addImage({ base64: th, extension: 'jpeg' });
-      ws.getRow(rowIx).height = 64;
-      ws.addImage(imgId, { tl: { col: 1.05, row: rowIx - 0.97 }, ext: { width: 110, height: 82 }, editAs: 'oneCell' });
+      try {
+        const b64 = th.indexOf(',') > -1 ? th.slice(th.indexOf(',') + 1) : th;
+        const imgId = wb.addImage({ base64: b64, extension: 'jpeg' });
+        ws.getRow(rowIx).height = 64;
+        ws.addImage(imgId, { tl: { col: 1.05, row: rowIx - 0.97 }, ext: { width: 110, height: 82 }, editAs: 'oneCell' });
+      } catch (e) { missing++; continue; }
       const uCell = ws.getCell(rowIx, heads.length);
       if (uCell.value) uCell.value = { text: 'Full photo', hyperlink: String(uCell.value) };
       embedded++;
@@ -4105,7 +4109,7 @@ function exportXLSXBasic(list, label) {
     rowsMeta.push({ hpx: u ? 74 : 20 });
     if (!u) continue;
     const pAddr = XLSX.utils.encode_cell({ r, c: pCol });
-    ws[pAddr] = { t: 'e', f: 'IMAGE("' + u + '",,1)' };
+    ws[pAddr] = { t: 's', v: '', f: 'IMAGE("' + u + '",,1)' };
     const uAddr = XLSX.utils.encode_cell({ r, c: uCol });
     if (ws[uAddr]) ws[uAddr].l = { Target: u, Tooltip: 'Open photo' };
   }
@@ -4461,6 +4465,82 @@ function printReport(scope) {
   if (scope.review) { openReview(); return; }
   window.print();
 }
+/* ---- Photo Exhibit ----
+   The Lexington "Exhibit B" done right: one document, every asset, big photograph,
+   full description — but self-assembling from the register instead of hand-typed
+   captions. Two cards per row, print-safe, no pricing unless accepted (amber ≈ for
+   predictions, TBD otherwise, same rules as everywhere). Scoped by the Report filters. */
+function photoExhibitHTML(TS, label) {
+  const j = S.job || {};
+  const T = totals(TS);
+  const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  const counts = arr => { const m = {}; for (const k of arr) if (k) m[k] = (m[k] || 0) + 1; return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const causeTop = counts(TS.map(t => t.cause))[0];
+  const K = 'font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:#98948a;font-weight:700;width:82px;flex:none;padding-top:1px';
+  const line = (k, v) => v ? `<div style="display:flex;gap:8px;margin-top:5px"><span style="${K}">${k}</span><span style="flex:1;font-size:10px;color:#403d37;line-height:1.45">${v}</span></div>` : '';
+  const card = t => {
+    const a = t.ai || {};
+    const hz = GX_HAZ(t.hazard || 'Moderate');
+    const lt = lineTotal(t);
+    const remed = lt > 0 ? `<strong>${money(lt)}</strong>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`
+      : (hasPred(t) ? `<span style="color:#b8842a;font-weight:700">\u2248${money(predTotal(t))} AI predicted \u2014 awaiting review</span>` : `<span style="color:#b8842a;font-weight:700">TBD</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
+    return `
+    <div style="flex:1;min-width:430px;max-width:calc(50% - 5px);background:#fff;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden;page-break-inside:avoid">
+      <div style="background:${GX_NAVY};color:#fff;display:flex;align-items:center;justify-content:space-between;padding:9px 14px">
+        <span style="font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px;letter-spacing:.04em">${esc(t.id)}</span>
+        <span style="color:${hz[0]};background:rgba(255,255,255,.94);border-radius:999px;padding:3px 10px;font-size:8.5px;font-weight:800;letter-spacing:.08em">${hz[1]} ${hz[2]}</span>
+      </div>
+      ${t.photo ? `<img src="${t.photo}" style="display:block;width:100%;height:330px;object-fit:cover" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
+      <div style="padding:12px 14px 13px">
+        <div style="font-size:13px;font-weight:800">${esc(a.species || 'Pending analysis')}${a.latin ? ` <em style="font-weight:400;color:#86837b;font-size:11px">(${esc(a.latin)})</em>` : ''}</div>
+        ${line('Qty / size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 \u00b7 ' + DBH_BAND(t.dbhIn) : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
+        ${line('Zone', `${esc(t.zone || '\u2014')}${t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : ''} \u00b7 ${t.ip === 'OP' ? 'OP' : 'IP'}`)}
+        ${line('Failure', esc((t.failures || []).join(' \u00b7 ') || '\u2014'))}
+        ${line('Observed', esc(a.description || ''))}
+        ${line('Cause', esc(t.cause || '\u2014'))}
+        ${t.notes ? line('Notes', esc(t.notes)) : ''}
+        ${line('Remediation', remed)}
+        <div style="margin-top:9px;padding-top:8px;border-top:1px solid #efece5;font-size:8px;color:#a8a49a">
+          ${typeof t.lat === 'number' ? 'GPS ' + fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) + ' \u00b7 ' : ''}Captured ${new Date(t.when).toLocaleString()}${t.surveyor ? ' \u00b7 ' + esc(t.surveyor) : ''} \u00b7 photo bound to record
+        </div>
+      </div>
+    </div>`;
+  };
+  return `
+  <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#17181a;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px">
+      <div style="width:44px;height:44px;border-radius:11px;background:${GX_ACCENT};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:11px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:16px;height:3px;background:#fff;border-radius:1px;display:block"></span><span style="width:22px;height:3px;background:#fff;border-radius:1px;display:block"></span></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;letter-spacing:.3em;font-weight:800">TRICE</div>
+        <div style="font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#98948a;font-weight:700;margin-top:1px">${esc(j.assessType || 'Post-loss tree damage assessment')} \u00b7 Photographic exhibit</div>
+        <div style="font-size:24px;font-weight:800;letter-spacing:-.01em;margin-top:5px;line-height:1.15">${esc(label)} \u2014 Photo Exhibit</div>
+        <div style="font-size:9.5px;color:#5c584f;margin-top:5px">${[j.town && j.county ? j.town + ', ' + j.county + ' County' : (j.town || ''), j.dateOfLoss ? 'Date of loss ' + j.dateOfLoss : '', 'Generated from the Trice field register ' + today].filter(Boolean).map(esc).join(' \u00b7 ')}</div>
+      </div>
+    </div>
+    <div style="background:${GX_NAVY};border-radius:13px;padding:14px 18px;display:flex;gap:22px;flex-wrap:wrap;color:#fff;page-break-inside:avoid;margin-bottom:18px">
+      ${[['Line items', String(T.lines)], ['Specimens', String(T.specimens)], ['High hazard', T.byHaz['High Hazard'].lines + ' items'], ['Photographs', TS.filter(t => t.photo).length + ' of ' + T.lines + ' on this device'], ['Cause of loss', causeTop ? esc(causeTop[0]) : '\u2014']]
+        .map(kv => `<div><div style="font-size:7.5px;letter-spacing:.13em;text-transform:uppercase;color:#8fa0ae;font-weight:700">${kv[0]}</div><div style="font-size:12.5px;font-weight:700;margin-top:3px">${kv[1]}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">${TS.map(card).join('')}</div>
+    <div style="margin-top:14px;padding-top:9px;border-top:1px solid #e7e4dc;font-size:8px;color:#a8a49a;line-height:1.6">
+      Every photograph on this exhibit was captured in the Trice field app and is bound to its record \u2014 species, dimensions, hazard, GPS and timestamp travel with the image; no caption was typed by hand.
+      Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. Not legal, tax or insurance advice. Generated ${new Date().toLocaleString()}.
+    </div>
+  </div>`;
+}
+function openPhotoExhibit() {
+  const TS = repScope();
+  if (!TS.length) { toast('Nothing in this scope \u2014 widen the Report filters'); return; }
+  const label = S.repProject || 'All projects';
+  document.getElementById('printReport').innerHTML = photoExhibitHTML(TS, label);
+  let w = document.getElementById('reviewWrap');
+  if (!w) { openGridExhibit(); closeReview(); w = document.getElementById('reviewWrap'); }
+  w.innerHTML = `<div class="bar"><span class="ttl">Photo exhibit \u2014 ${esc(label)}<span class="sub">${TS.length} assets \u00b7 big photographs with full descriptions \u00b7 photos and computed data are locked; notes in the print are editable per card.</span></span>
+    <button class="go" onclick="reviewPrint()">Print / save PDF</button>
+    <button onclick="closeReview()">Close</button></div>
+    <div class="body"><div class="paper" id="reviewPaper" contenteditable="false" style="max-width:1060px;background:${GX_CREAM}">${document.getElementById('printReport').innerHTML}</div></div>`;
+  w.style.display = 'flex';
+}
 function printSubScope() {
   const TS = repScope().filter(t => t.hazard !== 'Cleared');
   if (!TS.length) { toast('Nothing open in this scope — Cleared work is excluded'); return; }
@@ -4521,7 +4601,24 @@ function openReview() {
   w.style.display = 'flex';
   lockPaperEditing();
 }
-function reviewPrint() { const p = document.getElementById('reviewPaper'); if (p) document.getElementById('printReport').innerHTML = p.innerHTML; window.print(); }
+async function reviewPrint() {
+  /* Copying HTML creates fresh <img> nodes; printing synchronously snapshots the
+     page before the browser decodes them — blank pictures in the PDF. Wait for
+     every image (register thumbnails, photo journal, map tiles) to finish, capped
+     at 10s so a dead tile can never hang the print. */
+  const p = document.getElementById('reviewPaper');
+  if (p) document.getElementById('printReport').innerHTML = p.innerHTML;
+  const imgs = Array.from(document.querySelectorAll('#printReport img'));
+  if (imgs.length) {
+    toast('Preparing ' + imgs.length + ' image' + (imgs.length === 1 ? '' : 's') + ' for print…');
+    await Promise.race([
+      Promise.all(imgs.map(im => (im.complete && im.naturalWidth) ? Promise.resolve() : new Promise(res => { im.onload = im.onerror = res; }))).then(() =>
+        Promise.all(imgs.map(im => im.decode ? im.decode().catch(() => {}) : Promise.resolve()))),
+      new Promise(res => setTimeout(res, 10000))
+    ]);
+  }
+  window.print();
+}
 function closeReview() { const w = document.getElementById('reviewWrap'); if (w) { w.style.display = 'none'; w.innerHTML = ''; } }
 
 
@@ -4796,7 +4893,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.4</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v24.6</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
