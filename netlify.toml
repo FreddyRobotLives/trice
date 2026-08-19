@@ -10,9 +10,29 @@
     X-Frame-Options = "DENY"
 
 [[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/icon-192.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/icon-512.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
 
 [[headers]]
   for = "/sw.js"
