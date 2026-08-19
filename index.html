@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v28.6">
+<meta name="version" content="trice-v28.7">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -2966,8 +2966,7 @@ function woZoneChips() {
     : '<span style="font-size:12px;color:var(--faint)">No zones captured in this project yet.</span>';
 }
 function workView() {
-  if (!IS_DESKTOP()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Work orders are managed on the admin desktop. Subs never need this tab — they get a link.</div>';
-  if (!ADMIN()) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Work orders are an admin tool — turn on Admin in the header.</div>';
+  if (!S.admin) return '<div class="card" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Work orders are an admin tool. Turn on Admin ' + (IS_DESKTOP() ? 'in the header' : 'from the menu (top right)') + ', then this tab lists every sub link and its live progress.</div>';
   const names = topProjects();
   const subNames = Object.values(S.subs || {}).filter(s => s && !s.del && s.active !== false).map(s => s.name).sort();
   const orders = Object.entries(S.workorders || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
@@ -4301,7 +4300,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v28.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v28.7</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -5313,7 +5312,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v28.6</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v28.7</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5323,7 +5322,7 @@ function render() {
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
     <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div><img class="railcrest" src="${WTR_MARK}" alt="WTR Group"></div>${IS_DESKTOP()
-      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${navBtn('projects','Projects')}${ADMIN() ? navBtn('work','Work') : ''}${ADMIN() ? navBtn('team','Team') : ''}`
+      ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${navBtn('projects','Projects')}${S.admin ? navBtn('work','Work') : ''}${ADMIN() ? navBtn('team','Team') : ''}`
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}${IS_DESKTOP() ? `<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button>` : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
@@ -5348,7 +5347,7 @@ function render() {
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
 try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => render()); } catch (e) { window.addEventListener('resize', () => { clearTimeout(window.__rzT); window.__rzT = setTimeout(render, 200); }); }
 const ADMIN = () => S.admin && IS_DESKTOP();
-function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && S.tab === 'team') S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
+function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && (S.tab === 'team' || S.tab === 'work')) S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
 function fabCapture() {
   if (!S.surveyor) { go('survey'); toast('Pick your name first'); return; }
   if (!S.site) { go('survey'); toast('Join a project first — every capture files under it'); return; }
@@ -5371,6 +5370,8 @@ function hdrMenu() {
     ${row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--info)">${S.site ? 'Switch project' : 'Join a project'}</span><span style="color:var(--faint)">\u203a</span>`, "S.hdrMenu=false;S.showPicker=true;render()")}
     ${row(`<span id="syncTop" style="flex:1;font-size:13px;font-weight:700"></span><span style="font-size:11px;color:var(--faint)">tap to sync</span>`, "manualSync()")}
     ${row(`<span style="flex:1;font-size:13px;font-weight:700">${esc(S.surveyor || 'No user')}</span><span style="font-size:11px;color:var(--info);font-weight:700">Switch user</span>`, "S.hdrMenu=false;switchUser()")}
+    ${!IS_DESKTOP() ? row(`<span style="flex:1;font-size:13px;font-weight:700">Admin mode</span><span style="font-size:11px;font-weight:700;color:${S.admin ? 'var(--accent)' : 'var(--faint)'}">${S.admin ? 'On ✓' : 'Off'}</span>`, "S.hdrMenu=false;toggleAdmin()") : ''}
+    ${!IS_DESKTOP() && S.admin ? row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--info)">Work orders</span><span style="color:var(--faint)">\u203a</span>`, "S.hdrMenu=false;go('work')") : ''}
     ${row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--bad)">Sign out</span>`, "S.hdrMenu=false;signOut()")}
   </div>`;
 }
@@ -5562,7 +5563,7 @@ function subBoot() {
   if (S.site && !localStorage.getItem('trice_joined')) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   if (S.site && projHidden(S.site)) { S.site = ''; try { localStorage.removeItem('trice_site'); } catch (e) {} }
   try { const savedDraft = await DB.getMeta('draft'); if (savedDraft && savedDraft.photo) { S.draft = { ...savedDraft, analyzing: false }; S.tab = 'survey'; setTimeout(() => toast('Resumed your in-progress capture — nothing was lost'), 400); } } catch (e) {}
-  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','sheet','report','projects'].includes(lt)) S.tab = lt; }
+  if (!S.draft) { const lt = localStorage.getItem('trice_tab'); if (['survey','map','trees','sheet','report','projects','work'].includes(lt)) S.tab = lt; }
   render();
   syncNow(); SYNC.timer = setInterval(syncNow, 25000 + Math.floor(Math.random() * 12000));
   window.addEventListener('online', syncNow);
