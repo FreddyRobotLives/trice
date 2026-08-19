@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v28.5">
+<meta name="version" content="trice-v28.6">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -2330,7 +2330,7 @@ function detectionCard(r, i, total) {
       <div class="card">
         <div class="slab" style="margin-bottom:8px">Hazard rating</div>
         ${hazButtons(i, r.hazard)}
-        <div class="slab" style="margin:13px 0 8px">Mechanical failure</div>
+        <div class="slab" style="margin:13px 0 8px">Damage</div>
         ${failChips(i, r.failures)}
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:13px">
           <div class="field"><label>Qty</label><input type="number" min="1" value="${r.qty || 1}" oninput="S.draft.results[${i}].qty=Math.max(1,parseInt(this.value,10)||1)"></div>
@@ -2350,7 +2350,7 @@ function detectionCard(r, i, total) {
           <div class="field"><label>Height (ft)</label><input type="number" value="${esc(a.height_ft ?? '')}" oninput="setDetAI(${i},'height_ft',this.value)" onchange="render()"></div>
         </div>
         <div class="field" style="margin-top:8px"><label>Recommendation</label><input value="${esc(a.action || '')}" oninput="setDetAI(${i},'action',this.value)" onchange="render()"></div>
-        <div style="margin-top:7px;font-size:11px;color:var(--faint)">Hazard, cause and failure are set above. Everything stays editable after logging too — open the record and tap Edit.</div>
+        <div style="margin-top:7px;font-size:11px;color:var(--faint)">Hazard, cause and damage are set above. Everything stays editable after logging too — open the record and tap Edit.</div>
       </details>` : ''}` : ''}
     </div>
   </div>`;
@@ -2570,7 +2570,7 @@ function editView(t) {
     ${f('canopy','Canopy', a.canopy, 'Full, dense')}
     <div class="field" style="margin-top:10px"><label>Hazard rating</label><select id="ed_hazard">${HAZARDS.map(h => `<option ${t.hazard === h ? 'selected':''}>${h}</option>`).join('')}</select></div>
     <div class="field" style="margin-top:10px"><label>Cause of loss</label><select id="ed_cause" onchange="var o=document.getElementById('ed_cause_other'); if(o) o.style.display = this.value === 'Other…' ? 'block' : 'none'">${CAUSES.map(c => `<option ${t.cause === c ? 'selected':''}>${c}</option>`).join('')}<option ${t.cause && !CAUSES.includes(t.cause) ? 'selected' : ''}>Other…</option></select><input id="ed_cause_other" placeholder="Type the cause" value="${esc(t.cause && !CAUSES.includes(t.cause) ? t.cause : '')}" style="margin-top:8px;display:${t.cause && !CAUSES.includes(t.cause) ? 'block' : 'none'};width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:#fff;color:var(--ink)"></div>
-    <div class="field" style="margin-top:10px"><label>Mechanical failure</label><div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">${FAILURES.map(fl => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" name="ed_fail" value="${fl}" ${((t.failures)||[]).includes(fl) ? 'checked':''} style="width:16px;height:16px;accent-color:#c8452c">${fl}</label>`).join('')}</div></div>
+    <div class="field" style="margin-top:10px"><label>Damage</label><div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">${FAILURES.map(fl => `<label style="display:flex;align-items:center;gap:6px;font-size:12.5px"><input type="checkbox" name="ed_fail" value="${fl}" ${((t.failures)||[]).includes(fl) ? 'checked':''} style="width:16px;height:16px;accent-color:#c8452c">${fl}</label>`).join('')}</div></div>
     ${f('health','Health 0–100', a.health, '', 'number')}
     <div class="field" style="margin-top:10px"><label>Description — what you saw</label><textarea id="ed_desc">${esc(a.description||'')}</textarea></div>
     <div class="field" style="margin-top:10px"><label>Findings (one per line)</label><textarea id="ed_findings">${esc((a.findings||[]).join('\n'))}</textarea></div>
@@ -3668,7 +3668,7 @@ function clearAllPreds() { const sc = sheetScope().filter(t => t.pred); for (con
 function setSheetProject(p) { S.sheetProject = p; render(); }
 function sheetScope() { const vis = S.trees.filter(visT); if (!S.sheetProject) return vis; return vis.filter(t => projMatches(siteOfT(t), S.sheetProject)); }
 function sheetRows(src) {
-  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Band','Height (ft)','Health','Hazard','Cause of loss','Failure','IP/OP','MGD','Location details','Recommendation','Pricing','Prune ($)','Take-down ($)','Debris method','Debris ($)','Stump method','Stump ($)','Line total ($)','Assessor','Notes'];
+  const head = ['Tree ID','Project','Location','GPS (lat, long)','Date / time','Hole / zone','Qty','Species','Scientific','DBH (in)','Band','Height (ft)','Health','Hazard','Cause of loss','Damage','IP/OP','MGD','Location details','Recommendation','Pricing','Prune ($)','Take-down ($)','Debris method','Debris ($)','Stump method','Stump ($)','Line total ($)','Assessor','Notes'];
   const rows = [head];
   for (const t of src) { const a = t.ai || {}; const pstate = hasPred(t) ? 'AI predicted ≈' + predTotal(t) : (lineTotal(t) > 0 || t.prune != null || t.removal != null || t.disposal != null || t.stump != null ? (t.priceSource === 'AI prediction' ? 'AI accepted' : 'Priced') : ''); rows.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : '—'), typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) : '', isoWhen(t.when), t.zone || '', t.qty || 1, a.species || 'Pending', a.latin || '', t.dbhIn ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? '', a.health ?? '', t.hazard || '', t.cause || '', (t.failures || []).join('; '), t.ip || 'IP', t.mgd || 'No', t.locDetails || '', a.action || '', pstate, t.prune ?? '', t.removal ?? '', t.disposalMethod || '', t.disposal ?? '', t.stumpMethod || '', t.stump ?? '', lineTotal(t) || '', t.surveyor || '', t.notes || '']); }
   return rows;
@@ -3825,8 +3825,8 @@ function assetDatabaseHTML(TS, label, clientSafe) {
   const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif";
   const hazDot = h => h === 'High Hazard' ? '#e0483e' : (h === 'Cleared' ? '#34a853' : '#e8a33d');
   const photod = TS.filter(t => t.photo).length;
-  const spec = (k, v) => v ? `<div style="display:flex;justify-content:space-between;gap:18px;padding:9px 0;border-top:1px solid ${HAIR}"><span style="flex:none;font-size:11px;color:${GRAY}">${k}</span><span style="flex:1;text-align:right;font-size:11.5px;color:${INK};line-height:1.5">${v}</span></div>` : '';
-  const stat = (n, l) => `<div style="flex:1;min-width:86px;text-align:center;padding:4px 8px"><div style="font-size:clamp(22px, 6vw, 34px);font-weight:600;letter-spacing:-.02em;color:${INK};white-space:nowrap">${n}</div><div style="font-size:11px;color:${GRAY};margin-top:2px">${l}</div></div>`;
+  const spec = (k, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid ${HAIR}"><span style="flex:none;font-size:11px;color:${GRAY}">${k}</span><span style="flex:1;min-width:0;text-align:right;font-size:11.5px;color:${INK};line-height:1.5;overflow-wrap:break-word">${v}</span></div>` : '';
+  const stat = (n, l) => `<div style="flex:1 1 96px;min-width:0;text-align:center;padding:4px 8px"><div style="font-size:clamp(22px, 6vw, 34px);font-weight:600;letter-spacing:-.02em;color:${INK};white-space:nowrap">${n}</div><div style="font-size:11px;color:${GRAY};margin-top:2px">${l}</div></div>`;
   const card = t => {
     const a = t.ai || {};
     const lt = lineTotal(t);
@@ -3847,7 +3847,7 @@ function assetDatabaseHTML(TS, label, clientSafe) {
           ${spec('Size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 DBH' : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
           ${spec('Location', `${esc(t.zone || '\u2014')}${t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : ''} \u00b7 ${t.ip === 'OP' ? 'Out of play' : 'In play'}`)}
           ${spec('Assessment', esc(t.notes || a.description || ''))}
-          ${spec('Failure', esc((t.failures || []).join(' \u00b7 ')))}
+          ${spec('Damage', esc((t.failures || []).join(' \u00b7 ')))}
           ${spec('Cause', esc(t.cause || ''))}
           ${t.salv ? spec('Salvageable', esc(t.salv)) : ''}
                     ${clientSafe ? spec('Recommended', esc(a.action || '')) : spec('Remediation', remed)}
@@ -3925,9 +3925,9 @@ function gridExhibitHTML(TS, label, capRows) {
   const assessors = [...new Set(TS.map(t => t.surveyor).filter(Boolean))];
   const idSlug = (label === 'All projects' ? 'TRICE' : label.replace(/[^A-Za-z0-9]+/g, '').slice(0, 10).toUpperCase() || 'TRICE') + '-' + new Date().getFullYear();
   const K = 'font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#98948a;font-weight:700';
-  const tile = (k, v, sub) => `<div style="flex:1;min-width:118px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 14px;page-break-inside:avoid"><div style="${K}">${k}</div><div style="font-size:23px;font-weight:800;letter-spacing:-.02em;margin-top:3px;color:#17181a">${v}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:3px;line-height:1.4">${sub}</div>` : ''}</div>`;
+  const tile = (k, v, sub) => `<div style="flex:1 1 128px;min-width:0;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 14px;page-break-inside:avoid"><div style="${K}">${k}</div><div style="font-size:23px;font-weight:800;letter-spacing:-.02em;margin-top:3px;color:#17181a">${v}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:3px;line-height:1.4">${sub}</div>` : ''}</div>`;
   const bar = (lab, n, max, right, col) => `<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="width:104px;font-size:9.5px;color:#5c584f;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none;font-weight:600">${esc(lab)}</div><div style="flex:1;height:11px;background:${GX_CREAM};border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(n / max * 100))}%;background:${col || GX_NAVY};border-radius:4px"></div></div><div style="width:58px;font-size:9.5px;font-weight:800;flex:none;font-family:ui-monospace,Menlo,monospace">${right}</div></div>`;
-  const panel = (title, sub, inner) => `<div style="flex:1;min-width:300px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:15px 16px;page-break-inside:avoid"><div style="font-size:11.5px;font-weight:800;color:#17181a">${title}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:2px;line-height:1.45">${sub}</div>` : ''}<div style="margin-top:9px">${inner}</div></div>`;
+  const panel = (title, sub, inner) => `<div style="flex:1 1 300px;min-width:0;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:15px 16px;page-break-inside:avoid"><div style="font-size:11.5px;font-weight:800;color:#17181a">${title}</div>${sub ? `<div style="font-size:9.5px;color:#86837b;margin-top:2px;line-height:1.45">${sub}</div>` : ''}<div style="margin-top:9px">${inner}</div></div>`;
   const zMax = Math.max(1, ...zoneKeys.map(z => zones[z].spec));
   const zCostMax = Math.max(1, ...zoneKeys.map(z => zones[z].cost));
   const spMax = Math.max(1, ...(species.slice(0, 7).map(s => s[1])));
@@ -4002,8 +4002,8 @@ function gridExhibitHTML(TS, label, capRows) {
       ${panel('Specimens by DBH band', 'Banded to the unit-price removal schedule \u2014 how the carrier calculates.', DBH_BANDS.map(b => bar(b, T.byBand[b].specimens || 0.02, bMax, T.byBand[b].specimens || '', GX_NAVY)).join('') + (failTop.length ? `<div style="font-size:10.5px;font-weight:800;margin:12px 0 2px">Mechanical failure mode</div>` + failTop.slice(0, 5).map(fl => bar(fl[0], fl[1], flMax, fl[1], '#2f7d55')).join('') : ''))}
     </div>
     <div style="font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#98948a;font-weight:800;margin:20px 0 8px">03 \u00b7 Asset register \u2014 ${T.lines} line items</div>
-    <table style="width:100%;border-collapse:separate;border-spacing:0;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden">
-      <tr data-locked="1">${['#','Asset','Photo','Hole / zone','Species','DBH','Band','Ht','Qty','IP/OP','Hazard','Failure mode','Cause','Prune','Take-down','Debris','Stump','Line total','Assessor'].map(th).join('')}</tr>
+    <div class="tblwrap"><table style="width:100%;min-width:700px;border-collapse:separate;border-spacing:0;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden">
+      <tr data-locked="1">${['#','Asset','Photo','Hole / zone','Species','DBH','Band','Ht','Qty','IP/OP','Hazard','Damage','Cause','Prune','Take-down','Debris','Stump','Line total','Assessor'].map(th).join('')}</tr>
       ${rows}
       <tr data-locked="1" style="background:${GX_CREAM}">
         <td colspan="8" style="padding:9px 7px;font-size:9.5px;font-weight:800">Total</td>
@@ -4016,7 +4016,7 @@ function gridExhibitHTML(TS, label, capRows) {
         <td style="padding:9px 7px;text-align:right;font-size:10px;font-weight:800;font-family:ui-monospace,Menlo,monospace">${T.total ? money(T.total) + (predSum ? ` <span style="color:#b8842a;font-size:8px">+\u2248${money(predSum)}</span>` : '') : (predSum ? `<span style="color:#b8842a">\u2248${money(predSum)}</span>` : '<span style="color:#b8842a">TBD</span>')}</td>
         <td></td>
       </tr>
-    </table>
+    </table></div>
     ${T.unpriced || TS.some(hasPred) ? `<div style="margin-top:7px;font-size:8.5px;color:#86837b">Black figures are accepted pricing. Amber \u2248 figures are AI price predictions awaiting review \u2014 clearly marked, never blended into accepted totals. TBD marks a line with no price and no prediction yet.</div>` : ''}
     <div style="margin-top:16px;background:#fff;border:1px solid #e7e4dc;border-radius:13px;padding:13px 16px;page-break-inside:avoid">
       <div style="font-size:11.5px;font-weight:800">Data quality</div>
@@ -4049,7 +4049,7 @@ function ensureReviewWrap() {
   let w = document.getElementById('reviewWrap');
   if (w) return w;
   const st = document.createElement('style');
-  st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper [style*=page-break-inside]{content-visibility:auto;contain-intrinsic-size:auto 620px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media(max-width:640px){#reviewWrap .paper{padding:14px 10px;border-radius:12px}#reviewWrap .body{padding:10px 6px 44px}}@media print{#reviewWrap{display:none !important}}';
+  st.textContent = '#reviewWrap{position:fixed;inset:0;z-index:300;background:#eae7e0;display:flex;flex-direction:column}#reviewWrap .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-bottom:1px solid #e3e1da;flex-wrap:wrap}#reviewWrap .bar .ttl{flex:1;min-width:150px;font-size:13px;font-weight:700}#reviewWrap .bar .sub{display:block;font-size:10.5px;color:#8a929b;font-weight:500;margin-top:1px}#reviewWrap .bar button{border:1px solid #e3e1da;background:#fff;border-radius:999px;padding:10px 16px;font-size:12.5px;font-weight:700;color:#16181d}#reviewWrap .bar button.go{background:#c8452c;border-color:#c8452c;color:#fff}#reviewWrap .body{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:16px 12px 44px}#reviewWrap .paper [style*=page-break-inside]{content-visibility:auto;contain-intrinsic-size:auto 620px}#reviewWrap .paper{background:#fff;border-radius:14px;max-width:860px;margin:0 auto;padding:28px 24px;box-shadow:0 12px 34px rgba(8,12,18,.14);outline:none}@media(max-width:640px){#reviewWrap .paper{padding:14px 10px;border-radius:12px}#reviewWrap .body{padding:10px 6px 44px}}#reviewWrap .paper img{max-width:100%;height:auto}#reviewWrap .paper .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}#reviewWrap .paper .assess table{width:100%;border-collapse:collapse;margin-top:10px}#reviewWrap .paper .assess th,#reviewWrap .paper .assess td{text-align:left;padding:6px 8px;border-bottom:1px solid #e5e5e5;font-size:11px;vertical-align:top}#reviewWrap .paper .assess th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#777}#reviewWrap .paper .assess .ptree{border:1px solid #ddd;border-radius:10px;padding:14px;margin-top:12px;display:flex;gap:14px;flex-wrap:wrap}#reviewWrap .paper .assess .ptree img{width:150px;height:150px;object-fit:cover;border-radius:8px;flex:none}@media print{#reviewWrap{display:none !important}}';
   document.head.appendChild(st);
   w = document.createElement('div'); w.id = 'reviewWrap';
   document.body.appendChild(w);
@@ -4124,10 +4124,10 @@ function gridTable(head, body, src) {
   const byId = {}; for (const t of (src || [])) byId[t.id] = t;
   const s = S.sheetSort || {};
   return `<div id="gridTableScroll" style="border:1px solid var(--hair);border-radius:14px;background:#fff;overflow:auto;height:100%;-webkit-overflow-scrolling:touch">
-    <table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
+    <div class="tblwrap"><table style="border-collapse:separate;border-spacing:0;font-size:11px;width:max-content">
       <tr><th style="position:sticky;top:0;left:0;z-index:3;background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 8px">Photo</th>${head.map((h, ci) => `<th onclick="sheetSort(${ci})" title="Sort by ${esc(h)}" style="position:sticky;top:0;${ci === 0 ? 'left:64px;z-index:3;' : 'z-index:2;'}background:#16181d;color:#fff;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;text-align:left;padding:9px 10px;white-space:nowrap;cursor:pointer;user-select:none">${esc(h)}${s.c === ci ? (s.d === 1 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>
       ${body.map((r, ri) => { const t = byId[String(r[0])]; return `<tr onclick="if(!/input|select|button|textarea|summary|option/i.test(event.target.tagName))openEdit('${esc(String(r[0]))}','sheet')" style="cursor:pointer"><td style="position:sticky;left:0;z-index:1;padding:4px 8px;border-bottom:1px solid var(--hair);background:${ri % 2 ? '#faf9f5' : '#fff'}">${t && t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="width:48px;height:36px;object-fit:cover;border-radius:6px;display:block" alt="">` : '<span style="color:var(--faint)">—</span>'}</td>${r.map((c, ci) => `<td style="${ci === 0 ? 'position:sticky;left:64px;z-index:1;font-weight:700;font-family:ui-monospace,Menlo,monospace;' : ''}padding:${ADMIN() && (SHEET_EDIT[head[ci]] || head[ci] === 'Pricing') ? '4px 7px' : '8px 10px'};border-bottom:1px solid var(--hair);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;background:${t && hasPred(t) && (head[ci] === 'Pricing' || (SHEET_EDIT[head[ci]] || {}).cost || head[ci] === 'Line total ($)') ? '#fffbf0' : (ri % 2 ? '#faf9f5' : '#fff')};color:var(--body)">${shCell(String(r[0]), head[ci], c, t)}</td>`).join('')}</tr>`; }).join('')}
-    </table>
+    </table></div>
   </div>`;
 }
 
@@ -4301,7 +4301,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v28.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v28.6</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4446,7 +4446,7 @@ async function exportXLSX(list, label) {
     sm.getRow(1).font = { bold: true, size: 14 };
     /* Register sheet */
     const ws = wb.addWorksheet('Register');
-    const heads = ['Asset ID','Photo','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','IP/OP','Hazard','Failure mode','Cause','Salvageable (Y/N)','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Assessed','Assessor','Cleared by','Cleared at','Photo URL'];
+    const heads = ['Asset ID','Photo','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','IP/OP','Hazard','Damage','Cause','Salvageable (Y/N)','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Assessed','Assessor','Cleared by','Cleared at','Photo URL'];
     ws.addRow(heads);
     ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1B2733' } };
@@ -4515,7 +4515,7 @@ function exportXLSXBasic(list, label) {
   if (typeof XLSX === 'undefined') { toast('Spreadsheet engine still loading — try again in a second'); return; }
   const j = S.job || {};
   const imgUrl = t => t.photoKey ? location.origin + '/api/sync?img=' + encodeURIComponent(t.photoKey) : '';
-  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','Measured height (ft)','IP/OP','Hazard','Failure mode','Cause','Salvageable (Y/N)','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at','Photo','Photo URL']];
+  const reg = [['Asset ID','Project','Location','Zone','Species','Latin','Qty','DBH (in)','DBH band','Height (ft)','Measured height (ft)','IP/OP','Hazard','Damage','Cause','Salvageable (Y/N)','Health 0-100','Recommendation','Prune / repair ($)','Take-down ($)','Debris removal ($)','Stump removal ($)','Line total ($)','Priced via','Arborist notes','Latitude','Longitude','Position method','Assessed','Assessor','Reviewed','Cleared by','Cleared at','Photo','Photo URL']];
   for (const t of SRC) { const a = t.ai || {};
     reg.push([t.id, (parentOf(siteOfT(t)) || siteOfT(t)), (parentOf(siteOfT(t)) ? siteOfT(t) : ''), t.zone||'', a.species||'', a.latin||'', t.qty||1, t.dbhIn ?? a.dbh_in ?? '', DBH_BAND(t.dbhIn), t.heightFt ?? a.height_ft ?? '', t.heightMeasured||'', t.ip||'', t.hazard||'', (t.failures||[]).join(' | '), t.cause||'', t.salv||'', a.health ?? '', a.action||'', t.prune ?? '', t.removal ?? '', t.disposal ?? '', t.stump ?? '', lineTotal(t) || '', t.priceSource || (lineTotal(t) ? 'Manual' : ''), t.notes||'', typeof t.lat==='number'?t.lat:'', typeof t.lng==='number'?t.lng:'', t.posMethod||'', new Date(t.when).toLocaleString(), t.surveyor||'', t.reviewed?'Yes':'No', t.clearedBy||'', t.clearedAt?new Date(t.clearedAt).toLocaleString():'', '', imgUrl(t)]);
   }
@@ -4738,10 +4738,10 @@ function printReport(scope) {
   const zGroups = [...new Set(TS.map(zKey))].sort(zoneSort);
   const byHole = !scope.zone && !multiSite && zGroups.length > 1;
   const hazRow = (h, g) => `<div style="flex:1;border:1px solid #ddd;border-radius:9px;padding:10px 12px"><div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:${HAZ_INK(h)}">${g} ${h.toUpperCase()}</div><div style="font-size:20px;font-weight:700">${T.byHaz[h].lines}</div><div style="font-size:10px;color:#777">${T.byHaz[h].specimens} specimens${T.byHaz[h].cost ? ' · ' + money(T.byHaz[h].cost) : ''}</div></div>`;
-  el.innerHTML = `
+  el.innerHTML = `<div class="assess">
     ${pdfCover(esc(j.assessType || 'Field Assessment Report'), scope.site || (scope.all ? 'All projects' : (S.site || 'Site assessment')), "'Helvetica Neue',Helvetica,Arial,sans-serif")}
     <div style="display:flex;align-items:flex-start;gap:14px;padding-bottom:16px;border-bottom:3px solid #c8452c">
-      <div style="width:40px;height:40px;border-radius:10px;background:#c8452c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:none"><span style="width:10px;height:2.5px;background:#fff;border-radius:1px;display:block"></span><span style="width:15px;height:2.5px;background:#fff;border-radius:1px;display:block"></span><span style="width:20px;height:2.5px;background:#fff;border-radius:1px;display:block"></span></div>
+      <img src="${WTR_MARK}" alt="WTR Group" style="height:46px;flex:none">
       <div style="flex:1;min-width:0">
         <div style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#999;font-weight:700">WTR Group · ${esc(j.assessType || 'Tree survey report')}</div>
         <div style="font-size:25px;font-weight:700;letter-spacing:-.01em;margin-top:2px;line-height:1.2">${esc(scope.site || (scope.all ? 'All projects' : (S.site || 'Site assessment')))}</div>
@@ -4781,15 +4781,15 @@ function printReport(scope) {
       const fmBars = fmTop.map(([f, n]) => `<div style="display:flex;align-items:center;gap:8px;margin-top:5px"><div style="width:118px;font-size:9.5px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none">${esc(f)}</div><div style="flex:1;height:11px;background:#f2f1ec;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(n / fmMax * 100))}%;background:#2f7d55"></div></div><div style="width:26px;font-size:9.5px;font-weight:700;flex:none">${n}</div></div>`).join('');
       const bmax = Math.max(1, ...DBH_BANDS.map(b => T.byBand[b].specimens));
       const bcols = DBH_BANDS.map(b => `<div style="flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px"><div style="font-size:9px;font-weight:700;color:#555">${T.byBand[b].specimens || ''}</div><div style="width:64%;height:${Math.max(2, Math.round(T.byBand[b].specimens / bmax * 52))}px;background:#16181d;border-radius:3px 3px 0 0"></div><div style="font-size:8px;color:#999;white-space:nowrap">${b}</div></div>`).join('');
-      return `<div style="display:flex;gap:12px;margin-top:14px;page-break-inside:avoid">
-      <div style="flex:1.15;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
+      return `<div style="display:flex;gap:12px;margin-top:14px;page-break-inside:avoid;flex-wrap:wrap">
+      <div style="flex:1.15 1 250px;min-width:0;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Hazard mix · ${T.specimens} specimens</div>
         <div style="display:flex;height:14px;border-radius:4px;overflow:hidden;margin-top:9px">${stack}</div>
         <div style="display:flex;gap:12px;margin-top:7px;font-size:9.5px;color:#555;flex-wrap:wrap">${hz.map(h => `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${cols[h]};margin-right:4px"></span>${h} · ${T.byHaz[h].specimens}</span>`).join('')}</div>
         <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999;margin-top:16px">Size distribution · DBH</div>
         <div style="display:flex;gap:6px;height:82px;margin-top:8px">${bcols}</div>
       </div>
-      <div style="flex:1;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
+      <div style="flex:1 1 250px;min-width:0;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
         <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Remediation cost by hole / zone — composition</div>
         ${zbars || '<div style="font-size:10px;color:#999;margin-top:9px">No priced lines yet.</div>'}
         <div style="margin-top:13px;border-top:1px solid #eee;padding-top:9px;display:flex;justify-content:space-between;font-size:10px"><span style="color:#555">In-play / out-of-play</span><span style="font-weight:700">${T.byIP.IP.lines} / ${T.byIP.OP.lines}</span></div>
@@ -4803,34 +4803,34 @@ function printReport(scope) {
         ${spBars || '<div style="font-size:10px;color:#999;margin-top:9px">No species on record yet.</div>'}
       </div>
       <div style="flex:1;border:1px solid #e8e7e2;border-radius:12px;padding:13px 15px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Mechanical failure mode — line items</div>
-        ${fmBars || '<div style="font-size:10px;color:#999;margin-top:9px">No failure modes recorded.</div>'}
+        <div style="font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#999">Damage — line items</div>
+        ${fmBars || '<div style="font-size:10px;color:#999;margin-top:9px">No damage recorded.</div>'}
       </div>
     </div>`;
     })() : ''}
     ${sec('sitemap') ? reportMapHTML(TS) : ''}
     ${sec('read') && S.execRead ? `<div style="margin-top:14px;padding:12px 14px;border:1px solid #ddd;border-left:3px solid #c8452c;border-radius:8px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#777;font-weight:700;margin-bottom:6px">The read</div><div style="font-size:11.5px;line-height:1.6;white-space:pre-wrap">${esc(S.execRead)}</div></div>` : ''}
     ${sec('money') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Where the money is</div>
-    <table>
+    <div class="tblwrap"><table>
       <tr><td>Prune / repair <span style="color:#999">(${TS.filter(t=>t.prune!=null).length} lines)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td></tr>
       <tr><td>Take-down <span style="color:#999">(${TS.filter(t=>t.removal!=null).length} lines)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td></tr>
       <tr><td>Debris removal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td></tr>
       <tr><td>Stump removal</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td></tr>
       <tr><td style="font-weight:700">Total remediation</td><td style="text-align:right;font-weight:700;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
       ${T.specimens && T.total ? `<tr><td style="color:#555">Mean per specimen <span style="color:#999">(policy debris sublimit $5,000 / specimen)</span></td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;color:#555">${money(Math.round(T.total / T.specimens))}</td></tr>` : ''}
-    </table>
+    </table></div>
     ${T.predicted ? `<div style="margin-top:6px;font-size:10.5px;color:#b8842a">${T.predicted} line${T.predicted>1?'s carry':' carries'} an unaccepted AI prediction (≈${money(T.predTotal)}) — predictions are excluded from every figure above.</div>` : ''}
     ${T.unpriced ? `<div style="margin-top:4px;font-size:10.5px;color:#b8842a">${T.unpriced} line item${T.unpriced>1?'s are':' is'} not yet priced — totals above reflect priced lines only.</div>` : ''}` : ''}
     ${sec('byhole') && byHole ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">By hole / zone — one walk, every hole on the record</div>
-    <table><tr><th>Hole / zone</th><th>Line items</th><th>Specimens</th><th>High hazard</th><th>Unpriced</th><th style="text-align:right">Remediation</th></tr>
+    <div class="tblwrap"><table><tr><th>Hole / zone</th><th>Line items</th><th>Specimens</th><th>High hazard</th><th>Unpriced</th><th style="text-align:right">Remediation</th></tr>
     ${zGroups.map(z => { const rows = TS.filter(t => zKey(t) === z); const spec = rows.reduce((s, t) => s + (t.qty || 1), 0); const hi = rows.filter(t => t.hazard === 'High Hazard').length; const unp = rows.filter(t => t.prune == null && t.removal == null && t.disposal == null && t.stump == null).length; const cost = rows.reduce((s, t) => s + (lineTotal(t) || 0), 0); return `<tr><td style="font-weight:700">${esc(z)}</td><td>${rows.length}</td><td>${spec}</td><td style="color:${hi ? '#b34b48' : '#333'};font-weight:${hi ? 700 : 400}">${hi || '—'}</td><td>${unp || '—'}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${cost ? money(cost) : '—'}</td></tr>`; }).join('')}
-    </table>` : ''}
+    </table></div>` : ''}
     ${sec('register') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Asset register</div>
-    <table>
-      <tr><th>ID</th><th>Photo</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Failure mode</th><th style="text-align:right">Prune</th><th style="text-align:right">Take-down</th><th style="text-align:right">Debris</th><th style="text-align:right">Stump</th><th style="text-align:right">Line total</th></tr>
+    <div class="tblwrap"><table>
+      <tr><th>ID</th><th>Photo</th><th>Zone</th><th>Qty</th><th>Species</th><th>DBH″</th><th>Band</th><th>IP/OP</th><th>Hazard</th><th>Damage</th><th style="text-align:right">Prune</th><th style="text-align:right">Take-down</th><th style="text-align:right">Debris</th><th style="text-align:right">Stump</th><th style="text-align:right">Line total</th></tr>
       ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => { const rows = sk == null ? TS : TS.filter(t => multiSite ? groupKey(t) === sk : zKey(t) === sk); const sub = byHole && sk != null ? `<tr><td colspan="14" style="font-weight:700;background:#f2f1ec">Subtotal — ${esc(sk)} · ${rows.length} line item${rows.length > 1 ? 's' : ''} · ${rows.reduce((s, t) => s + (t.qty || 1), 0)} specimens</td><td style="text-align:right;font-weight:700;background:#f2f1ec;font-family:ui-monospace,Menlo,monospace">${(c => c ? money(c) : '—')(rows.reduce((s, t) => s + (lineTotal(t) || 0), 0))}</td></tr>` : ''; const $$ = v => v != null ? money(v) : '—'; return (sk != null ? `<tr><td colspan="15" style="background:#16181d;color:#fff;font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:6px 8px">${esc(sk)}</td></tr>` : '') + rows.map(t => { const a = t.ai||{}; return `<tr><td style="font-family:ui-monospace,Menlo,monospace">${esc(t.id)}</td><td style="padding:3px 4px">${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="width:56px;height:42px;object-fit:cover;border-radius:5px;display:block" alt="">` : '<span style="color:#bbb">—</span>'}</td><td>${esc(t.zone||'')}</td><td>${t.qty||1}</td><td>${esc(a.species||'Pending')}<br><em style="color:#777;font-size:10px">${esc(a.latin||'')}</em></td><td>${t.dbhIn ?? ''}</td><td>${DBH_BAND(t.dbhIn)}</td><td>${esc(t.ip||'')}</td><td style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</td><td>${esc((t.failures||[]).join(' | ')||'')}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.prune)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.removal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.disposal)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace">${$$(t.stump)}</td><td style="text-align:right;font-family:ui-monospace,Menlo,monospace;font-weight:700">${lineTotal(t) ? money(lineTotal(t)) : (hasPred(t) ? '<span style="color:#b8842a">≈' + money(predTotal(t)) + '</span>' : '—')}</td></tr>`; }).join('') + sub; }).join('')}
       <tr><td colspan="10" style="font-weight:700;background:#16181d;color:#fff">TOTAL — ${TS.length} line items · ${T.specimens} specimens</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.prune)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.removal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.disposal)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.stump)}</td><td style="text-align:right;font-weight:700;background:#16181d;color:#fff;font-family:ui-monospace,Menlo,monospace">${money(T.total)}</td></tr>
-    </table>
+    </table></div>
     <div style="margin-top:5px;font-size:9.5px;color:#888">The totals row is computed from every line above, not from a filtered view. ≈ marks an unaccepted AI prediction — never included in any total.</div>
     ` : ''}${sec('photos') ? `<div style="margin-top:16px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Photo journal — every asset, on the record</div>
     ${(multiSite ? [...new Set(TS.map(groupKey))].sort() : (byHole ? zGroups : [null])).map(sk => (sk ? `<div style="margin-top:14px;font-size:11px;font-weight:700;background:#16181d;color:#fff;padding:6px 10px;border-radius:6px;letter-spacing:.06em;text-transform:uppercase">${esc(sk)}</div>` : '') + TS.filter(t => !sk || (multiSite ? groupKey(t) === sk : zKey(t) === sk)).map(t => { const a = t.ai||{}; return `
@@ -4839,7 +4839,7 @@ function printReport(scope) {
         <div style="flex:1;min-width:0">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:700">${esc(t.id)}</span> · <strong>${esc(a.species||'Pending analysis')}</strong> <em style="color:#777">${esc(a.latin||'')}</em></div><div style="font-weight:700;color:${HAZ_INK(t.hazard||'Moderate')}">${esc(t.hazard||'')}</div></div>
           <div style="color:#555;margin-top:2px;font-size:11px">${t.qty||1} specimen${(t.qty||1)>1?'s':''} · ${t.dbhIn ? t.dbhIn + '″ · ' + DBH_BAND(t.dbhIn) : 'DBH —'} · ${t.heightFt ? '~' + t.heightFt + ' ft' : ''} · ${esc(t.zone||'')} · ${esc(t.ip||'IP')}</div>
-          <div style="color:#555;font-size:11px;margin-top:2px"><strong>Failure:</strong> ${esc((t.failures||[]).join(', ') || '—')} · <strong>Cause:</strong> ${esc(t.cause||'—')}${t.salv ? ' · <strong>Salvageable:</strong> ' + esc(t.salv) : ''}</div>
+          <div style="color:#555;font-size:11px;margin-top:2px"><strong>Damage:</strong> ${esc((t.failures||[]).join(', ') || '—')} · <strong>Cause:</strong> ${esc(t.cause||'—')}${t.salv ? ' · <strong>Salvageable:</strong> ' + esc(t.salv) : ''}</div>
           ${a.description ? `<div style="color:#555;font-size:11px;margin-top:2px"><strong>Observed:</strong> ${esc(a.description)}</div>` : ''}
           <div style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#555;margin-top:2px">${typeof t.lat === 'number' ? fmtCoord(t.lat) + ', ' + fmtCoord(t.lng) + ' · ' : ''}${isoWhen(t.when)}${t.posMethod === 'adjusted' ? ' · position verified on imagery' : ''}${t.imported ? ' · imported photo' : ''}</div>
           ${lineTotal(t) ? `<div style="font-size:11px;margin-top:3px"><strong>Remediation ${money(lineTotal(t))}</strong>${t.prune != null ? ' · prune ' + money(t.prune) : ''}${t.removal != null ? ' · take-down ' + money(t.removal) : ''}${t.disposal != null ? ' · debris ' + money(t.disposal) + (t.disposalMethod ? ' (' + esc(t.disposalMethod) + ')' : '') : ''}${t.stump != null ? ' · stump ' + money(t.stump) + (t.stumpMethod ? ' (' + esc(t.stumpMethod) + ')' : '') : ''}${t.priceSource ? ' · priced via ' + esc(t.priceSource) : ''}</div>` : ''}
@@ -4861,7 +4861,7 @@ function printReport(scope) {
       const noGps = TS.filter(t => typeof t.lat !== 'number');
       if (noGps.length) add('HIGH', `${noGps.length} lines carry no coordinate`, `A carrier cannot independently verify a tree without a pin. Place these on satellite from the Map tab.`);
       const noFail = TS.filter(t => t.hazard && t.hazard !== 'Cleared' && !(t.failures || []).length);
-      if (noFail.length) add('MEDIUM', `${noFail.length} lines have a hazard rating but no failure mode`, `A rating without a recorded mechanism is harder to defend. Set the failure mode on each.`);
+      if (noFail.length) add('MEDIUM', `${noFail.length} lines have a hazard rating but no damage recorded`, `A rating without a recorded mechanism is harder to defend. Set the failure mode on each.`);
       const unrev = TS.filter(t => !t.reviewed);
       if (unrev.length) add('MEDIUM', `${unrev.length} of ${TS.length} lines are unreviewed`, `A claim exhibit should not leave the office unreviewed. The lead assessor walks the register before it is issued; every override is signed and dated with the original AI read retained.`);
       const gapFields = certGaps();
@@ -4874,7 +4874,7 @@ function printReport(scope) {
       ${F.map(f => `<div style="margin-top:9px;padding:9px 12px;border-left:3px solid ${LC[f.lvl] || '#999'};background:#faf9f5;border-radius:0 8px 8px 0;page-break-inside:avoid"><span style="font-size:9px;font-weight:700;letter-spacing:.08em;color:${LC[f.lvl] || '#999'}">${f.lvl}</span> <strong style="font-size:11px">· ${esc(f.title)}</strong><div style="font-size:10.5px;color:#555;margin-top:2px;line-height:1.5">${esc(f.body)}</div></div>`).join('')}`;
     })() : ''}${sec('cert') ? `<div style="margin-top:18px;font-size:12px;font-weight:700;border-bottom:1px solid #16181d;padding-bottom:4px">Certification block</div>
     <div style="font-size:10.5px;color:#555;margin-top:6px">An unsigned assessment is a field note, not evidence.</div>
-    <table>
+    <div class="tblwrap"><table>
       <tr><td style="width:40%;font-weight:700">Lead assessor</td><td>${na(S.surveyor)}</td></tr>
       <tr><td style="font-weight:700">ISA certification number</td><td>${na(j.assessorCert)}</td></tr>
       <tr><td style="font-weight:700">Date of loss / named event</td><td>${na(j.dateOfLoss || j.stormName)}</td></tr>
@@ -4882,13 +4882,13 @@ function printReport(scope) {
       <tr><td style="font-weight:700">Weather at assessment</td><td>${na(j.weather)}</td></tr>
       <tr><td style="font-weight:700">Carrier / policy / claim</td><td>${j.carrier || j.policy || j.claim ? esc([j.carrier, j.policy, j.claim].filter(Boolean).join(' · ')) : '<span style="color:#999">Not stated</span>'}</td></tr>
       <tr><td style="font-weight:700">Adjuster / consultant on the loss</td><td>${na(j.adjuster)}</td></tr>
-    </table>
+    </table></div>
     <div style="margin-top:10px;font-size:11px;color:#333">The assessor named above certifies that each line item was observed on site at the date, time and coordinates recorded, that the photographs are of the specimens described, and that condition, cause of loss and hazard rating reflect the assessor's professional judgement at the time of inspection.</div>
-    <div style="display:flex;gap:24px;margin-top:26px">
-      <div style="flex:1"><div style="border-top:1px solid #333;padding-top:4px;font-size:10px">Lead assessor — signature · printed name · date</div></div>
-      <div style="flex:1"><div style="border-top:1px solid #333;padding-top:4px;font-size:10px">${esc(j.clientRep || 'Client representative')}${j.clientRepTitle ? ', ' + esc(j.clientRepTitle) : ''} — signature · printed name · title · date</div></div>
+    <div style="display:flex;gap:24px;margin-top:26px;flex-wrap:wrap">
+      <div style="flex:1 1 220px;min-width:0"><div style="border-top:1px solid #333;padding-top:4px;font-size:10px">Lead assessor — signature · printed name · date</div></div>
+      <div style="flex:1 1 220px;min-width:0"><div style="border-top:1px solid #333;padding-top:4px;font-size:10px">${esc(j.clientRep || 'Client representative')}${j.clientRepTitle ? ', ' + esc(j.clientRepTitle) : ''} — signature · printed name · title · date</div></div>
     </div>
-    ` : ''}<div style="margin-top:16px;font-size:9.5px;color:#888;border-top:1px solid #ddd;padding-top:8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. No invasive testing, aerial inspection or root excavation was performed unless expressly noted. Findings describe conditions observed on the date of assessment only. Cost figures are estimates of remediation, not a bid. AI-assisted capture; arborist overrides are signed and dated with the original assessment retained. Not legal, tax or insurance advice. Prepared by WTR Group on ${new Date().toLocaleString()}.</div>`;
+    ` : ''}<div style="margin-top:16px;font-size:9.5px;color:#888;border-top:1px solid #ddd;padding-top:8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. No invasive testing, aerial inspection or root excavation was performed unless expressly noted. Findings describe conditions observed on the date of assessment only. Cost figures are estimates of remediation, not a bid. AI-assisted capture; arborist overrides are signed and dated with the original assessment retained. Not legal, tax or insurance advice. Prepared by WTR Group on ${new Date().toLocaleString()}.</div></div>`;
   if (scope.review) { openReview(); return; }
   window.print();
 }
@@ -4912,7 +4912,7 @@ function photoExhibitHTML(TS, label) {
     const remed = lt > 0 ? `<strong>${money(lt)}</strong>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`
       : (hasPred(t) ? `<span style="color:#b8842a;font-weight:700">\u2248${money(predTotal(t))} AI predicted \u2014 awaiting review</span>` : `<span style="color:#b8842a;font-weight:700">TBD</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`);
     return `
-    <div style="flex:1;min-width:430px;max-width:calc(50% - 5px);background:#fff;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden;page-break-inside:avoid">
+    <div style="flex:1 1 340px;min-width:0;max-width:calc(50% - 5px);background:#fff;border:1px solid #e7e4dc;border-radius:13px;overflow:hidden;page-break-inside:avoid">
       <div style="background:${GX_NAVY};color:#fff;display:flex;align-items:center;justify-content:space-between;padding:9px 14px">
         <span style="font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px;letter-spacing:.04em">${esc(t.id)}</span>
         <span style="color:${hz[0]};background:rgba(255,255,255,.94);border-radius:999px;padding:3px 10px;font-size:8.5px;font-weight:800;letter-spacing:.08em">${hz[1]} ${hz[2]}</span>
@@ -4922,7 +4922,7 @@ function photoExhibitHTML(TS, label) {
         <div style="font-size:13px;font-weight:800">${esc(a.species || 'Pending analysis')}${a.latin ? ` <em style="font-weight:400;color:#86837b;font-size:11px">(${esc(a.latin)})</em>` : ''}</div>
         ${line('Qty / size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 \u00b7 ' + DBH_BAND(t.dbhIn) : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
         ${line('Zone', `${esc(t.zone || '\u2014')}${t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : ''} \u00b7 ${t.ip === 'OP' ? 'OP' : 'IP'}`)}
-        ${line('Failure', esc((t.failures || []).join(' \u00b7 ') || '\u2014'))}
+        ${line('Damage', esc((t.failures || []).join(' \u00b7 ') || '\u2014'))}
         ${line('Assessment', esc(t.notes || a.description || ''))}
         ${line('Cause', esc(t.cause || '\u2014'))}
         ${t.salv ? line('Salvageable', esc(t.salv)) : ''}
@@ -5313,7 +5313,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v28.5</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v28.6</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
