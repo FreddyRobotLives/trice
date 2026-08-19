@@ -896,6 +896,38 @@ var sync_src_default = async (req) => {
       }
     };
 
+    /* ---- Work orders: hole-scoped sub links ----
+       A work order is a capability token. Whoever holds the link sees only the
+       assets inside its project+zone scope (no pricing, no crew data) and can
+       mark those assets complete. Completion is an LWW map the team app also
+       reads and writes, so the admin grid is live through normal sync. */
+    const woScope = async (wo) => {
+      const parents = (await safeGetJSON("meta/parents")) || {};
+      const up = (name) => { const e = parents[name]; return (e && e.p) || null; };
+      const inProj = (site) => { let c = site, g2 = 0; while (c && g2++ < 8) { if (c === wo.project) return true; c = up(c); } return false; };
+      const { live } = await listAll();
+      const out = [];
+      for (const [id, r] of Object.entries(live)) {
+        const t = await safeGetJSON(r.k); if (!t) continue;
+        const site = t.site || "";
+        if (!inProj(site)) continue;
+        if (wo.zones && wo.zones.length && !wo.zones.includes(t.zone || "")) continue;
+        out.push(t);
+        if (Date.now() - T0 > 8500) break;
+      }
+      return out;
+    };
+    const woPublic = (t) => {
+      const a = t.ai || {};
+      return { id: t.id, zone: t.zone || "", locDetails: t.locDetails || "",
+        species: a.species || "", latin: a.latin || "", action: a.action || "",
+        qty: t.qty || 1, dbhIn: t.dbhIn || null, heightFt: t.heightFt || null,
+        hazard: t.hazard || "", failures: t.failures || [], cause: t.cause || "",
+        notes: t.notes || "", salv: t.salv || "",
+        lat: typeof t.lat === "number" ? t.lat : null, lng: typeof t.lng === "number" ? t.lng : null,
+        photoKey: t.photoKey || null };
+    };
+
     const metaBundle = async (live) => {
       const parents = (await safeGetJSON("meta/parents")) || {};
       const users = (await safeGetJSON("meta/users")) || {};
@@ -928,6 +960,19 @@ var sync_src_default = async (req) => {
         if (!m) return new Response("unsupported", { status: 415, headers: { "Access-Control-Allow-Origin": "*" } });
         const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
         return new Response(bytes, { headers: { "Content-Type": m[1], "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" } });
+      }
+      const woT = url.searchParams.get("wo");
+      if (woT && /^[A-Za-z0-9]{12,40}$/.test(woT)) {
+        const wos = (await safeGetJSON("meta/workorders")) || {};
+        const wo = wos[woT];
+        if (!wo || wo.revoked) return new Response(JSON.stringify({ error: "This work link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
+        const assets = (await woScope(wo)).map(woPublic);
+        const doneAll = (await safeGetJSON("meta/wodone")) || {};
+        const done = {};
+        for (const [k, e] of Object.entries(doneAll)) { if (k.startsWith(woT + "|")) done[k.slice(woT.length + 1)] = e; }
+        return new Response(JSON.stringify({ v: V, now: Date.now(),
+          wo: { token: woT, project: wo.project, zones: wo.zones || [], sub: wo.sub || "", note: wo.note || "", at: wo.at || 0 },
+          assets, done }), { headers: cors });
       }
       if (url.searchParams.get("list") === "backups") {
         const out = [];
@@ -969,6 +1014,42 @@ var sync_src_default = async (req) => {
     }
 
     await migrateSlice();
+
+    // ---- work orders: create (returns the shareable token), revoke, and the sub's mark ----
+    if (b.woCreate && typeof b.woCreate === "object") {
+      const w = b.woCreate;
+      const project = String(w.project || "").trim().slice(0, 80);
+      if (!project) return new Response(JSON.stringify({ error: "project required" }), { status: 400, headers: cors });
+      const zones = (Array.isArray(w.zones) ? w.zones : []).map((z) => String(z || "").trim().slice(0, 80)).filter(Boolean).slice(0, 40);
+      const token = [...crypto.getRandomValues(new Uint8Array(15))].map((n) => "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[n % 55]).join("");
+      const wo = { project, zones, sub: String(w.sub || "").trim().slice(0, 80), note: String(w.note || "").trim().slice(0, 300), by: String(w.by || "").trim().slice(0, 60), at: Date.now(), revoked: 0 };
+      await metaMerge("meta/workorders", (cur) => { cur[token] = wo; return { next: cur, changed: true }; });
+      return new Response(JSON.stringify({ v: V, ok: true, woToken: token, wo }), { headers: cors });
+    }
+    if (b.woRevoke && typeof b.woRevoke === "string") {
+      const tk = b.woRevoke.trim();
+      await metaMerge("meta/workorders", (cur) => { if (cur[tk] && !cur[tk].revoked) { cur[tk].revoked = Date.now(); return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
+    if (b.woUnrevoke && typeof b.woUnrevoke === "string") {
+      const tk = b.woUnrevoke.trim();
+      await metaMerge("meta/workorders", (cur) => { if (cur[tk] && cur[tk].revoked) { cur[tk].revoked = 0; return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
+    if (b.woMark && typeof b.woMark === "object") {
+      const m = b.woMark;
+      const tk = String(m.token || "").trim();
+      const aid = String(m.assetId || "").trim();
+      if (!/^[A-Za-z0-9]{12,40}$/.test(tk) || !/^[A-Za-z0-9_.:-]{1,64}$/.test(aid)) return new Response(JSON.stringify({ error: "bad request" }), { status: 400, headers: cors });
+      const wos = (await safeGetJSON("meta/workorders")) || {};
+      const wo = wos[tk];
+      if (!wo || wo.revoked) return new Response(JSON.stringify({ error: "link inactive" }), { status: 403, headers: cors });
+      const scoped = await woScope(wo);
+      if (!scoped.some((t) => t.id === aid)) return new Response(JSON.stringify({ error: "asset not in this work order" }), { status: 403, headers: cors });
+      const entry = { done: m.done === true, by: String(m.by || wo.sub || "Sub").slice(0, 60), at: Date.now() };
+      await metaMerge("meta/wodone", (cur) => { cur[tk + "|" + aid] = entry; return { next: cur, changed: true }; });
+      return new Response(JSON.stringify({ v: V, ok: true, key: tk + "|" + aid, entry }), { headers: cors });
+    }
 
     // shared meta updates ride along with any op
     const applyMeta = async () => {
@@ -1033,6 +1114,9 @@ var sync_src_default = async (req) => {
         hours: Math.max(0, +e.hours || 0), cost: Math.max(0, +e.cost || 0)
       }));
       await lwwMap("meta/projstate", b.projLWW, (e) => ({
+        done: e.done === true, by: String(e.by || "").slice(0, 60)
+      }));
+      await lwwMap("meta/wodone", b.wodoneLWW, (e) => ({
         done: e.done === true, by: String(e.by || "").slice(0, 60)
       }));
       await lwwMap("meta/subs", b.subsLWW, (e) => ({
@@ -1101,7 +1185,9 @@ var sync_src_default = async (req) => {
       const budgets = (await safeGetJSON("meta/budgets")) || {};
       const subs = (await safeGetJSON("meta/subs")) || {};
       const projstate = (await safeGetJSON("meta/projstate")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate,
+      const workorders = (await safeGetJSON("meta/workorders")) || {};
+      const wodone = (await safeGetJSON("meta/wodone")) || {};
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
