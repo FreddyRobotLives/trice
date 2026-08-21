@@ -38,7 +38,7 @@ export default async (req) => {
   const title = project ? 'Live tree map \u00b7 ' + project : 'Live tree map \u00b7 WTR Group';
   const desc = (project ? project + '. ' : '')
     + 'The map updates as our crews complete the work. View only, no login.';
-  const img = origin + '/og-map.png?v=3';
+  const img = origin + '/og-map.png?v=4';
   const here = origin + '/?mv=' + encodeURIComponent(token);
 
   const metas = [
