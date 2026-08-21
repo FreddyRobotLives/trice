@@ -4,7 +4,7 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v88';
+const CACHE = 'trice-shell-v91';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js', '/vendor/InterVariable.woff2'];
 const NAV_TIMEOUT = 3500;
 
@@ -12,13 +12,33 @@ self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(
+    caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+      .then(() => {
+        /* One-shot per deploy: this activate runs exactly once per new worker.
+           Every window this worker now controls is running whatever build it
+           loaded with — possibly months old. Reload each once through this
+           worker's network-race so the live build takes over everywhere,
+           including home-screen PWAs that never see a refresh button. The 3.5s
+           delay lets the navigation that triggered the update finish painting;
+           pages already on the rescue path are left alone. */
+        setTimeout(() => {
+          self.clients.matchAll({ type: 'window' }).then((cs) => {
+            cs.forEach((c) => {
+              try { if (!/[?&]fresh=/.test(c.url) && c.navigate) c.navigate(c.url); } catch (e2) {}
+            });
+          });
+        }, 3500);
+      })
+  );
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;                      // never touch sync/analyze POSTs
   const url = new URL(req.url);
   if (url.pathname.startsWith('/api/')) return;          // live API only
+  if (url.pathname === '/fresh' || url.pathname === '/fresh.html') return; // rescue page: always straight from the network
 
   // App shell
   if (req.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {

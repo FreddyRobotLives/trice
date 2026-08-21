@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v28.7">
+<meta name="version" content="trice-v29.2">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css">
-<script defer src="/vendor/leaflet.min.js" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.2">
+<script defer src="/vendor/leaflet.min.js?v=trice-v29.2" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.2" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -3833,7 +3833,7 @@ function assetDatabaseHTML(TS, label, clientSafe) {
       : (hasPred(t) ? `<span style="color:#b8842a">\u2248${money(predTotal(t))} \u00b7 AI predicted, awaiting review</span>` : `<span style="color:#b8842a">To be determined</span>${a.action ? ' \u00b7 ' + esc(a.action) : ''}`));
     return `
     <div style="max-width:620px;margin:0 auto;width:100%;min-height:92vh;display:flex;flex-direction:column;justify-content:center;page-break-after:always;page-break-inside:avoid">
-      ${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${docPhotoURL(t)}" style="display:block;width:100%;height:min(380px, 78vw);object-fit:cover;border-radius:20px;background:#f2f2f7" alt="">`
         : `<div style="height:min(380px, 78vw);border-radius:20px;background:#f2f2f7;display:flex;align-items:center;justify-content:center;color:#aeaeb2;font-size:12px">Photo syncing from the field</div>`}
       <div style="padding:18px 6px 6px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
@@ -3871,7 +3871,76 @@ function assetDatabaseHTML(TS, label, clientSafe) {
     </div>
   </div>`;
 }
-function openAssetDatabase(clientSafe) {
+
+/* ---- Email-size photo pipeline for the Asset Database and Photo Exhibit ----
+   The originals are full-resolution captures; 147 of them makes a print PDF far
+   past what email accepts. Before these documents build, every photo is scaled
+   to at most 1100px on the long edge and re-encoded to a per-photo byte budget
+   computed from the asset count, so the total image payload stays under
+   DOC_IMG_BUDGET no matter how big the job is. The originals on the record are
+   never touched — this cache exists only for document builds. */
+const DOC_IMG_BUDGET = 17 * 1024 * 1024;   // image bytes; the PDF wrapper adds ~10-15% on top
+const DOC_PHOTOS = new Map();               // t.id -> { url, at, bytes }
+function docPhotoBudget(count) {
+  if (!count) return 220 * 1024;
+  return Math.max(60 * 1024, Math.min(220 * 1024, Math.floor(DOC_IMG_BUDGET / count)));
+}
+function docPhotoURL(t) {
+  const hit = DOC_PHOTOS.get(t && t.id);
+  return hit ? hit.url : photoURL(t);
+}
+async function compressDocPhotos(TS, onProgress) {
+  const withPhoto = TS.filter(t => t.photo);
+  const target = docPhotoBudget(withPhoto.length);
+  let total = 0, done = 0;
+  for (const t of withPhoto) {
+    done++;
+    const cached = DOC_PHOTOS.get(t.id);
+    if (cached && cached.at === (t.photoAt || 0) && cached.target === target) { total += cached.bytes; continue; }
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = photoURL(t); });
+      const long = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+      /* Two levers, tried in order: quality first, then dimensions. Bytes scale
+         with pixels, so stepping the long edge down always converges on the
+         per-photo target — the budget is a guarantee, not a hope. */
+      let blob = null;
+      for (const edge of [1100, 920, 780, 660, 560, 480]) {
+        const scale = Math.min(1, edge / long);
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        cv.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        let q = edge === 1100 ? 0.78 : 0.66;
+        for (let step = 0; step < 5; step++) {
+          const b = await new Promise(res => cv.toBlob(res, 'image/jpeg', q));
+          if (!b) break;
+          if (!blob || b.size < blob.size) blob = b;
+          if (b.size <= target) { blob = b; break; }
+          q = Math.max(0.5, q - 0.09);
+          if (q === 0.5 && step > 0) break;
+        }
+        if (blob && blob.size <= target) break;
+      }
+      if (blob) {
+        const old = DOC_PHOTOS.get(t.id);
+        if (old) { try { URL.revokeObjectURL(old.url); } catch (e) {} }
+        DOC_PHOTOS.set(t.id, { url: URL.createObjectURL(blob), at: t.photoAt || 0, bytes: blob.size, target });
+        total += blob.size;
+      } else { total += Math.round(t.photo.length * 0.75); }
+    } catch (e) { /* fall back to the original for this photo */ }
+    if (onProgress && (done % 4 === 0 || done === withPhoto.length)) onProgress(done, withPhoto.length, total);
+    if (done % 8 === 0) await new Promise(r => setTimeout(r, 0)); // keep the UI alive
+  }
+  return { count: withPhoto.length, bytes: total };
+}
+function docProgress(text) {
+  const p = document.getElementById('reviewPaper');
+  if (!p) return;
+  const el = p.querySelector('[data-docprog]');
+  if (el) el.textContent = text;
+}
+
+async function openAssetDatabase(clientSafe) {
   const TS = gridExhibitScope();
   if (!TS.length) { toast('Nothing in this scope yet \u2014 widen the filters'); return; }
   const label = S.sheetProject || 'All projects';
@@ -3880,7 +3949,11 @@ function openAssetDatabase(clientSafe) {
     `${esc(site)} ${clientSafe ? 'Asset Database \u00b7 client copy' : 'Admin Asset Database'}<span class="sub">${TS.length} assets \u00b7 ${clientSafe ? 'client-safe: no internal notes, no pricing, no crew names. The document itself carries no client marking' : 'big photography, full descriptions \u00b7 the photos live in the document'}.</span>`,
     `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
     'max-width:1120px;background:#fbfbfd', TS.length);
-  setTimeout(() => { docReady(assetDatabaseHTML(TS, label, !!clientSafe)); }, 40);
+  const p = document.getElementById('reviewPaper');
+  if (p) { const d = p.querySelector('div'); if (d) d.insertAdjacentHTML('beforeend', '<div data-docprog style="margin-top:8px;font-size:11px;color:#a8a49a"></div>'); }
+  const r = await compressDocPhotos(TS, (n, of, bytes) => docProgress('Sizing photos for email \u2014 ' + n + ' of ' + of + ' \u00b7 ' + (bytes / 1048576).toFixed(1) + ' MB so far'));
+  docReady(assetDatabaseHTML(TS, label, !!clientSafe));
+  if (r.count) toast('Photos sized for email: ' + r.count + ' images, ~' + Math.max(1, Math.round(r.bytes / 1048576)) + ' MB in the document \u2014 the saved PDF lands well under 25 MB');
 }
 /* ---- The Grid Exhibit ----
    The register rendered as a carrier-ready document in the Trice design language.
@@ -4300,7 +4373,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v28.7</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4344,13 +4417,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.2', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.2', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -4916,7 +4989,7 @@ function photoExhibitHTML(TS, label) {
         <span style="font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:12px;letter-spacing:.04em">${esc(t.id)}</span>
         <span style="color:${hz[0]};background:rgba(255,255,255,.94);border-radius:999px;padding:3px 10px;font-size:8.5px;font-weight:800;letter-spacing:.08em">${hz[1]} ${hz[2]}</span>
       </div>
-      ${t.photo ? `<img loading="lazy" decoding="async" src="${photoURL(t)}" style="display:block;width:100%;height:330px;object-fit:cover;background:#efece5" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
+      ${t.photo ? `<img loading="lazy" decoding="async" src="${docPhotoURL(t)}" style="display:block;width:100%;height:330px;object-fit:cover;background:#efece5" alt="">` : `<div style="height:330px;display:flex;align-items:center;justify-content:center;background:${GX_CREAM};color:#a8a49a;font-size:10px">Photo captured on another device \u2014 syncs to this one shortly</div>`}
       <div style="padding:12px 14px 13px">
         <div style="font-size:13px;font-weight:800">${esc(a.species || 'Pending analysis')}${a.latin ? ` <em style="font-weight:400;color:#86837b;font-size:11px">(${esc(a.latin)})</em>` : ''}</div>
         ${line('Qty / size', `${t.qty || 1} specimen${(t.qty || 1) > 1 ? 's' : ''}${t.dbhIn ? ' \u00b7 ' + t.dbhIn + '\u2033 \u00b7 ' + DBH_BAND(t.dbhIn) : ''}${t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : ''}`)}
@@ -4955,7 +5028,7 @@ function photoExhibitHTML(TS, label) {
     </div>
   </div>`;
 }
-function openPhotoExhibit() {
+async function openPhotoExhibit() {
   const TS = repScope();
   if (!TS.length) { toast('Nothing in this scope \u2014 widen the Report filters'); return; }
   const label = S.repProject || 'All projects';
@@ -4963,7 +5036,11 @@ function openPhotoExhibit() {
     `Photo exhibit \u2014 ${esc(label)}<span class="sub">${TS.length} assets \u00b7 big photographs with full descriptions \u00b7 photos and computed data are locked.</span>`,
     `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
     'max-width:1060px;background:' + GX_CREAM, TS.length);
-  setTimeout(() => { docReady(photoExhibitHTML(TS, label)); }, 40);
+  const p = document.getElementById('reviewPaper');
+  if (p) { const d = p.querySelector('div'); if (d) d.insertAdjacentHTML('beforeend', '<div data-docprog style="margin-top:8px;font-size:11px;color:#a8a49a"></div>'); }
+  const r = await compressDocPhotos(TS, (n, of, bytes) => docProgress('Sizing photos for email \u2014 ' + n + ' of ' + of + ' \u00b7 ' + (bytes / 1048576).toFixed(1) + ' MB so far'));
+  docReady(photoExhibitHTML(TS, label));
+  if (r.count) toast('Photos sized for email: ' + r.count + ' images, ~' + Math.max(1, Math.round(r.bytes / 1048576)) + ' MB in the document \u2014 the saved PDF lands well under 25 MB');
 }
 function printSubScope() {
   const TS = repScope().filter(t => t.hazard !== 'Cleared');
@@ -5312,7 +5389,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v28.7</div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.2</div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5321,7 +5398,7 @@ function render() {
       ${S.hdrMenu ? hdrMenu() : ''}
     </div>
     <div class="view${S.tab === 'sheet' ? ' sheetfull' : ''}">${body}</div>
-    <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div><img class="railcrest" src="${WTR_MARK}" alt="WTR Group"></div>${IS_DESKTOP()
+    <div class="nav"><div class="railtop"><div class="railmark">TRICE</div><div class="railsub">WTR field module</div><img class="railcrest" src="${WTR_MARK}" alt="WTR Group"><button onclick="hardRefresh()" title="Clear this device's cached copy and load the live build" style="display:block;margin-top:14px;border:0;background:none;padding:0;font-size:9.5px;letter-spacing:.14em;color:#c6c8cb;font-weight:700;cursor:pointer;text-transform:uppercase">${BUILD.replace('trice-','')} \u00b7 update</button></div>${IS_DESKTOP()
       ? `${navBtn('survey','Home')}${navBtn('map','Map')}${navBtn('sheet','Grid')}${navBtn('report','Report')}${navBtn('projects','Projects')}${S.admin ? navBtn('work','Work') : ''}${ADMIN() ? navBtn('team','Team') : ''}`
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}${IS_DESKTOP() ? `<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button>` : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
@@ -5347,6 +5424,13 @@ function render() {
 const IS_DESKTOP = () => window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
 try { window.matchMedia('(min-width: 900px)').addEventListener('change', () => render()); } catch (e) { window.addEventListener('resize', () => { clearTimeout(window.__rzT); window.__rzT = setTimeout(render, 200); }); }
 const ADMIN = () => S.admin && IS_DESKTOP();
+async function hardRefresh() {
+  toast('Getting the latest version\u2026');
+  try { if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); for (const r of regs) { try { await r.unregister(); } catch (e) {} } } } catch (e) {}
+  try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch (e) {}
+  try { sessionStorage.setItem('trice_lastreload', '0'); } catch (e) {}
+  location.replace('/?fresh=' + Date.now());
+}
 function toggleAdmin() { S.admin = !S.admin; localStorage.setItem('trice_admin', S.admin ? '1' : '0'); if (!S.admin && (S.tab === 'team' || S.tab === 'work')) S.tab = 'report'; toast(S.admin ? 'Admin mode — assessor filters & bulk tools unlocked on Register and Report' : 'Admin mode off'); render(); }
 function fabCapture() {
   if (!S.surveyor) { go('survey'); toast('Pick your name first'); return; }
@@ -5372,6 +5456,7 @@ function hdrMenu() {
     ${row(`<span style="flex:1;font-size:13px;font-weight:700">${esc(S.surveyor || 'No user')}</span><span style="font-size:11px;color:var(--info);font-weight:700">Switch user</span>`, "S.hdrMenu=false;switchUser()")}
     ${!IS_DESKTOP() ? row(`<span style="flex:1;font-size:13px;font-weight:700">Admin mode</span><span style="font-size:11px;font-weight:700;color:${S.admin ? 'var(--accent)' : 'var(--faint)'}">${S.admin ? 'On ✓' : 'Off'}</span>`, "S.hdrMenu=false;toggleAdmin()") : ''}
     ${!IS_DESKTOP() && S.admin ? row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--info)">Work orders</span><span style="color:var(--faint)">\u203a</span>`, "S.hdrMenu=false;go('work')") : ''}
+    ${row(`<span style="flex:1;font-size:13px;font-weight:700">Get the latest version</span><span style="font-size:11px;color:var(--faint)">${BUILD.replace('trice-','')}</span>`, "S.hdrMenu=false;hardRefresh()")}
     ${row(`<span style="flex:1;font-size:13px;font-weight:700;color:var(--bad)">Sign out</span>`, "S.hdrMenu=false;signOut()")}
   </div>`;
 }
@@ -5387,7 +5472,7 @@ function go(tab) { S.hdrMenu = false; if (S.tab === 'sheet' && tab !== 'sheet') 
 const BUILD = (document.querySelector('meta[name="version"]') || {}).content || '';
 let VCHK_BUSY = false;
 async function checkBuild(force) {
-  if (VCHK_BUSY || !navigator.onLine || !gateOk() || document.visibilityState === 'hidden') return;
+  if (VCHK_BUSY || !navigator.onLine || document.visibilityState === 'hidden') return;
   if (Date.now() - (+(sessionStorage.getItem('trice_lastreload') || 0)) < 3 * 60 * 1000) return;
   const last = +(sessionStorage.getItem('trice_vchk') || 0);
   if (!force && Date.now() - last < 4 * 60 * 1000) return;

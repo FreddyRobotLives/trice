@@ -35,6 +35,16 @@
     Cache-Control = "public, max-age=86400"
 
 [[headers]]
+  for = "/fresh.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
+  for = "/fresh"
+  [headers.values]
+    Cache-Control = "no-store"
+
+[[headers]]
   for = "/sw.js"
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
@@ -43,6 +53,12 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
+
+[[redirects]]
+  from = "/fresh"
+  to = "/fresh.html"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/api/sync"

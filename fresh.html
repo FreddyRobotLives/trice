@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>WTR — Getting the latest version</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fbfbfd;font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1d1d1f;text-align:center;padding:30px}
+  .sp{width:26px;height:26px;border:3px solid #e0ded6;border-top-color:#17181a;border-radius:50%;animation:r .8s linear infinite;margin:0 auto 18px}
+  @keyframes r{to{transform:rotate(360deg)}}
+  h1{font-size:16px;margin:0}
+  p{font-size:12.5px;color:#6e6e73;margin:8px 0 0;line-height:1.6;max-width:340px}
+</style>
+</head>
+<body>
+<div>
+  <div class="sp"></div>
+  <h1>Getting you the latest version…</h1>
+  <p id="msg">Clearing this device's stored copies of the app. Your field data is untouched — records live on the server and in the app's database, not in these caches.</p>
+</div>
+<script>
+/* This page is served with no-store headers and is never cached by any service
+   worker, so it always arrives fresh from the network — even on a device whose
+   controlling worker predates every current build. It tears down the layers
+   that can pin an old version, then loads the app clean:
+   1. every service worker registration      (old fetch handlers)
+   2. every Cache Storage bucket             (old app shells)
+   Records are NOT touched: they live in IndexedDB and on the server. */
+(async function () {
+  var msg = document.getElementById('msg');
+  try {
+    if ('serviceWorker' in navigator) {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      for (var i = 0; i < regs.length; i++) { try { await regs[i].unregister(); } catch (e) {} }
+    }
+  } catch (e) {}
+  try {
+    if (window.caches && caches.keys) {
+      var ks = await caches.keys();
+      for (var j = 0; j < ks.length; j++) { try { await caches.delete(ks[j]); } catch (e) {} }
+    }
+  } catch (e) {}
+  try { sessionStorage.setItem('trice_lastreload', '0'); sessionStorage.setItem('trice_vchk', '0'); } catch (e) {}
+  msg.textContent = 'Done. Loading the live app…';
+  setTimeout(function () { location.replace('/?fresh=' + Date.now()); }, 350);
+})();
+</script>
+</body>
+</html>
