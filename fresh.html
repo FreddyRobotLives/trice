@@ -42,7 +42,11 @@
     }
   } catch (e) {}
   try { sessionStorage.setItem('trice_lastreload', '0'); sessionStorage.setItem('trice_vchk', '0'); } catch (e) {}
-  msg.textContent = 'Done. Loading the live app…';
+  try {
+    var vr = await fetch('/version.txt?ts=' + Date.now(), { cache: 'no-store' });
+    if (vr.ok) { var vt = (await vr.text()).trim(); if (/^trice-v[\d.]+$/.test(vt)) msg.textContent = 'Server is publishing ' + vt + '. Loading it now…'; }
+  } catch (e) {}
+  if (msg.textContent.indexOf('Server is publishing') !== 0) msg.textContent = 'Done. Loading the live app…';
   setTimeout(function () { location.replace('/?fresh=' + Date.now()); }, 350);
 })();
 </script>
