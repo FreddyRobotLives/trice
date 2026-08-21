@@ -906,16 +906,34 @@ var sync_src_default = async (req) => {
       const up = (name) => { const e = parents[name]; return (e && e.p) || null; };
       const inProj = (site) => { let c = site, g2 = 0; while (c && g2++ < 8) { if (c === wo.project) return true; c = up(c); } return false; };
       const { live } = await listAll();
+      /* Read records in parallel batches — one-at-a-time blob reads made a
+         147-asset work order take 7-15s to open. Batches of 24 bring the whole
+         scope walk down to a few round trips. */
+      const entries = Object.entries(live);
       const out = [];
-      for (const [id, r] of Object.entries(live)) {
-        const t = await safeGetJSON(r.k); if (!t) continue;
-        const site = t.site || "";
-        if (!inProj(site)) continue;
-        if (wo.zones && wo.zones.length && !wo.zones.includes(t.zone || "")) continue;
-        out.push(t);
+      for (let i = 0; i < entries.length; i += 24) {
+        const recs = await Promise.all(entries.slice(i, i + 24).map(([, r]) => safeGetJSON(r.k).catch(() => null)));
+        for (const t of recs) {
+          if (!t) continue;
+          if (!inProj(t.site || "")) continue;
+          if (wo.zones && wo.zones.length && !wo.zones.includes(t.zone || "")) continue;
+          out.push(t);
+        }
         if (Date.now() - T0 > 8500) break;
       }
       return out;
+    };
+    const ensureWoNums = async () => {
+      let m = (await safeGetJSON("meta/workorders")) || {};
+      if (!Object.values(m).some((w) => !w.num)) return m;
+      await metaMerge("meta/workorders", (cur) => {
+        let next = Math.max(0, ...Object.values(cur).map((x) => x.num || 0));
+        const missing = Object.entries(cur).filter(([, w]) => !w.num).sort((a, b) => (a[1].at || 0) - (b[1].at || 0));
+        for (const [tk] of missing) cur[tk].num = ++next;
+        m = cur;
+        return { next: cur, changed: missing.length > 0 };
+      });
+      return m;
     };
     const woPublic = (t) => {
       const a = t.ai || {};
@@ -972,7 +990,7 @@ var sync_src_default = async (req) => {
       }
       const woT = url.searchParams.get("wo");
       if (woT && /^[A-Za-z0-9]{12,40}$/.test(woT)) {
-        const wos = (await safeGetJSON("meta/workorders")) || {};
+        const wos = await ensureWoNums();
         const wo = wos[woT];
         if (!wo || wo.revoked) return new Response(JSON.stringify({ error: "This work link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
         const assets = (await woScope(wo)).map(woPublic);
@@ -980,7 +998,7 @@ var sync_src_default = async (req) => {
         const done = {};
         for (const [k, e] of Object.entries(doneAll)) { if (k.startsWith(woT + "|")) done[k.slice(woT.length + 1)] = e; }
         return new Response(JSON.stringify({ v: V, now: Date.now(),
-          wo: { token: woT, project: wo.project, zones: wo.zones || [], sub: wo.sub || "", note: wo.note || "", at: wo.at || 0 },
+          wo: { token: woT, num: wo.num || 0, project: wo.project, zones: wo.zones || [], sub: wo.sub || "", note: wo.note || "", at: wo.at || 0 },
           assets, done }), { headers: cors });
       }
       if (url.searchParams.get("list") === "backups") {
@@ -1051,7 +1069,15 @@ var sync_src_default = async (req) => {
       const zones = (Array.isArray(w.zones) ? w.zones : []).map((z) => String(z || "").trim().slice(0, 80)).filter(Boolean).slice(0, 40);
       const token = [...crypto.getRandomValues(new Uint8Array(15))].map((n) => "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[n % 55]).join("");
       const wo = { project, zones, sub: String(w.sub || "").trim().slice(0, 80), note: String(w.note || "").trim().slice(0, 300), by: String(w.by || "").trim().slice(0, 60), at: Date.now(), revoked: 0 };
-      await metaMerge("meta/workorders", (cur) => { cur[token] = wo; return { next: cur, changed: true }; });
+      /* Sequential order number, assigned inside the merge so concurrent creates
+         can never collide — the merge retries on conflict with fresh state. */
+      let assigned = 0;
+      await metaMerge("meta/workorders", (cur) => {
+        assigned = Math.max(0, ...Object.values(cur).map((x) => x.num || 0)) + 1;
+        cur[token] = Object.assign({}, wo, { num: assigned });
+        return { next: cur, changed: true };
+      });
+      wo.num = assigned;
       return new Response(JSON.stringify({ v: V, ok: true, woToken: token, wo }), { headers: cors });
     }
     if (b.woRevoke && typeof b.woRevoke === "string") {
@@ -1213,7 +1239,7 @@ var sync_src_default = async (req) => {
       const budgets = (await safeGetJSON("meta/budgets")) || {};
       const subs = (await safeGetJSON("meta/subs")) || {};
       const projstate = (await safeGetJSON("meta/projstate")) || {};
-      const workorders = (await safeGetJSON("meta/workorders")) || {};
+      const workorders = await ensureWoNums();
       const maplinks = (await safeGetJSON("meta/maplinks")) || {};
       const wodone = (await safeGetJSON("meta/wodone")) || {};
       return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone, maplinks,
