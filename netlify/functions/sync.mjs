@@ -1000,8 +1000,16 @@ var sync_src_default = async (req) => {
           }
           if (st) a.work = st;
         }
+        /* The order list itself, client-safe: number, who, zones, progress and
+           exact member ids for pin filtering. Capability tokens never leave. */
+        const orders = active.map(([tk, w]) => {
+          const members = assets.filter((a) => !w.zones || !w.zones.length || w.zones.includes(a.zone || ""));
+          const done = members.filter((a) => { const e = doneAll[tk + "|" + a.id]; return e && e.done; }).length;
+          const lastAt = members.reduce((m, a) => { const e = doneAll[tk + "|" + a.id]; return e && e.at > m ? e.at : m; }, 0);
+          return { num: w.num || 0, sub: w.sub || "", zones: w.zones || [], at: w.at || 0, done, total: members.length, lastAt, ids: members.map((a) => a.id) };
+        }).sort((x, y) => x.num - y.num);
         return new Response(JSON.stringify({ v: V, now: Date.now(),
-          mv: { token: mvT, project: ml.project, label: ml.label || "", at: ml.at || 0 }, assets }), { headers: cors });
+          mv: { token: mvT, project: ml.project, label: ml.label || "", at: ml.at || 0 }, assets, orders }), { headers: cors });
       }
       const woT = url.searchParams.get("wo");
       if (woT && /^[A-Za-z0-9]{12,40}$/.test(woT)) {
