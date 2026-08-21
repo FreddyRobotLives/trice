@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v29.5">
+<meta name="version" content="trice-v29.8">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.5">
-<script defer src="/vendor/leaflet.min.js?v=trice-v29.5" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.5" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.8">
+<script defer src="/vendor/leaflet.min.js?v=trice-v29.8" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.8" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.5') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.8') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -2692,7 +2692,7 @@ function mapView() {
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px">
     <span class="slab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hazard map · ${esc(S.mapProject || 'All projects')}</span>
-    ${S.admin ? `<button class="btn ghost" style="width:auto;margin:0;padding:8px 14px;font-size:11.5px;flex:none" onclick="mvSheet()">Create view-only link</button>` : ''}
+    <button class="btn ghost" style="width:auto;margin:0;padding:8px 14px;font-size:11.5px;flex:none" onclick="mvSheet()">Create view-only link</button>
     <span style="font-size:12px;color:var(--muted);flex:none">${S.mapProject ? withGps.length + ' pinned' : (() => { const roots = new Set(withGps.map(t => rootProjOf(siteOfT(t)))); return roots.size + ' location' + (roots.size === 1 ? '' : 's') + ' · ' + withGps.length + ' assets'; })()}${S.mapUser ? ' · ' + esc(S.mapUser) : ''}</span>
   </div>
   ${(projs.length > 1 || names.length > 1) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
@@ -2918,12 +2918,14 @@ function projectsView() {
    data, and revoking the token kills the link instantly. */
 function mvProject() { return S.mapProject || S.site || ''; }
 function mvSheet() {
-  if (!S.admin) { toast('Turn on Admin mode first'); return; }
   if (!mvProject()) { toast('Pick a project first'); return; }
   S.sheet = 'mvlinks'; render();
 }
 function mvSheetHTML() {
   const proj = mvProject();
+  if (!S.admin) return `<div style="font-size:16px;font-weight:800">View-only map \u00b7 ${esc(proj)}</div>
+  <div style="margin-top:8px;font-size:12.5px;color:var(--muted);line-height:1.6">Send anyone a link to a full-screen interactive map of this project's trees \u2014 photos, species, hazard, size. No pricing, no crew data, no way into the rest of the app. Creating and revoking links is an admin action.</div>
+  <button class="btn dark" style="margin-top:16px" onclick="toggleAdmin();render()">Turn on Admin mode</button>`;
   const links = Object.entries(S.maplinks || {}).filter(([, m]) => m.project === proj).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
   return `<div style="font-size:16px;font-weight:800">View-only map \u00b7 ${esc(proj)}</div>
   <div style="margin-top:6px;font-size:12px;color:var(--muted);line-height:1.6">Anyone with the link sees a full-screen interactive map of this project's trees \u2014 photos, species, hazard, size. No pricing, no crew data, no way into the rest of the app. Revoke any time.</div>
@@ -2962,6 +2964,89 @@ async function mvRevokeGo(token, un) {
     toast(un ? 'Link re-enabled' : 'Link revoked');
     render();
   } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
+}
+
+
+function woNum(wo) { return wo && wo.num ? 'WO-' + String(wo.num).padStart(4, '0') : 'WO-\u2014'; }
+/* ---- Work Order Report: the live progress document ----
+   Built fresh from the current registry and completion map every time it opens,
+   so it always states progress as of this moment. Same design language as the
+   Asset Database: WTR cover, quiet paper, one work order per page. Text only —
+   it prints small and emails instantly. */
+function workOrderReportHTML(orders) {
+  const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif";
+  const INK = '#1d1d1f', GRAY = '#6e6e73', HAIR = '#e8e8ed', PAPER = '#fbfbfd';
+  const site = S.site || 'WTR Group';
+  let allTasks = 0, allDone = 0;
+  const sections = orders.map(([token, wo]) => {
+    const scope = woScopeAssets(wo).slice().sort((a, b) => zoneSort(a.zone || '', b.zone || '') || (a.id < b.id ? -1 : 1));
+    const doneN = scope.filter(t => (S.wodone[token + '|' + t.id] || {}).done).length;
+    allTasks += scope.length; allDone += doneN;
+    const pct = scope.length ? Math.round(doneN / scope.length * 100) : 0;
+    const complete = scope.length && doneN === scope.length;
+    const lastMark = scope.reduce((m, t) => { const e = S.wodone[token + '|' + t.id]; return e && e.at > m ? e.at : m; }, 0);
+    const chip = wo.revoked
+      ? `<span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:${GRAY};border:1px solid ${HAIR};border-radius:999px;padding:4px 11px">Revoked</span>`
+      : (complete
+        ? `<span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#1e7e3e;background:#e8f5ec;border-radius:999px;padding:5px 11px">Complete</span>`
+        : `<span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#0a66c2;background:#eaf2fb;border-radius:999px;padding:5px 11px">In progress</span>`);
+    const row = (t) => {
+      const e = S.wodone[token + '|' + t.id] || {};
+      const a = t.ai || {};
+      return `<tr>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-family:ui-monospace,Menlo,monospace;font-size:10px;white-space:nowrap">${esc(t.id)}</td>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-size:10.5px">${esc(a.species || 'Unidentified')}${t.qty > 1 ? ' \u00d7' + t.qty : ''}</td>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-size:10.5px;white-space:nowrap">${esc(t.zone || '\u2014')}</td>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-size:10.5px">${esc(a.action || '\u2014')}</td>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-size:10.5px;font-weight:700;color:${HAZ_INK(t.hazard || 'Moderate')};white-space:nowrap">${esc(t.hazard || '')}</td>
+        <td style="padding:7px 9px;border-bottom:1px solid ${HAIR};font-size:10.5px;white-space:nowrap;${e.done ? 'color:#1e7e3e;font-weight:700' : 'color:' + GRAY}">${e.done ? '\u2713 Done \u00b7 ' + esc(e.by || '?') + ' \u00b7 ' + fmtWhen(e.at) : 'Open'}</td>
+      </tr>`;
+    };
+    return `
+    <div style="max-width:800px;margin:0 auto;page-break-after:always;padding-top:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <span style="font-size:24px;font-weight:800;letter-spacing:-.01em;color:${INK}">${woNum(wo)}</span>
+        ${chip}
+      </div>
+      <div style="margin-top:7px;font-size:11.5px;color:${GRAY}">For <b style="color:${INK}">${esc(wo.sub || 'Unnamed sub')}</b> \u00b7 ${esc(wo.project)}${wo.zones && wo.zones.length ? ' \u00b7 ' + wo.zones.map(esc).join(', ') : ' \u00b7 whole project'} \u00b7 issued ${fmtWhen(wo.at)}${wo.by ? ' by ' + esc(wo.by) : ''}</div>
+      ${wo.note ? `<div style="margin-top:8px;font-size:11px;color:#3c3c43;border-left:2px solid ${HAIR};padding-left:11px;line-height:1.6">${esc(wo.note)}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:14px;margin-top:15px">
+        <div style="flex:1;height:8px;border-radius:99px;background:#eeedf0;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact"><div style="width:${pct}%;height:100%;background:${complete ? '#34a853' : INK}"></div></div>
+        <span style="flex:none;font-size:12.5px;font-weight:800;color:${INK}">${doneN} / ${scope.length} \u00b7 ${pct}%</span>
+      </div>
+      <div style="font-size:10px;color:#a8a49a;margin-top:6px">${lastMark ? 'Last completion ' + fmtWhen(lastMark) : 'No completions yet'} \u00b7 progress as of ${new Date().toLocaleString()}</div>
+      <div class="tblwrap" style="margin-top:14px"><table style="width:100%;min-width:640px;border-collapse:separate;border-spacing:0;border:1px solid ${HAIR};border-radius:12px;overflow:hidden;background:#fff">
+        <tr>${['Asset', 'Species', 'Hole / zone', 'Work', 'Hazard', 'Status'].map(h => `<th style="text-align:left;padding:8px 9px;background:#f6f6f8;font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:${GRAY};border-bottom:1px solid ${HAIR}">${h}</th>`).join('')}</tr>
+        ${scope.map(row).join('')}
+      </table></div>
+    </div>`;
+  }).join('');
+  const pctAll = allTasks ? Math.round(allDone / allTasks * 100) : 0;
+  const stat = (n, l) => `<div style="flex:1 1 96px;min-width:0;padding:4px 8px;text-align:center"><div style="font-size:clamp(22px,6vw,32px);font-weight:800;letter-spacing:-.02em;color:${INK}">${n}</div><div style="font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:${GRAY};margin-top:3px">${l}</div></div>`;
+  return `
+  ${pdfCover('Work Order Report', site, FONT)}
+  <div style="font-family:${FONT};background:${PAPER};color:${INK};-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:8px 2px">
+    <div style="text-align:center;padding:34px 0 10px">
+      <img src="${WTR_MARK}" alt="WTR Group" style="height:74px">
+      <div style="font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#98948a;font-weight:700;margin-top:16px">Work Order Report</div>
+      <div style="font-size:clamp(22px,7.5vw,34px);font-weight:800;letter-spacing:-.02em;margin-top:6px">${esc(site)}</div>
+      <div style="font-size:11px;color:${GRAY};margin-top:8px">Live progress across every issued work order \u00b7 ${new Date().toLocaleString()}</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:0;max-width:860px;margin:30px auto 0;padding:18px 0;border-top:1px solid ${HAIR};border-bottom:1px solid ${HAIR};page-break-after:always">
+      ${stat(orders.length, 'work orders')}${stat(allTasks, 'tasks assigned')}${stat(allDone, 'complete')}${stat(pctAll + '%', 'overall progress')}
+    </div>
+    ${sections}
+    <div style="text-align:center;margin-top:8px;padding:18px 30px 8px;border-top:1px solid ${HAIR};font-size:10px;color:#a8a49a;line-height:1.7;max-width:760px;margin-left:auto;margin-right:auto">Completions are recorded live from the field as each subcontractor marks work done. Prepared by WTR Group.</div>
+  </div>`;
+}
+function openWorkOrderReport() {
+  const orders = Object.entries(S.workorders || {}).sort((a, b) => (a[1].num || 0) - (b[1].num || 0));
+  if (!orders.length) { toast('No work orders yet \u2014 create one first'); return; }
+  showDocLoading(
+    `Work Order Report<span class="sub">${orders.length} work order${orders.length > 1 ? 's' : ''} \u00b7 live progress, one order per page.</span>`,
+    `<button class="go" onclick="reviewPrint()">Print / save PDF</button>`,
+    'max-width:1120px;background:#fbfbfd', orders.length);
+  setTimeout(() => { docReady(workOrderReportHTML(orders)); }, 40);
 }
 
 function woScopeAssets(wo) {
@@ -3030,7 +3115,7 @@ function workView() {
   </div>`;
   const names = topProjects();
   const subNames = Object.values(S.subs || {}).filter(s => s && !s.del && s.active !== false).map(s => s.name).sort();
-  const orders = Object.entries(S.workorders || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+  const orders = Object.entries(S.workorders || {}).sort((a, b) => (b[1].num || 0) - (a[1].num || 0) || (b[1].at || 0) - (a[1].at || 0));
   const orderCard = ([token, wo]) => {
     const scope = woScopeAssets(wo);
     const doneN = scope.filter(t => (S.wodone[token + '|' + t.id] || {}).done).length;
@@ -3043,7 +3128,7 @@ function workView() {
       <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
           <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-            <span style="font-size:15.5px;font-weight:800">${esc(wo.sub || 'Unnamed sub')}</span>
+            <span style="font-size:15.5px;font-weight:800">${woNum(wo)} · ${esc(wo.sub || 'Unnamed sub')}</span>
             <span class="chip ${wo.revoked ? '' : (doneN === scope.length && scope.length ? 'good' : 'info')}">${wo.revoked ? '■ Revoked' : (scope.length && doneN === scope.length ? '✓ All work complete' : '● Active')}</span>
           </div>
           <div style="font-size:12px;color:var(--muted);margin-top:5px">${esc(wo.project)}${wo.zones && wo.zones.length ? ' · ' + wo.zones.map(esc).join(', ') : ' · whole project'}${wo.note ? ' · ' + esc(wo.note) : ''}</div>
@@ -3092,7 +3177,7 @@ function workView() {
       <button class="btn dark" style="width:auto;margin:0;padding:10px 18px" onclick="woCopyLink('${S.woNewToken}')">Copy</button>
     </div>` : ''}
   </div>
-  <div class="slab" style="margin-bottom:10px">Work orders · ${orders.length}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px"><span class="slab">Work orders · ${orders.length}</span><button class="btn ghost" style="width:auto;margin:0;padding:8px 15px;font-size:11.5px" onclick="openWorkOrderReport()">Open live report</button></div>
   ${orders.length ? orders.map(orderCard).join('') : '<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No work orders yet. Create one above — the sub gets a link, never the app.</div>'}
   <div style="margin-top:6px;font-size:11px;color:var(--faint);line-height:1.55">The link shows the sub only their assigned assets — photo, species, location and the work required. No pricing, no crew data, no register. Marks sync here live. Revoking a link cuts access instantly without losing completed marks.</div>`;
 }
@@ -4434,7 +4519,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.5</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.8</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4478,13 +4563,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.5', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.8', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.5', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.8', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5450,7 +5535,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.5</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.8</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5628,6 +5713,11 @@ function migrate(t) {
    the server returns only the assets inside its scope, and only accepts marks
    for those assets. Marks post immediately; failures queue on this phone and
    retry, so a sub with patchy course signal never loses a tap. */
+function publicShellReset() {
+  const st = document.createElement('style');
+  st.textContent = '#app{display:block !important;max-width:none !important;flex-direction:column !important;border:0 !important;margin:0 !important;width:100% !important}';
+  document.head.appendChild(st);
+}
 const WO_TOKEN = (() => { try { return new URLSearchParams(location.search).get('wo') || ''; } catch (e) { return ''; } })();
 const WOS = { data: null, err: '', busy: {}, name: '' };
 function woPendKey() { return 'trice_wopend_' + WO_TOKEN; }
@@ -5707,7 +5797,7 @@ function subRender() {
   };
   el.innerHTML = '<div style="font-family:' + F + ';background:#fbfbfd;min-height:100vh;padding:18px 14px 60px;max-width:660px;margin:0 auto">'
     + '<div style="text-align:center;padding:10px 0 4px"><img src="' + WTR_MARK + '" style="height:88px"></div>'
-    + '<div style="text-align:center;font-size:20px;font-weight:800;color:#1d1d1f;margin-top:8px">Work order · ' + esc(d.wo.project) + '</div>'
+    + '<div style="text-align:center;font-size:20px;font-weight:800;color:#1d1d1f;margin-top:8px">' + esc(d.wo.num ? 'Work order WO-' + String(d.wo.num).padStart(4, '0') : 'Work order') + ' · ' + esc(d.wo.project) + '</div>'
     + '<div style="text-align:center;font-size:12.5px;color:#6e6e73;margin-top:4px">For ' + esc(d.wo.sub || 'crew') + (d.wo.zones.length ? ' · ' + d.wo.zones.map(esc).join(', ') : '') + '</div>'
     + (d.wo.note ? '<div style="text-align:center;font-size:12.5px;color:#3c3c43;margin-top:8px;background:#fff;border:1px solid #e8e8ed;border-radius:12px;padding:11px 14px">' + esc(d.wo.note) + '</div>' : '')
     + '<div style="display:flex;align-items:center;gap:12px;margin:16px 2px 4px"><div style="flex:1;height:8px;border-radius:99px;background:#e8e8ed;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + (pct === 100 ? '#34a853' : '#17181a') + ';transition:width .3s"></div></div><span style="flex:none;font-size:13px;font-weight:800;color:#1d1d1f">' + doneN + ' / ' + assets.length + '</span></div>'
@@ -5719,6 +5809,7 @@ function subRender() {
     + '</div>';
 }
 function subBoot() {
+  publicShellReset();
   document.title = 'WTR — Work order';
   subRender();
   woFetch();
@@ -5804,6 +5895,7 @@ function mvRender() {
   })();
 }
 function mvBoot() {
+  publicShellReset();
   document.title = 'WTR \u2014 Tree map';
   mvRender();
   mvFetch();
