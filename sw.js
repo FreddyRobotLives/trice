@@ -4,7 +4,7 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v101';
+const CACHE = 'trice-shell-v103';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js', '/vendor/InterVariable.woff2'];
 const NAV_TIMEOUT = 3500;
 
@@ -13,9 +13,14 @@ self.addEventListener('install', (e) => {
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-      .then(() => {
+    caches.keys()
+      .then((ks) => {
+        const upgrade = ks.some((k) => k !== CACHE && /^trice-shell-/.test(k));
+        return Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))).then(() => upgrade);
+      })
+      .then((upgrade) => self.clients.claim().then(() => upgrade))
+      .then((upgrade) => {
+        if (!upgrade) return;   // first registration on this device: nothing to displace
         /* One-shot per deploy: this activate runs exactly once per new worker.
            Every window this worker now controls is running whatever build it
            loaded with — possibly months old. Reload each once through this
@@ -29,7 +34,7 @@ self.addEventListener('activate', (e) => {
            need force, so after 1.5s the worker navigates the non-responders. */
         setTimeout(() => {
           self.clients.matchAll({ type: 'window' }).then((cs) => {
-            cs.forEach((c) => { try { c.postMessage({ t: 'trice-takeover' }); } catch (e2) {} });
+            cs.forEach((c) => { try { if (!/[?&]fresh=/.test(c.url)) c.postMessage({ t: 'trice-takeover' }); } catch (e2) {} });
             setTimeout(() => {
               self.clients.matchAll({ type: 'window' }).then((cs2) => {
                 cs2.forEach((c) => {

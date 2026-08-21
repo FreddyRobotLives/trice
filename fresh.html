@@ -41,7 +41,7 @@
       for (var j = 0; j < ks.length; j++) { try { await caches.delete(ks[j]); } catch (e) {} }
     }
   } catch (e) {}
-  try { sessionStorage.setItem('trice_lastreload', '0'); sessionStorage.setItem('trice_vchk', '0'); } catch (e) {}
+  try { sessionStorage.setItem('trice_lastreload', String(Date.now())); sessionStorage.setItem('trice_vchk', '0'); } catch (e) {}
   try {
     var vr = await fetch('/version.txt?ts=' + Date.now(), { cache: 'no-store' });
     if (vr.ok) { var vt = (await vr.text()).trim(); if (/^trice-v[\d.]+$/.test(vt)) msg.textContent = 'Server is publishing ' + vt + '. Loading it now…'; }
