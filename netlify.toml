@@ -35,6 +35,12 @@
     Cache-Control = "public, max-age=86400"
 
 [[headers]]
+  for = "/version.txt"
+  [headers.values]
+    Cache-Control = "no-store"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
   for = "/fresh.html"
   [headers.values]
     Cache-Control = "no-store"
