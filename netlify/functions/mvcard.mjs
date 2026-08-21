@@ -36,11 +36,9 @@ export default async (req) => {
 
   const project = await projectFor(origin, token);
   const title = project ? 'Live tree map \u00b7 ' + project : 'Live tree map \u00b7 WTR Group';
-  const desc = (project
-    ? 'Every tree we assessed at ' + project + ', with photos, species and condition. '
-    : 'Every tree we assessed, with photos, species and condition. ')
+  const desc = (project ? project + '. ' : '')
     + 'The map updates as our crews complete the work. View only, no login.';
-  const img = origin + '/og-map.png?v=2';
+  const img = origin + '/og-map.png?v=3';
   const here = origin + '/?mv=' + encodeURIComponent(token);
 
   const metas = [
