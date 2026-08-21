@@ -985,6 +985,21 @@ var sync_src_default = async (req) => {
         const ml = mls[mvT];
         if (!ml || ml.revoked) return new Response(JSON.stringify({ error: "This map link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
         const assets = (await woScope({ project: ml.project, zones: [] })).map(woPublic);
+        /* Live work status rides along: which trees sit in an active work order,
+           and which of those the subs have already marked complete. */
+        const wosAll = await ensureWoNums();
+        const doneAll = (await safeGetJSON("meta/wodone")) || {};
+        const active = Object.entries(wosAll).filter(([, w]) => !w.revoked && w.project === ml.project);
+        for (const a of assets) {
+          let st = null;
+          for (const [tk, w] of active) {
+            if (w.zones && w.zones.length && !w.zones.includes(a.zone || "")) continue;
+            const e = doneAll[tk + "|" + a.id];
+            if (e && e.done) { st = { s: "done", num: w.num || 0, by: e.by || "", at: e.at || 0 }; break; }
+            st = st || { s: "assigned", num: w.num || 0 };
+          }
+          if (st) a.work = st;
+        }
         return new Response(JSON.stringify({ v: V, now: Date.now(),
           mv: { token: mvT, project: ml.project, label: ml.label || "", at: ml.at || 0 }, assets }), { headers: cors });
       }
