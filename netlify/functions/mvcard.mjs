@@ -1,88 +1,93 @@
-import { getStore } from '@netlify/blobs';
-
 /* ---- Link preview for view-only map links ----
    Messaging apps and mail clients fetch the URL and read its meta tags. They do
    not run JavaScript, so the app cannot set these itself — a /?mv= link would
-   otherwise show whatever tags index.html carries, which are the Trice product
-   tags. This serves the same app shell with map-specific tags swapped in, so a
+   otherwise preview with whatever tags index.html carries, which are the Trice
+   product tags. This serves the same app shell with map tags swapped in, so the
    client sees the WTR crest and plain language about what the link is.
 
-   Only /?mv=TOKEN is routed here (see netlify.toml). The token is used solely to
-   look up the project name for the title; nothing else is exposed. */
+   NO IMPORTS. This site has no package.json, so every function here must be
+   self-contained; an npm import fails the build and takes the whole deploy with
+   it. The project name comes from sync's mvmeta lookup over plain fetch.
 
-const esc = (s) => String(s || '')
+   Nothing in here may break a link. Every failure path still returns a working
+   page — generic card, app intact. */
+
+const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-const store = () => {
-  try { return getStore('trice-shared'); } catch (e) {
-    const env = (k) => (globalThis.Netlify && Netlify.env && Netlify.env.get(k)) || (globalThis.process && process.env && process.env[k]) || '';
-    const siteID = env('NETLIFY_SITE_ID') || env('SITE_ID');
-    const token = env('NETLIFY_BLOBS_TOKEN') || env('NETLIFY_API_TOKEN');
-    if (siteID && token) return getStore({ name: 'trice-shared', siteID, token });
-    return null;
-  }
-};
-
-async function projectFor(token) {
+async function projectFor(origin, token) {
   if (!/^[A-Za-z0-9]{12,40}$/.test(token || '')) return '';
   try {
-    const s = store();
-    if (!s) return '';
-    const links = (await s.get('meta/maplinks', { type: 'json' })) || {};
-    const ml = links[token];
-    if (!ml || ml.revoked) return '';
-    return String(ml.project || '').slice(0, 80);
+    const r = await fetch(origin + '/.netlify/functions/sync?mvmeta=' + encodeURIComponent(token));
+    if (!r || !r.ok) return '';
+    const j = await r.json();
+    return String((j && j.project) || '').slice(0, 80);
   } catch (e) { return ''; }
 }
 
 export default async (req) => {
-  const url = new URL(req.url);
-  const token = url.searchParams.get('mv') || '';
-  const origin = url.origin;
-
-  // The app shell itself, unmodified, straight from the CDN.
-  let html = '';
+  let origin = 'https://trice.live', token = '';
   try {
-    const r = await fetch(origin + '/index.html', { headers: { 'x-mvcard': '1' } });
-    if (!r.ok) throw new Error('shell ' + r.status);
-    html = await r.text();
-  } catch (e) {
-    return new Response('Map temporarily unavailable. Please try again.', { status: 502, headers: { 'Content-Type': 'text/plain' } });
-  }
+    const url = new URL(req.url);
+    origin = url.origin;
+    token = url.searchParams.get('mv') || '';
+  } catch (e) {}
 
-  const project = await projectFor(token);
+  const project = await projectFor(origin, token);
   const title = project ? 'Live tree map \u00b7 ' + project : 'Live tree map \u00b7 WTR Group';
   const desc = (project
     ? 'Every tree we assessed at ' + project + ', with photos, species and condition. '
     : 'Every tree we assessed, with photos, species and condition. ')
     + 'The map updates as our crews complete the work. View only, no login.';
-  const img = origin + '/og-map.png?v=1';
+  const img = origin + '/og-map.png?v=2';
   const here = origin + '/?mv=' + encodeURIComponent(token);
 
-  const tags = [
-    ['<title>', '</title>', '<title>' + esc(title) + '</title>'],
+  const metas = [
+    ['property', 'og:title', title],
+    ['property', 'og:description', desc],
+    ['property', 'og:image', img],
+    ['property', 'og:image:secure_url', img],
+    ['property', 'og:image:type', 'image/png'],
+    ['property', 'og:image:width', '2400'],
+    ['property', 'og:image:height', '1260'],
+    ['property', 'og:image:alt', 'WTR Group live tree map'],
+    ['property', 'og:url', here],
+    ['property', 'og:site_name', 'WTR Group'],
+    ['property', 'og:type', 'website'],
+    ['name', 'description', desc],
+    ['name', 'twitter:card', 'summary_large_image'],
+    ['name', 'twitter:title', title],
+    ['name', 'twitter:description', desc],
+    ['name', 'twitter:image', img],
+    ['name', 'twitter:image:alt', 'WTR Group live tree map'],
   ];
-  // Swap the product tags for map tags. Anything not present is appended.
-  const set = (attr, key, value) => {
-    const re = new RegExp('<meta\\s+' + attr + '="' + key.replace(/:/g, ':') + '"[^>]*>', 'i');
-    const tag = '<meta ' + attr + '="' + key + '" content="' + esc(value) + '">';
-    html = re.test(html) ? html.replace(re, tag) : html.replace('</head>', tag + '\n</head>');
-  };
-  html = html.replace(/<title>[\s\S]*?<\/title>/i, '<title>' + esc(title) + '</title>');
-  set('property', 'og:title', title);
-  set('property', 'og:description', desc);
-  set('property', 'og:image', img);
-  set('property', 'og:image:width', '2400');
-  set('property', 'og:image:height', '1260');
-  set('property', 'og:url', here);
-  set('property', 'og:site_name', 'WTR Group');
-  set('property', 'og:type', 'website');
-  set('name', 'description', desc);
-  set('name', 'twitter:card', 'summary_large_image');
-  set('name', 'twitter:title', title);
-  set('name', 'twitter:description', desc);
-  set('name', 'twitter:image', img);
+  const tagFor = (attr, key, value) => '<meta ' + attr + '="' + key + '" content="' + esc(value) + '">';
+
+  // The app shell, unmodified, straight from the CDN.
+  let html = '';
+  try {
+    const r = await fetch(origin + '/index.html', { headers: { 'x-mvcard': '1' } });
+    if (r && r.ok) html = await r.text();
+  } catch (e) {}
+
+  if (html) {
+    html = html.replace(/<title>[\s\S]*?<\/title>/i, '<title>' + esc(title) + '</title>');
+    // Drop the product's social tags outright, then insert the map's.
+    html = html.replace(/[ \t]*<meta\s+(?:property|name)="(?:og:[a-z:_]+|twitter:[a-z:_]+|description)"[^>]*>\s*\n?/gi, '');
+    html = html.replace('</head>', metas.map((m) => tagFor(m[0], m[1], m[2])).join('\n') + '\n</head>');
+  } else {
+    /* Shell unreachable: still hand back a correct preview and send the person
+       to the app. A link must never come back broken. */
+    html = '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+      + '<title>' + esc(title) + '</title>'
+      + metas.map((m) => tagFor(m[0], m[1], m[2])).join('')
+      + '<meta http-equiv="refresh" content="0;url=/index.html?mv=' + encodeURIComponent(token) + '">'
+      + '</head><body style="font:15px -apple-system,Helvetica,Arial,sans-serif;padding:40px;text-align:center">'
+      + 'Opening your live tree map\u2026 <a href="/index.html?mv=' + encodeURIComponent(token) + '">tap here</a> if it does not open.'
+      + '</body></html>';
+  }
 
   return new Response(html, {
     status: 200,

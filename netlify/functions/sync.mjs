@@ -979,6 +979,14 @@ var sync_src_default = async (req) => {
         const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
         return new Response(bytes, { headers: { "Content-Type": m[1], "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" } });
       }
+      /* Tiny lookup for the link-preview card: project name only, nothing else.
+         Keeps the card function dependency-free. */
+      const mvMeta = url.searchParams.get("mvmeta");
+      if (mvMeta && /^[A-Za-z0-9]{12,40}$/.test(mvMeta)) {
+        const mls = (await safeGetJSON("meta/maplinks")) || {};
+        const ml = mls[mvMeta];
+        return new Response(JSON.stringify({ v: V, project: ml && !ml.revoked ? String(ml.project || "") : "" }), { headers: cors });
+      }
       const mvT = url.searchParams.get("mv");
       if (mvT && /^[A-Za-z0-9]{12,40}$/.test(mvT)) {
         const mls = (await safeGetJSON("meta/maplinks")) || {};
@@ -1078,6 +1086,17 @@ var sync_src_default = async (req) => {
     if (b.mvRevoke && typeof b.mvRevoke === "string") {
       const tk = b.mvRevoke.trim();
       await metaMerge("meta/maplinks", (cur) => { if (cur[tk] && !cur[tk].revoked) { cur[tk].revoked = Date.now(); return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
+    if (b.mvDelete && typeof b.mvDelete === "string") {
+      const tk = b.mvDelete.trim();
+      /* Permanent: the token leaves the registry, so the link 404s forever and
+         cannot be re-enabled. Revoke is the reversible option. */
+      await metaMerge("meta/maplinks", (cur) => {
+        if (!cur[tk]) return { next: cur, changed: false };
+        delete cur[tk];
+        return { next: cur, changed: true };
+      });
       return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
     }
     if (b.mvUnrevoke && typeof b.mvUnrevoke === "string") {
