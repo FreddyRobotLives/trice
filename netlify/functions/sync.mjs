@@ -961,6 +961,15 @@ var sync_src_default = async (req) => {
         const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
         return new Response(bytes, { headers: { "Content-Type": m[1], "Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*" } });
       }
+      const mvT = url.searchParams.get("mv");
+      if (mvT && /^[A-Za-z0-9]{12,40}$/.test(mvT)) {
+        const mls = (await safeGetJSON("meta/maplinks")) || {};
+        const ml = mls[mvT];
+        if (!ml || ml.revoked) return new Response(JSON.stringify({ error: "This map link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
+        const assets = (await woScope({ project: ml.project, zones: [] })).map(woPublic);
+        return new Response(JSON.stringify({ v: V, now: Date.now(),
+          mv: { token: mvT, project: ml.project, label: ml.label || "", at: ml.at || 0 }, assets }), { headers: cors });
+      }
       const woT = url.searchParams.get("wo");
       if (woT && /^[A-Za-z0-9]{12,40}$/.test(woT)) {
         const wos = (await safeGetJSON("meta/workorders")) || {};
@@ -1016,6 +1025,25 @@ var sync_src_default = async (req) => {
     await migrateSlice();
 
     // ---- work orders: create (returns the shareable token), revoke, and the sub's mark ----
+    if (b.mvCreate && typeof b.mvCreate === "object") {
+      const w = b.mvCreate;
+      const project = String(w.project || "").trim().slice(0, 80);
+      if (!project) return new Response(JSON.stringify({ error: "project required" }), { status: 400, headers: cors });
+      const token = [...crypto.getRandomValues(new Uint8Array(15))].map((n) => "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[n % 55]).join("");
+      const ml = { project, label: String(w.label || "").trim().slice(0, 120), by: String(w.by || "").trim().slice(0, 60), at: Date.now(), revoked: 0 };
+      await metaMerge("meta/maplinks", (cur) => { cur[token] = ml; return { next: cur, changed: true }; });
+      return new Response(JSON.stringify({ v: V, ok: true, mvToken: token, ml }), { headers: cors });
+    }
+    if (b.mvRevoke && typeof b.mvRevoke === "string") {
+      const tk = b.mvRevoke.trim();
+      await metaMerge("meta/maplinks", (cur) => { if (cur[tk] && !cur[tk].revoked) { cur[tk].revoked = Date.now(); return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
+    if (b.mvUnrevoke && typeof b.mvUnrevoke === "string") {
+      const tk = b.mvUnrevoke.trim();
+      await metaMerge("meta/maplinks", (cur) => { if (cur[tk] && cur[tk].revoked) { cur[tk].revoked = 0; return { next: cur, changed: true }; } return { next: cur, changed: false }; });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
     if (b.woCreate && typeof b.woCreate === "object") {
       const w = b.woCreate;
       const project = String(w.project || "").trim().slice(0, 80);
@@ -1186,8 +1214,9 @@ var sync_src_default = async (req) => {
       const subs = (await safeGetJSON("meta/subs")) || {};
       const projstate = (await safeGetJSON("meta/projstate")) || {};
       const workorders = (await safeGetJSON("meta/workorders")) || {};
+      const maplinks = (await safeGetJSON("meta/maplinks")) || {};
       const wodone = (await safeGetJSON("meta/wodone")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone,
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone, maplinks,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
