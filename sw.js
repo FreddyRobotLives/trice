@@ -4,7 +4,7 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v104';
+const CACHE = 'trice-shell-v106';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js', '/vendor/InterVariable.woff2'];
 const NAV_TIMEOUT = 3500;
 
@@ -63,8 +63,12 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
     const net = fetch(new Request(req, { cache: 'no-cache' }))
       .then((r) => {
-        // Cache only a real page — never a 4xx/5xx or an opaque error body.
-        if (r && r.ok) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put('/index.html', copy)); }
+        /* Cache only a real page — never a 4xx/5xx or an opaque error body, and
+           never a share link. Map and work-order links are served with their own
+           preview tags and titles; storing one under the shared shell key would
+           hand those tags to the whole app on the next offline load. */
+        const shareLink = url.searchParams.has('mv') || url.searchParams.has('wo');
+        if (r && r.ok && !shareLink) { const copy = r.clone(); caches.open(CACHE).then((c) => c.put('/index.html', copy)); }
         return r;
       });
     const timer = new Promise((res) => setTimeout(() => res('timeout'), NAV_TIMEOUT));

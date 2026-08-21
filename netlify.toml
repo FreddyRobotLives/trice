@@ -35,6 +35,11 @@
     Cache-Control = "public, max-age=86400"
 
 [[headers]]
+  for = "/og-map.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
   for = "/version.txt"
   [headers.values]
     Cache-Control = "no-store"
@@ -59,6 +64,13 @@
   for = "/manifest.webmanifest"
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
+
+[[redirects]]
+  from = "/"
+  query = { mv = ":token" }
+  to = "/.netlify/functions/mvcard?mv=:token"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/fresh"
