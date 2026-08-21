@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v29.8">
+<meta name="version" content="trice-v29.9">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.8">
-<script defer src="/vendor/leaflet.min.js?v=trice-v29.8" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.8" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.9">
+<script defer src="/vendor/leaflet.min.js?v=trice-v29.9" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.9" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.8') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.9') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -211,18 +211,18 @@ input,select,textarea{border-radius:11px}
   body{background:#f2f2ef}
   #app{max-width:none;flex-direction:row;border:0 !important}
   .hdr{display:none}
-  .nav{position:sticky;top:0;bottom:auto;order:-1;flex:none;align-self:flex-start;width:304px;height:100vh;max-width:none;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:2px;background:#fbfbf9;border-top:0;border-right:1px solid #e9e8e3;box-shadow:none;padding:60px 48px;border-radius:0}
+  .nav{position:sticky;top:0;bottom:auto;order:-1;flex:none;align-self:flex-start;width:304px;height:100vh;overflow-y:auto;overscroll-behavior:contain;min-height:0;padding-bottom:26px;max-width:none;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:2px;background:#fbfbf9;border-top:0;border-right:1px solid #e9e8e3;box-shadow:none;padding:60px 48px;border-radius:0}
   .nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:0;padding:12px 0;font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:#a8aaad;font-weight:600;border-radius:0;min-height:0}
   .nav button:hover{color:#5c5f63}
   .nav button.on{color:#101214;font-weight:800}
   .nav button.on::before{content:'';position:absolute;left:-19px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(200,69,44,.12)}
   .nav .ndot{position:static;display:inline-block;margin-left:10px;width:6px;height:6px;border:0;vertical-align:middle;opacity:.85;box-shadow:0 0 0 3px rgba(200,69,44,.12)}
   .nav button svg,.nav button .ic{display:none}
-  .railtop{display:block;margin:0 0 72px}
+  .railtop{display:block;margin:0 0 34px;flex:none}
   .railmark{font-size:21px;font-weight:800;letter-spacing:.34em;color:#101214}
   .railsub{margin-top:10px;font-size:9.5px;letter-spacing:.3em;text-transform:uppercase;color:#b3b5b8;font-weight:600}
-  .railcrest{display:block;height:52px;width:auto;margin-top:20px;opacity:.9}
-  .railfoot{display:flex;align-items:center;gap:9px;margin-top:0;padding-top:14px;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9b9ea2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .railcrest{display:block;height:48px;width:auto;margin-top:14px;opacity:.9}
+  .railfoot{display:flex;align-items:center;gap:9px;margin-top:0;padding-top:14px;flex:none;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#9b9ea2;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .raildot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none;box-shadow:0 0 0 4px rgba(47,125,85,.12)}
   .view{padding:76px 88px 140px;background:transparent}
   .view>*{max-width:1120px;margin-left:auto !important;margin-right:auto !important}
@@ -4519,7 +4519,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.8</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.9</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4563,13 +4563,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.8', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.9', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.8', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.9', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5535,7 +5535,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.8</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.9</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5828,7 +5828,8 @@ const MV_TOKEN = (() => { try { return new URLSearchParams(location.search).get(
 const MVS = { data: null, err: '' };
 function mvPinData(assets) {
   return assets.filter(t => typeof t.lat === 'number' && typeof t.lng === 'number').map(t => ({
-    lat: t.lat, lng: t.lng, color: HAZ_INK(t.hazard || 'Moderate'),
+    id: t.id, lat: t.lat, lng: t.lng, color: HAZ_INK(t.hazard || 'Moderate'),
+    done: !!(t.work && t.work.s === 'done'), assigned: !!(t.work && t.work.s === 'assigned'),
     popup: '<div style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;width:230px">'
       + (t.photoKey ? '<img loading="lazy" src="/api/sync?img=' + encodeURIComponent(t.photoKey) + '" style="display:block;width:100%;height:140px;object-fit:cover;border-radius:10px;background:#f2f2f7">' : '')
       + '<div style="margin-top:8px;font-size:14px;font-weight:800;color:#1d1d1f">' + esc(t.species || 'Tree') + '</div>'
@@ -5837,6 +5838,7 @@ function mvPinData(assets) {
       + '<span style="font-weight:700;color:' + HAZ_INK(t.hazard || 'Moderate') + '">' + esc(t.hazard || '') + '</span>'
       + (t.qty > 1 ? ' \u00b7 ' + t.qty + ' trees' : '') + (t.dbhIn ? ' \u00b7 ' + t.dbhIn + '&Prime; DBH' : '') + (t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : '')
       + (t.salv ? ' \u00b7 Salvageable ' + esc(t.salv) : '') + '</div>'
+      + (t.work ? '<div style="margin-top:7px;font-size:11px;font-weight:700;' + (t.work.s === 'done' ? 'color:#1e7e3e">\u2713 Work complete' + (t.work.by ? ' \u00b7 ' + esc(t.work.by) : '') + (t.work.at ? ' \u00b7 ' + fmtWhen(t.work.at) : '') : 'color:#0a66c2">\u25cf Work scheduled') + (t.work.num ? ' \u00b7 WO-' + String(t.work.num).padStart(4, '0') : '') + '</div>' : '')
       + (t.notes ? '<div style="margin-top:6px;font-size:11px;color:#3c3c43;line-height:1.55;max-height:88px;overflow:auto">' + esc(t.notes) + '</div>' : '')
       + '<div style="margin-top:6px;font-size:10.5px;color:#6e6e73">' + esc(t.zone || '') + (t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : '') + ' \u00b7 ' + esc(t.id) + '</div>'
       + '</div>'
@@ -5869,33 +5871,68 @@ function mvRender() {
     + '<div style="pointer-events:auto;display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #e8e8ed;border-radius:16px;padding:9px 15px 9px 10px;box-shadow:0 6px 24px rgba(16,18,22,.10)">'
     + '<img src="' + WTR_MARK + '" style="height:40px">'
     + '<span><span style="display:block;font-size:13.5px;font-weight:800;color:#1d1d1f">' + esc(d.mv.project) + '</span>'
-    + '<span style="display:block;font-size:10.5px;color:#6e6e73">Tree hazard map \u00b7 ' + d.assets.length + ' assets \u00b7 view only</span></span>'
+    + '<span style="display:block;font-size:10.5px;color:#6e6e73">Tree hazard map \u00b7 ' + d.assets.length + ' assets \u00b7 view only</span>'
+    + (function(){ const w = d.assets.filter(t => t.work); const dn = w.filter(t => t.work.s === 'done').length; if (!w.length) return ''; const p = Math.round(dn / w.length * 100);
+        return '<span style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="flex:none;width:120px;height:6px;border-radius:99px;background:#e8e8ed;overflow:hidden;display:inline-block"><span style="display:block;width:' + p + '%;height:100%;background:' + (p === 100 ? '#34a853' : '#17181a') + '"></span></span><span style="font-size:10.5px;font-weight:800;color:#1d1d1f">' + dn + ' of ' + w.length + ' work items done \u00b7 ' + p + '%</span></span>'; })()
+    + '</span>'
     + '</div></div>'
     + '<div style="position:absolute;left:12px;bottom:12px;z-index:500;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #e8e8ed;border-radius:13px;padding:9px 13px;font-size:10.5px;color:#3c3c43;box-shadow:0 6px 24px rgba(16,18,22,.10)">'
     + '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:11px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('High Hazard') + '"></span>High hazard</span>'
     + '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:11px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('Moderate') + '"></span>Moderate</span>'
-    + '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('Low') + '"></span>Low</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:11px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('Low') + '"></span>Low</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:13px;height:13px;border-radius:50%;background:#34a853;color:#fff;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">\u2713</span>Work complete</span>'
     + '<span style="display:block;margin-top:4px;color:#98948a">WTR Group \u00b7 tap a pin for the tree\u2019s photo and condition</span>'
     + '</div>'
     + '</div>';
   let tries = 0;
   (function draw() {
     if (typeof L === 'undefined') { if (tries++ < 80) return void setTimeout(draw, 125); return; }
-    const map = L.map('mvMap', { zoomControl: true, attributionControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '\u00a9 OpenStreetMap' }).addTo(map);
-    const pins = mvPinData(d.assets);
-    const grp = [];
-    for (const p of pins) {
-      const mk = L.circleMarker([p.lat, p.lng], { radius: 8, color: '#fff', weight: 2, fillColor: p.color, fillOpacity: .95 }).addTo(map);
-      mk.bindPopup(p.popup, { maxWidth: 260 });
-      grp.push(mk);
-    }
-    if (grp.length) map.fitBounds(L.featureGroup(grp).getBounds().pad(0.18));
-    else map.setView([27.95, -82.46], 10);
+    MVMAP.map = L.map('mvMap', { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '\u00a9 OpenStreetMap' }).addTo(MVMAP.map);
+    mvPlacePins(mvPinData(d.assets), true);
   })();
+}
+/* Markers are keyed by asset and restyled in place on refresh, so the client's
+   pan and zoom survive every live update. Completed work turns the pin into a
+   green check. */
+const MVMAP = { map: null, marks: {} };
+function mvPinIcon(p) {
+  return L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -10],
+    html: p.done
+      ? '<div style="width:20px;height:20px;border-radius:50%;background:#34a853;border:2px solid #fff;box-shadow:0 1px 6px rgba(16,18,22,.35);color:#fff;font:800 11px/16px -apple-system,Helvetica,Arial,sans-serif;text-align:center">\u2713</div>'
+      : '<div style="width:16px;height:16px;border-radius:50%;background:' + p.color + ';border:2px solid #fff;box-shadow:0 1px 6px rgba(16,18,22,.3)' + (p.assigned ? ';outline:2px solid rgba(10,102,194,.45);outline-offset:1px' : '') + '"></div>' });
+}
+function mvPlacePins(pins, fit) {
+  const seen = new Set();
+  for (const p of pins) {
+    seen.add(p.id);
+    let mk = MVMAP.marks[p.id];
+    if (!mk) { mk = L.marker([p.lat, p.lng], { icon: mvPinIcon(p) }).addTo(MVMAP.map); MVMAP.marks[p.id] = mk; }
+    else mk.setIcon(mvPinIcon(p));
+    mk.unbindPopup(); mk.bindPopup(p.popup, { maxWidth: 260 });
+  }
+  for (const id of Object.keys(MVMAP.marks)) { if (!seen.has(id)) { MVMAP.map.removeLayer(MVMAP.marks[id]); delete MVMAP.marks[id]; } }
+  if (fit) {
+    const all = Object.values(MVMAP.marks);
+    if (all.length) MVMAP.map.fitBounds(L.featureGroup(all).getBounds().pad(0.18));
+    else MVMAP.map.setView([27.95, -82.46], 10);
+  }
+}
+async function mvRefresh() {
+  if (document.hidden || !MVMAP.map) return;
+  try {
+    const r = await fetch('/api/sync?mv=' + encodeURIComponent(MV_TOKEN));
+    if (!r.ok) return;
+    const j = await r.json();
+    MVS.data = j;
+    mvPlacePins(mvPinData(j.assets), false);
+    const bar = document.getElementById('mvHead');
+    if (bar) { /* header re-render without touching the map */ }
+  } catch (e) {}
 }
 function mvBoot() {
   publicShellReset();
+  setInterval(mvRefresh, 45000);
   document.title = 'WTR \u2014 Tree map';
   mvRender();
   mvFetch();
