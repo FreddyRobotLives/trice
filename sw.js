@@ -4,7 +4,7 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v110';
+const CACHE = 'trice-shell-v112';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js', '/vendor/InterVariable.woff2'];
 const NAV_TIMEOUT = 3500;
 
@@ -32,13 +32,19 @@ self.addEventListener('activate', (e) => {
            reload themselves at a polite moment (never mid-password). Pages too
            old to know the protocol stay silent — they are exactly the ones that
            need force, so after 1.5s the worker navigates the non-responders. */
+        /* Share-link windows are never taken over. A client reading the map, or a
+           sub working an order, is a public page that already pulls live data on
+           its own — and it deliberately boots early, so it never registers the
+           handshake listener. Without this it looks "silent", gets force
+           navigated, and reloads under the person a few seconds in. */
+        const SKIP = /[?&](fresh|mv|wo)=/;
         setTimeout(() => {
           self.clients.matchAll({ type: 'window' }).then((cs) => {
-            cs.forEach((c) => { try { if (!/[?&]fresh=/.test(c.url)) c.postMessage({ t: 'trice-takeover' }); } catch (e2) {} });
+            cs.forEach((c) => { try { if (!SKIP.test(c.url)) c.postMessage({ t: 'trice-takeover' }); } catch (e2) {} });
             setTimeout(() => {
               self.clients.matchAll({ type: 'window' }).then((cs2) => {
                 cs2.forEach((c) => {
-                  try { if (!ACKED.has(c.id) && !/[?&]fresh=/.test(c.url) && c.navigate) c.navigate(c.url); } catch (e2) {}
+                  try { if (!ACKED.has(c.id) && !SKIP.test(c.url) && c.navigate) c.navigate(c.url); } catch (e2) {}
                 });
               });
             }, 1500);
