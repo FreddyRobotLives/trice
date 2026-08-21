@@ -4,7 +4,7 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v93';
+const CACHE = 'trice-shell-v94';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/xlsx.full.min.js', '/vendor/exceljs.min.js', '/vendor/InterVariable.woff2'];
 const NAV_TIMEOUT = 3500;
 
@@ -23,15 +23,28 @@ self.addEventListener('activate', (e) => {
            including home-screen PWAs that never see a refresh button. The 3.5s
            delay lets the navigation that triggered the update finish painting;
            pages already on the rescue path are left alone. */
+        /* Handshake first: pages new enough to listen reply with an ack and
+           reload themselves at a polite moment (never mid-password). Pages too
+           old to know the protocol stay silent — they are exactly the ones that
+           need force, so after 1.5s the worker navigates the non-responders. */
         setTimeout(() => {
           self.clients.matchAll({ type: 'window' }).then((cs) => {
-            cs.forEach((c) => {
-              try { if (!/[?&]fresh=/.test(c.url) && c.navigate) c.navigate(c.url); } catch (e2) {}
-            });
+            cs.forEach((c) => { try { c.postMessage({ t: 'trice-takeover' }); } catch (e2) {} });
+            setTimeout(() => {
+              self.clients.matchAll({ type: 'window' }).then((cs2) => {
+                cs2.forEach((c) => {
+                  try { if (!ACKED.has(c.id) && !/[?&]fresh=/.test(c.url) && c.navigate) c.navigate(c.url); } catch (e2) {}
+                });
+              });
+            }, 1500);
           });
         }, 3500);
       })
   );
+});
+const ACKED = new Set();
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.t === 'trice-ack' && e.source) ACKED.add(e.source.id);
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;

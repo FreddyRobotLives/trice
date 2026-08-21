@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v29.4">
+<meta name="version" content="trice-v29.5">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.4">
-<script defer src="/vendor/leaflet.min.js?v=trice-v29.4" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.4" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v29.5">
+<script defer src="/vendor/leaflet.min.js?v=trice-v29.5" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v29.5" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.4') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v29.5') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -343,6 +343,7 @@ const S = {
   workorders: (() => { try { return JSON.parse(localStorage.getItem('trice_wo') || '{}'); } catch (e) { return {}; } })(),
   wodone: (() => { try { return JSON.parse(localStorage.getItem('trice_wodone') || '{}'); } catch (e) { return {}; } })(),
   wodoneDirty: {},
+  maplinks: {},
   predAdjust: (() => { try { return localStorage.getItem('trice_predadjust') || ''; } catch (e) { return ''; } })(),
   projState: (() => { try { return JSON.parse(localStorage.getItem('trice_projstate') || '{}'); } catch (e) { return {}; } })(),
   projStateDirty: {},
@@ -783,6 +784,7 @@ function applySharedMeta(j) {
   if (mergeLWW(S.subs, j.subs, S.subsDirty)) teamCh = true;
   if (mergeLWW(S.wodone, j.wodone, S.wodoneDirty)) teamCh = true;
   if (j.workorders && typeof j.workorders === 'object' && JSON.stringify(j.workorders) !== JSON.stringify(S.workorders)) { S.workorders = j.workorders; teamCh = true; }
+  if (j.maplinks && typeof j.maplinks === 'object' && JSON.stringify(j.maplinks) !== JSON.stringify(S.maplinks)) { S.maplinks = j.maplinks; teamCh = true; }
   if (teamCh) { try { localStorage.setItem('trice_wo', JSON.stringify(S.workorders)); localStorage.setItem('trice_wodone', JSON.stringify(S.wodone)); } catch (e) {} }
   if (mergeLWW(S.projState, j.projstate, S.projStateDirty)) teamCh = true;
   if (teamCh) { try { localStorage.setItem('trice_emp', JSON.stringify(S.emp)); localStorage.setItem('trice_assign', JSON.stringify(S.assign)); localStorage.setItem('trice_hours', JSON.stringify(S.hoursMap)); localStorage.setItem('trice_budgets', JSON.stringify(S.budgets)); localStorage.setItem('trice_subs', JSON.stringify(S.subs)); localStorage.setItem('trice_projstate', JSON.stringify(S.projState)); } catch (e) {} if (S.tab === 'team') { const ae = document.activeElement; if (!ae || !/input|textarea|select/i.test(ae.tagName)) render(); } }
@@ -2690,6 +2692,7 @@ function mapView() {
   return `
   <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px">
     <span class="slab" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Hazard map · ${esc(S.mapProject || 'All projects')}</span>
+    ${S.admin ? `<button class="btn ghost" style="width:auto;margin:0;padding:8px 14px;font-size:11.5px;flex:none" onclick="mvSheet()">Create view-only link</button>` : ''}
     <span style="font-size:12px;color:var(--muted);flex:none">${S.mapProject ? withGps.length + ' pinned' : (() => { const roots = new Set(withGps.map(t => rootProjOf(siteOfT(t)))); return roots.size + ' location' + (roots.size === 1 ? '' : 's') + ' · ' + withGps.length + ' assets'; })()}${S.mapUser ? ' · ' + esc(S.mapUser) : ''}</span>
   </div>
   ${(projs.length > 1 || names.length > 1) ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
@@ -2907,12 +2910,66 @@ function projectsView() {
    whoever opens it sees only those assets (no pricing, no crew data) and marks
    them complete. Completions live in an LWW map that rides normal sync, so this
    grid updates live as subs work. Revoking kills the link server-side. */
+
+/* ---- View-only map links ----
+   A token the client can forward to THEIR client: a full-screen interactive map
+   of the project's trees, nothing else. Same capability model as work orders:
+   the server returns only that project's assets, stripped of pricing and crew
+   data, and revoking the token kills the link instantly. */
+function mvProject() { return S.mapProject || S.site || ''; }
+function mvSheet() {
+  if (!S.admin) { toast('Turn on Admin mode first'); return; }
+  if (!mvProject()) { toast('Pick a project first'); return; }
+  S.sheet = 'mvlinks'; render();
+}
+function mvSheetHTML() {
+  const proj = mvProject();
+  const links = Object.entries(S.maplinks || {}).filter(([, m]) => m.project === proj).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
+  return `<div style="font-size:16px;font-weight:800">View-only map \u00b7 ${esc(proj)}</div>
+  <div style="margin-top:6px;font-size:12px;color:var(--muted);line-height:1.6">Anyone with the link sees a full-screen interactive map of this project's trees \u2014 photos, species, hazard, size. No pricing, no crew data, no way into the rest of the app. Revoke any time.</div>
+  <button class="btn dark" style="margin-top:14px" onclick="mvCreateGo()">Create link for ${esc(proj)}</button>
+  ${links.length ? `<div class="slab" style="margin:16px 0 6px">Links \u00b7 ${links.length}</div>` + links.map(([tk, m]) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--hair)">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:12.5px;font-weight:700;${m.revoked ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(m.label || 'Map link')}</span>
+        <span style="display:block;font-size:10.5px;color:var(--faint)">${fmtWhen(m.at)}${m.by ? ' \u00b7 ' + esc(m.by) : ''}${m.revoked ? ' \u00b7 revoked' : ''}</span>
+      </span>
+      ${m.revoked
+        ? `<button class="btn ghost" style="width:auto;margin:0;padding:8px 13px;font-size:11px" onclick="mvRevokeGo('${tk}', true)">Re-enable</button>`
+        : `<button class="btn ghost" style="width:auto;margin:0;padding:8px 13px;font-size:11px" onclick="woCopyLink('${tk}', true)">Copy</button>
+           <button class="btn ghost" style="width:auto;margin:0;padding:8px 13px;font-size:11px;color:var(--bad)" onclick="mvRevokeGo('${tk}')">Revoke</button>`}
+    </div>`).join('') : ''}`;
+}
+async function mvCreateGo() {
+  const proj = mvProject();
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mvCreate: { project: proj, label: proj + ' \u2014 tree map', by: S.surveyor || 'Admin' } }) });
+    const j = await r.json();
+    if (!r.ok || !j.mvToken) throw new Error(j.error || 'refused');
+    S.maplinks[j.mvToken] = j.ml;
+    woCopyLink(j.mvToken, true);
+    render();
+  } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
+}
+async function mvRevokeGo(token, un) {
+  if (!un && !confirm('Revoke this map link?\n\nAnyone holding it loses access the moment they next load it. You can re-enable it later.')) return;
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(un ? { mvUnrevoke: token } : { mvRevoke: token }) });
+    if (!r.ok) throw new Error('http');
+    if (S.maplinks[token]) S.maplinks[token].revoked = un ? 0 : Date.now();
+    toast(un ? 'Link re-enabled' : 'Link revoked');
+    render();
+  } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
+}
+
 function woScopeAssets(wo) {
   return S.trees.filter(t => visT(t) && projMatches(siteOfT(t), wo.project) && (!wo.zones || !wo.zones.length || wo.zones.includes(t.zone || '')));
 }
-function woLink(token) { return location.origin + '/?wo=' + token; }
-function woCopyLink(token) {
-  const url = woLink(token);
+function woLink(token, mv) { return location.origin + (mv ? '/?mv=' : '/?wo=') + token; }
+function woCopyLink(token, mv) {
+  const url = woLink(token, mv);
   const done = () => toast('Link copied — text or email it to the sub');
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => prompt('Copy this link:', url));
   else prompt('Copy this link:', url);
@@ -4377,7 +4434,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.4</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v29.5</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4421,13 +4478,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.4', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v29.5', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.4', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v29.5', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5393,7 +5450,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.4</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v29.5</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5407,6 +5464,7 @@ function render() {
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}${IS_DESKTOP() ? `<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button>` : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
+    ${S.sheet === 'mvlinks' ? `<div class="sheet-scrim" onclick="S.sheet=null;render()"></div><div class="sheet">${mvSheetHTML()}</div>` : ''}
     ${S.camOpen ? camView() : ''}
     ${S.zoomSrc ? zoomView() : ''}
     ${adjT ? adjustSheet(adjT) : ''}
@@ -5451,6 +5509,7 @@ async function beaconCheck() {
   const b = await buildBeacon();
   S.beacon = b; 
   if (b.state === 'server-ahead' && sessionStorage.getItem('trice_beacon_heal') !== b.server) {
+    if (userBusy()) { setTimeout(beaconCheck, 12000); return; }   // never mid-password, never mid-capture
     try { sessionStorage.setItem('trice_beacon_heal', b.server); } catch (e) {}
     hardRefresh();
     return;
@@ -5510,6 +5569,13 @@ function go(tab) { S.hdrMenu = false; if (S.tab === 'sheet' && tab !== 'sheet') 
    projects and the team password all survive. An in-progress draft resumes after the reload. */
 const BUILD = (document.querySelector('meta[name="version"]') || {}).content || '';
 let VCHK_BUSY = false;
+let LAST_INPUT = 0;
+addEventListener('pointerdown', () => { LAST_INPUT = Date.now(); }, { capture: true, passive: true });
+addEventListener('keydown', () => { LAST_INPUT = Date.now(); }, { capture: true, passive: true });
+function userBusy() {
+  const ae = document.activeElement;
+  return (ae && /input|textarea|select/i.test(ae.tagName)) || S.camOpen || (S.draft && S.draft.analyzing) || (Date.now() - LAST_INPUT < 8000);
+}
 async function checkBuild(force) {
   if (VCHK_BUSY || !navigator.onLine || document.visibilityState === 'hidden') return;
   if (Date.now() - (+(sessionStorage.getItem('trice_lastreload') || 0)) < 3 * 60 * 1000) return;
@@ -5518,16 +5584,20 @@ async function checkBuild(force) {
   try { sessionStorage.setItem('trice_vchk', String(Date.now())); } catch (e) {}
   let remote = '';
   try {
-    const r = await fetch('/index.html?build=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) return;
-    const m = (await r.text()).match(/name="version" content="([^"]+)"/);
-    remote = m ? m[1] : '';
+    /* 11 bytes instead of the whole index — this runs on every load. */
+    const rv = await fetch('/version.txt?ts=' + Date.now(), { cache: 'no-store' });
+    if (rv.ok) { const t = (await rv.text()).trim(); if (/^trice-v[\d.]+$/.test(t)) remote = t; }
+    if (!remote) {
+      const r = await fetch('/index.html?build=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const m = (await r.text()).match(/name="version" content="([^"]+)"/);
+      remote = m ? m[1] : '';
+    }
   } catch (e) { return; }
   if (!remote || remote === BUILD) return;
   /* Newer build on the server. Never interrupt typing, an open camera, or a running analysis —
      try again in 30 seconds instead. */
-  const ae = document.activeElement;
-  if ((ae && /input|textarea|select/i.test(ae.tagName)) || S.camOpen || (S.draft && S.draft.analyzing)) { setTimeout(() => checkBuild(true), 30000); return; }
+  if (userBusy()) { setTimeout(() => checkBuild(true), 15000); return; }
   VCHK_BUSY = true;
   toast('A newer build is live — updating this device…');
   try { await Promise.race([syncNow(), new Promise(res => setTimeout(res, 6000))]); } catch (e) {}
@@ -5658,7 +5728,90 @@ function subBoot() {
   setInterval(() => { if (!document.hidden) woFlushPending(); }, 20000);
 }
 
+
+/* ---- View-only map: what a map link opens ----
+   Full-screen Leaflet, pins colored by hazard, a card per tree with photo,
+   species, size, condition. The token is the whole identity; the server sends
+   only that project's trees with pricing and crew data already stripped. */
+const MV_TOKEN = (() => { try { return new URLSearchParams(location.search).get('mv') || ''; } catch (e) { return ''; } })();
+const MVS = { data: null, err: '' };
+function mvPinData(assets) {
+  return assets.filter(t => typeof t.lat === 'number' && typeof t.lng === 'number').map(t => ({
+    lat: t.lat, lng: t.lng, color: HAZ_INK(t.hazard || 'Moderate'),
+    popup: '<div style="font-family:-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;width:230px">'
+      + (t.photoKey ? '<img loading="lazy" src="/api/sync?img=' + encodeURIComponent(t.photoKey) + '" style="display:block;width:100%;height:140px;object-fit:cover;border-radius:10px;background:#f2f2f7">' : '')
+      + '<div style="margin-top:8px;font-size:14px;font-weight:800;color:#1d1d1f">' + esc(t.species || 'Tree') + '</div>'
+      + (t.latin ? '<div style="font-size:11px;color:#6e6e73;font-style:italic">' + esc(t.latin) + '</div>' : '')
+      + '<div style="margin-top:6px;font-size:11.5px;color:#3c3c43;line-height:1.55">'
+      + '<span style="font-weight:700;color:' + HAZ_INK(t.hazard || 'Moderate') + '">' + esc(t.hazard || '') + '</span>'
+      + (t.qty > 1 ? ' \u00b7 ' + t.qty + ' trees' : '') + (t.dbhIn ? ' \u00b7 ' + t.dbhIn + '&Prime; DBH' : '') + (t.heightFt ? ' \u00b7 ~' + t.heightFt + ' ft' : '')
+      + (t.salv ? ' \u00b7 Salvageable ' + esc(t.salv) : '') + '</div>'
+      + (t.notes ? '<div style="margin-top:6px;font-size:11px;color:#3c3c43;line-height:1.55;max-height:88px;overflow:auto">' + esc(t.notes) + '</div>' : '')
+      + '<div style="margin-top:6px;font-size:10.5px;color:#6e6e73">' + esc(t.zone || '') + (t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : '') + ' \u00b7 ' + esc(t.id) + '</div>'
+      + '</div>'
+  }));
+}
+async function mvFetch() {
+  try {
+    const r = await fetch('/api/sync?mv=' + encodeURIComponent(MV_TOKEN));
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Could not load this map.');
+    MVS.data = j; MVS.err = '';
+  } catch (e) { MVS.err = (e && e.message) || 'Could not load this map.'; }
+  mvRender();
+}
+function mvRender() {
+  const el = document.getElementById('app'); if (!el) return;
+  const F = "-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif";
+  if (MVS.err) {
+    el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;background:#fbfbfd"><img src="' + WTR_LOGO + '" style="width:180px;margin-bottom:26px"><div style="font-size:15px;font-weight:700;color:#1d1d1f">' + esc(MVS.err) + '</div><button onclick="mvFetch()" style="margin-top:18px;border:1px solid #d6d3ca;background:#fff;border-radius:999px;padding:12px 26px;font-size:13.5px;font-weight:700">Try again</button></div>';
+    return;
+  }
+  if (!MVS.data) {
+    el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fbfbfd"><img src="' + WTR_LOGO + '" style="width:180px;margin-bottom:22px"><div style="font-size:13px;color:#6e6e73">Loading the map\u2026</div></div>';
+    return;
+  }
+  const d = MVS.data;
+  el.innerHTML = '<div style="position:fixed;inset:0;font-family:' + F + '">'
+    + '<div id="mvMap" style="position:absolute;inset:0;background:#e8e6df"></div>'
+    + '<div style="position:absolute;top:12px;left:12px;right:12px;z-index:500;display:flex;align-items:center;gap:11px;pointer-events:none">'
+    + '<div style="pointer-events:auto;display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #e8e8ed;border-radius:16px;padding:9px 15px 9px 10px;box-shadow:0 6px 24px rgba(16,18,22,.10)">'
+    + '<img src="' + WTR_MARK + '" style="height:40px">'
+    + '<span><span style="display:block;font-size:13.5px;font-weight:800;color:#1d1d1f">' + esc(d.mv.project) + '</span>'
+    + '<span style="display:block;font-size:10.5px;color:#6e6e73">Tree hazard map \u00b7 ' + d.assets.length + ' assets \u00b7 view only</span></span>'
+    + '</div></div>'
+    + '<div style="position:absolute;left:12px;bottom:12px;z-index:500;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border:1px solid #e8e8ed;border-radius:13px;padding:9px 13px;font-size:10.5px;color:#3c3c43;box-shadow:0 6px 24px rgba(16,18,22,.10)">'
+    + '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:11px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('High Hazard') + '"></span>High hazard</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:11px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('Moderate') + '"></span>Moderate</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:' + HAZ_INK('Low') + '"></span>Low</span>'
+    + '<span style="display:block;margin-top:4px;color:#98948a">WTR Group \u00b7 tap a pin for the tree\u2019s photo and condition</span>'
+    + '</div>'
+    + '</div>';
+  let tries = 0;
+  (function draw() {
+    if (typeof L === 'undefined') { if (tries++ < 80) return void setTimeout(draw, 125); return; }
+    const map = L.map('mvMap', { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '\u00a9 OpenStreetMap' }).addTo(map);
+    const pins = mvPinData(d.assets);
+    const grp = [];
+    for (const p of pins) {
+      const mk = L.circleMarker([p.lat, p.lng], { radius: 8, color: '#fff', weight: 2, fillColor: p.color, fillOpacity: .95 }).addTo(map);
+      mk.bindPopup(p.popup, { maxWidth: 260 });
+      grp.push(mk);
+    }
+    if (grp.length) map.fitBounds(L.featureGroup(grp).getBounds().pad(0.18));
+    else map.setView([27.95, -82.46], 10);
+  })();
+}
+function mvBoot() {
+  document.title = 'WTR \u2014 Tree map';
+  mvRender();
+  mvFetch();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && MVS.err) mvFetch(); });
+}
+
 (async function boot() {
+  if (MV_TOKEN) { mvBoot(); return; }
   if (WO_TOKEN) { subBoot(); return; }
   // v10: the API key lives server-side only — purge any key an older build stored on this phone.
   try { localStorage.removeItem('trice_api_key'); localStorage.removeItem('trice_prefix'); } catch (e) {}
@@ -5698,6 +5851,15 @@ function subBoot() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
   window.addEventListener('online', () => checkBuild());
   window.addEventListener('pageshow', (ev) => { if (ev.persisted) checkBuild(true); });
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.t === 'trice-takeover') {
+        try { navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ t: 'trice-ack' }); } catch (e) {}
+        const go = () => { if (userBusy()) { setTimeout(go, 10000); return; } location.reload(); };
+        setTimeout(go, 800);
+      }
+    });
+  }
   setTimeout(beaconCheck, 900);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) beaconCheck(); });
   // GPS only starts after the user has granted it once (readiness check / camera) — never a prompt on page load
