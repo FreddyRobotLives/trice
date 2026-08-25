@@ -983,7 +983,7 @@ var sync_src_default = async (req) => {
          Keeps the card function dependency-free. */
       /* Count audit: where every record actually is, straight from storage.
          Answers "the app shows N but there should be M" without guesswork. */
-      if (url.searchParams.get("audit")) {
+      if (url.searchParams.get("audit") && url.searchParams.get("audit") !== "deep") {
         const A = await listAll();
         const liveIds = Object.keys(A.live);
         const byProject = {};
@@ -1006,9 +1006,52 @@ var sync_src_default = async (req) => {
           live: liveIds.length,
           deleted: deletedIds.length,
           deletedIds: deletedIds.slice(0, 200),
+          ids: liveIds.slice(0, 2000),
           byProject,
           unreadable: noProject.length,
         }), { headers: cors });
+      }
+      if (url.searchParams.get("audit") === "deep") {
+        const revs = {};   // id -> [{u,k}] every revision, oldest first
+        const { blobs } = await store.list({ prefix: PRE });
+        for (const bl of blobs) {
+          const rest = bl.key.slice(PRE.length);
+          if (rest.slice(0, 2) !== "r/") continue;
+          const bang = rest.lastIndexOf("!");
+          if (bang < 2) continue;
+          const id = rest.slice(2, bang);
+          (revs[id] = revs[id] || []).push({ u: parseInt(rest.slice(bang + 1), 10) || 0, k: bl.key });
+        }
+        const multi = Object.entries(revs).filter(([, a]) => a.length >= 2);
+        for (const [, a] of multi) a.sort((x, y) => x.u - y.u);
+        const conflicts = [];
+        const dist = (a, b) => {
+          if (typeof a.lat !== "number" || typeof b.lat !== "number") return 0;
+          const dy = (a.lat - b.lat) * 111320;
+          const dx = (a.lng - b.lng) * 111320 * Math.cos(a.lat * Math.PI / 180);
+          return Math.sqrt(dx * dx + dy * dy);
+        };
+        for (let i = 0; i < multi.length; i += 12) {
+          const slice = multi.slice(i, i + 12);
+          await Promise.all(slice.map(async ([id, a]) => {
+            const first = await safeGetJSON(a[0].k).catch(() => null);
+            const last = await safeGetJSON(a[a.length - 1].k).catch(() => null);
+            if (!first || !last) return;
+            const moved = dist(first, last);
+            const speciesChanged = first.species && last.species && first.species !== last.species;
+            const zoneChanged = first.zone && last.zone && first.zone !== last.zone;
+            /* An honest edit fixes a typo in place. A collision teleports the
+               tree: far-apart GPS plus a different species or hole. */
+            if (moved > 40 && (speciesChanged || zoneChanged)) {
+              conflicts.push({ id, revisions: a.length, firstU: a[0].u,
+                first: { species: first.species || "", zone: first.zone || "", lat: first.lat, lng: first.lng, dbhIn: first.dbhIn },
+                last: { species: last.species || "", zone: last.zone || "", lat: last.lat, lng: last.lng, dbhIn: last.dbhIn },
+                movedM: Math.round(moved) });
+            }
+          }));
+          if (Date.now() - T0 > 8000) break;
+        }
+        return new Response(JSON.stringify({ v: V, scanned: multi.length, conflicts }), { headers: cors });
       }
       const mvMeta = url.searchParams.get("mvmeta");
       if (mvMeta && /^[A-Za-z0-9]{12,40}$/.test(mvMeta)) {
@@ -1116,6 +1159,28 @@ var sync_src_default = async (req) => {
       const tk = b.mvRevoke.trim();
       await metaMerge("meta/maplinks", (cur) => { if (cur[tk] && !cur[tk].revoked) { cur[tk].revoked = Date.now(); return { next: cur, changed: true }; } return { next: cur, changed: false }; });
       return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
+    if (Array.isArray(b.split) && b.split.length) {
+      /* Un-collide: the buried tree (oldest revision) comes back under a new id
+         derived from its own timestamp, so it can never collide again. The
+         current tree keeps the original id untouched. */
+      const A = await listAll();
+      const out = [];
+      for (const req2 of b.split.slice(0, 100)) {
+        const id = String((req2 && req2.id) || "");
+        const u = +((req2 && req2.u) || 0);
+        if (!id || !u) { out.push({ id, ok: false, note: "bad request" }); continue; }
+        const key = PRE + "r/" + id + "!" + u;
+        const rec = await safeGetJSON(key).catch(() => null);
+        if (!rec) { out.push({ id, ok: false, note: "revision not found" }); continue; }
+        const nid = id + "-R" + String(u).slice(-5);
+        if (A.all[nid]) { out.push({ id, ok: false, note: "already recovered" }); continue; }
+        rec.id = nid;
+        rec.updated = Date.now();
+        try { await store.setJSON(PRE + "r/" + nid + "!" + rec.updated, rec); out.push({ id, ok: true, newId: nid }); }
+        catch (e) { out.push({ id, ok: false, note: "write failed" }); }
+      }
+      return new Response(JSON.stringify({ v: V, split: out }), { headers: cors });
     }
     if (Array.isArray(b.restore) && b.restore.length) {
       /* Undelete: write the newest surviving revision back with a fresh
