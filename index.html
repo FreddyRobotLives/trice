@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v31.3">
+<meta name="version" content="trice-v31.4">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.3">
-<script defer src="/vendor/leaflet.min.js?v=trice-v31.3" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.3" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.4">
+<script defer src="/vendor/leaflet.min.js?v=trice-v31.4" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.4" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.3') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.4') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -345,6 +345,7 @@ const S = {
   wodoneDirty: {},
   maplinks: {},
   mvNew: null,
+  audit: null,
   predAdjust: (() => { try { return localStorage.getItem('trice_predadjust') || ''; } catch (e) { return ''; } })(),
   projState: (() => { try { return JSON.parse(localStorage.getItem('trice_projstate') || '{}'); } catch (e) { return {}; } })(),
   projStateDirty: {},
@@ -2475,7 +2476,7 @@ function treesView() {
   <button onclick="go('report')" style="border:0;background:none;padding:0 0 12px;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--ink)"><span style="font-size:18px;line-height:1">‹</span> Report</button>
   <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px">
     <span class="slab">Asset register${S.site ? ' · ' + esc(S.site) : ''}</span>
-    <span style="font-size:12px;color:var(--muted)">${T.lines} line items · ${T.specimens} specimens · ${money(T.total)}</span>
+    <span style="font-size:12px;color:var(--muted)">${T.lines} line items · ${T.specimens} specimens · ${money(T.total)}${S.admin ? ` · <button onclick="runCountAudit()" style="border:0;background:none;padding:0;font:inherit;font-size:12px;color:var(--info);font-weight:700;cursor:pointer">count check</button>` : ''}</span>
   </div>
   <div class="field"><input placeholder="Filter by ID, species, zone, cause…" value="${esc(S.regQ)}" oninput="S.regQ=this.value;const el=document.getElementById('regList');if(el)el.innerHTML=regRowsHTML()"></div>
   ${regChips()}
@@ -3055,6 +3056,71 @@ async function mvDeleteGo(token) {
     toast('Link deleted');
     render();
   } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
+}
+
+
+/* ---- Count audit ----
+   Reconciles what the server holds against what this device shows, and names
+   the reason for every difference. Built because a count can drift for several
+   unrelated reasons — an archived project, a deleted record, an unsynced edit —
+   and guessing which one is a waste of a field day. */
+async function runCountAudit() {
+  S.audit = { running: true }; render();
+  let srv = null, err = '';
+  try {
+    const r = await fetch('/api/sync?audit=1');
+    srv = await r.json();
+    if (!r.ok) throw new Error(srv && srv.error || 'server refused');
+  } catch (e) { err = (e && e.message) || 'could not reach the server'; }
+  const local = S.trees.slice();
+  const visible = local.filter(visT);
+  const hidden = local.filter(t => !visT(t));
+  const hiddenBy = {};
+  for (const t of hidden) {
+    const p = siteOfT(t) || '(no project)';
+    let c = p, reason = p, g2 = 0;
+    while (c && g2++ < 8) {
+      if (S.deletedProjects.includes(c)) { reason = c + ' (deleted project)'; break; }
+      if (S.archivedProjects.includes(c)) { reason = c + ' (archived project)'; break; }
+      c = parentOf(c);
+    }
+    hiddenBy[reason] = (hiddenBy[reason] || 0) + 1;
+  }
+  const localIds = new Set(local.map(t => t.id));
+  const dirty = Object.keys(S.dirty || {}).filter(id => localIds.has(id)).length;
+  S.audit = { running: false, srv, err, local: local.length, visible: visible.length, hidden: hidden.length, hiddenBy, dirty };
+  render();
+}
+function auditSheet() {
+  const a = S.audit;
+  if (!a) return '';
+  const row = (k, v, note) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--hair)">
+    <span style="flex:1;min-width:0;font-size:12.5px">${k}${note ? `<span style="display:block;font-size:10.5px;color:var(--faint);margin-top:2px">${note}</span>` : ''}</span>
+    <span style="flex:none;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums">${v}</span></div>`;
+  let body;
+  if (a.running) body = '<div style="padding:22px 0;text-align:center;font-size:12.5px;color:var(--muted)">Counting every record on the server\u2026</div>';
+  else if (a.err) body = `<div style="padding:18px 0;font-size:12.5px;color:var(--bad)">${esc(a.err)}. Counts below are from this device only.</div>` + row('On this device', a.local) + row('Showing in the app', a.visible);
+  else {
+    const s = a.srv || {};
+    const projRows = Object.entries(s.byProject || {}).sort((x, y) => y[1] - x[1])
+      .map(([p, n]) => row('&nbsp;&nbsp;' + esc(p), n)).join('');
+    const gap = (s.live || 0) - a.visible;
+    body = row('Live records on the server', s.live || 0, 'the authoritative count')
+      + projRows
+      + row('Showing in the app right now', a.visible, gap ? 'short by ' + gap : 'matches the server')
+      + row('Hidden on this device', a.hidden, a.hidden ? Object.entries(a.hiddenBy).map(([k, n]) => esc(k) + ': ' + n).join(' \u00b7 ') : 'none')
+      + row('Deleted records (tombstoned)', s.deleted || 0, s.deleted ? 'removed by someone on the crew' : 'none')
+      + row('Edits on this device not yet synced', a.dirty || 0, a.dirty ? 'send them with a sync' : 'all sent')
+      + row('Stored revisions', s.revisions || 0, 'every edit ever made, kept for recovery');
+  }
+  return `<div class="sheet-scrim" onclick="S.audit=null;render()"></div>
+  <div class="sheet">
+    <div style="font-size:16px;font-weight:800">Where every record is</div>
+    <div style="margin-top:5px;font-size:12px;color:var(--muted);line-height:1.55">If a count looks wrong, this shows the server's number, this device's number, and the reason for any difference.</div>
+    <div style="margin-top:12px">${body}</div>
+    ${a.running ? '' : `<button class="btn ghost" style="margin-top:14px" onclick="runCountAudit()">Run again</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="S.audit=null;render()">Close</button>`}
+  </div>`;
 }
 
 function mvProject() { return S.mapProject || S.site || ''; }
@@ -4657,7 +4723,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.3</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.4</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4701,13 +4767,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.3', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.4', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.3', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.4', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5673,7 +5739,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.3</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.4</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -5687,6 +5753,7 @@ function render() {
       : `${navBtn('survey','Home')}${navBtn('map','Map')}<button class="fab" onclick="fabCapture()" title="Capture a tree" aria-label="Capture"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>${navBtn('sheet','Grid')}${navBtn('report','Report')}`}${IS_DESKTOP() ? `<button class="railout" onclick="signOut()" title="Back to the landing page — records stay on this device">Sign out</button>` : ''}<div class="railfoot"><span class="raildot"></span><span>${esc(S.surveyor || 'No user')}${S.site ? ' · ' + esc(S.site) : ''}</span></div></div>
     ${S.ruler ? rulerView() : ''}
     ${S.showCheck ? checkSheet() : ''}
+    ${S.audit ? auditSheet() : ''}
     ${S.sheet === 'mvlinks' ? `<div class="sheet-scrim" onclick="S.sheet=null;S.mvNew=null;render()"></div><div class="sheet">${mvSheetHTML()}</div>` : ''}
     ${S.camOpen ? camView() : ''}
     ${S.zoomSrc ? zoomView() : ''}
