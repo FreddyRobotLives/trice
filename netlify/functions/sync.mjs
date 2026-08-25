@@ -981,6 +981,35 @@ var sync_src_default = async (req) => {
       }
       /* Tiny lookup for the link-preview card: project name only, nothing else.
          Keeps the card function dependency-free. */
+      /* Count audit: where every record actually is, straight from storage.
+         Answers "the app shows N but there should be M" without guesswork. */
+      if (url.searchParams.get("audit")) {
+        const A = await listAll();
+        const liveIds = Object.keys(A.live);
+        const byProject = {};
+        const noProject = [];
+        const dupIds = [];
+        for (let i = 0; i < liveIds.length; i += 24) {
+          const slice = liveIds.slice(i, i + 24);
+          const recs = await Promise.all(slice.map((id) => safeGetJSON(A.live[id].k).catch(() => null)));
+          recs.forEach((t, n) => {
+            if (!t) { noProject.push(slice[n]); return; }
+            const p = String(t.site || "").trim() || "(no project)";
+            byProject[p] = (byProject[p] || 0) + 1;
+          });
+          if (Date.now() - T0 > 12000) break;
+        }
+        const deletedIds = Object.keys(A.dels).filter((id) => A.all[id] && A.dels[id] >= A.all[id].u);
+        return new Response(JSON.stringify({
+          v: V,
+          revisions: Object.keys(A.all).length,
+          live: liveIds.length,
+          deleted: deletedIds.length,
+          deletedIds: deletedIds.slice(0, 200),
+          byProject,
+          unreadable: noProject.length,
+        }), { headers: cors });
+      }
       const mvMeta = url.searchParams.get("mvmeta");
       if (mvMeta && /^[A-Za-z0-9]{12,40}$/.test(mvMeta)) {
         const mls = (await safeGetJSON("meta/maplinks")) || {};
