@@ -1100,9 +1100,10 @@ var sync_src_default = async (req) => {
         const doneAll = (await safeGetJSON("meta/wodone")) || {};
         const done = {};
         for (const [k, e] of Object.entries(doneAll)) { if (k.startsWith(woT + "|")) done[k.slice(woT.length + 1)] = e; }
+        const notes = ((await safeGetJSON("meta/wonotes")) || {})[woT] || [];
         return new Response(JSON.stringify({ v: V, now: Date.now(),
           wo: { token: woT, num: wo.num || 0, project: wo.project, zones: wo.zones || [], sub: wo.sub || "", note: wo.note || "", at: wo.at || 0 },
-          assets, done }), { headers: cors });
+          assets, done, notes: notes.slice(-60) }), { headers: cors });
       }
       if (url.searchParams.get("list") === "backups") {
         const out = [];
@@ -1245,6 +1246,48 @@ var sync_src_default = async (req) => {
       await metaMerge("meta/workorders", (cur) => { if (cur[tk] && cur[tk].revoked) { cur[tk].revoked = 0; return { next: cur, changed: true }; } return { next: cur, changed: false }; });
       return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
     }
+    if (b.woNote && typeof b.woNote === "object") {
+      /* A note under a work order: from the app or from the sub's link page.
+         Stored on the order, visible to everyone who can see the order. */
+      const tk = String(b.woNote.token || "").trim();
+      const text = String(b.woNote.text || "").trim().slice(0, 400);
+      const by = String(b.woNote.by || "Crew").trim().slice(0, 40) || "Crew";
+      if (!/^[A-Za-z0-9]{12,40}$/.test(tk) || !text) return new Response(JSON.stringify({ error: "bad request" }), { status: 400, headers: cors });
+      const wos2 = (await safeGetJSON("meta/workorders")) || {};
+      if (!wos2[tk]) return new Response(JSON.stringify({ error: "no such order" }), { status: 404, headers: cors });
+      const note = { at: Date.now(), by, text };
+      await metaMerge("meta/wonotes", (cur) => {
+        const list = (cur[tk] = cur[tk] || []);
+        list.push(note);
+        if (list.length > 200) cur[tk] = list.slice(-200);
+        return { next: cur, changed: true };
+      });
+      return new Response(JSON.stringify({ v: V, ok: true, note }), { headers: cors });
+    }
+    if (b.mvNote && typeof b.mvNote === "object") {
+      /* A note from the client's view-only map. The only write a map link can
+         ever perform: capped, plain text, tied to a live link. */
+      const tk = String(b.mvNote.token || "").trim();
+      const text = String(b.mvNote.text || "").trim().slice(0, 400);
+      const treeId = String(b.mvNote.treeId || "").trim().slice(0, 64);
+      if (!/^[A-Za-z0-9]{12,40}$/.test(tk) || !text) return new Response(JSON.stringify({ error: "bad request" }), { status: 400, headers: cors });
+      const mls2 = (await safeGetJSON("meta/maplinks")) || {};
+      const ml2 = mls2[tk];
+      if (!ml2 || ml2.revoked) return new Response(JSON.stringify({ error: "link inactive" }), { status: 403, headers: cors });
+      const day = new Date().toISOString().slice(0, 10);
+      let refused = false;
+      await metaMerge("meta/clientnotes", (cur) => {
+        const proj = ml2.project || "(no project)";
+        const list = (cur[proj] = cur[proj] || []);
+        const todayFromLink = list.filter((n) => n.tk === tk.slice(-4) && new Date(n.at).toISOString().slice(0, 10) === day).length;
+        if (todayFromLink >= 30) { refused = true; return { next: cur, changed: false }; }
+        list.push({ at: Date.now(), text, treeId: treeId || null, tk: tk.slice(-4) });
+        if (list.length > 300) cur[proj] = list.slice(-300);
+        return { next: cur, changed: true };
+      });
+      if (refused) return new Response(JSON.stringify({ error: "too many notes today" }), { status: 429, headers: cors });
+      return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
+    }
     if (b.woMark && typeof b.woMark === "object") {
       const m = b.woMark;
       const tk = String(m.token || "").trim();
@@ -1257,6 +1300,44 @@ var sync_src_default = async (req) => {
       if (!scoped.some((t) => t.id === aid)) return new Response(JSON.stringify({ error: "asset not in this work order" }), { status: 403, headers: cors });
       const entry = { done: m.done === true, by: String(m.by || wo.sub || "Sub").slice(0, 60), at: Date.now() };
       await metaMerge("meta/wodone", (cur) => { cur[tk + "|" + aid] = entry; return { next: cur, changed: true }; });
+      /* The last check on the last tree: record it and tell the team lead.
+         Email goes out only when RESEND_API_KEY + NOTIFY_EMAIL are configured;
+         the in-app event is recorded either way. */
+      if (entry.done) {
+        try {
+          const doneNow = (await safeGetJSON("meta/wodone")) || {};
+          const doneCount = scoped.filter((t) => { const e2 = doneNow[tk + "|" + t.id]; return e2 && e2.done; }).length;
+          if (scoped.length > 0 && doneCount === scoped.length && !wo.doneNotified) {
+            await metaMerge("meta/workorders", (cur) => { if (cur[tk]) cur[tk].doneNotified = Date.now(); return { next: cur, changed: true }; });
+            const ev = { at: Date.now(), kind: "wo_complete", num: wo.num || 0, sub: wo.sub || "", project: wo.project || "", total: scoped.length, by: entry.by, emailed: false };
+            const env2 = (k) => (globalThis.Netlify && Netlify.env && Netlify.env.get(k)) || (globalThis.process && process.env && process.env[k]) || "";
+            const KEY = env2("RESEND_API_KEY"), TO = env2("NOTIFY_EMAIL");
+            if (KEY && TO) {
+              try {
+                const rr = await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: { "Authorization": "Bearer " + KEY, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    from: env2("NOTIFY_FROM") || "WTR Trice <onboarding@resend.dev>",
+                    to: [TO],
+                    subject: "WO-" + String(wo.num || 0).padStart(4, "0") + " complete \u00b7 " + (wo.project || ""),
+                    text: "Work order WO-" + String(wo.num || 0).padStart(4, "0") + " on " + (wo.project || "") + " is complete.\n\n"
+                      + "All " + scoped.length + " trees are marked done. Last mark by " + entry.by + ".\n\n"
+                      + "Open the Work tab in Trice to review.",
+                  }),
+                });
+                ev.emailed = rr.ok === true;
+              } catch (e) {}
+            }
+            await metaMerge("meta/notifylog", (cur) => {
+              const list = (cur.events = cur.events || []);
+              list.push(ev);
+              if (list.length > 200) cur.events = list.slice(-200);
+              return { next: cur, changed: true };
+            });
+          }
+        } catch (e) {}
+      }
       return new Response(JSON.stringify({ v: V, ok: true, key: tk + "|" + aid, entry }), { headers: cors });
     }
 
@@ -1397,7 +1478,10 @@ var sync_src_default = async (req) => {
       const workorders = await ensureWoNums();
       const maplinks = (await safeGetJSON("meta/maplinks")) || {};
       const wodone = (await safeGetJSON("meta/wodone")) || {};
-      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone, maplinks,
+      const wonotes = (await safeGetJSON("meta/wonotes")) || {};
+      const clientnotes = (await safeGetJSON("meta/clientnotes")) || {};
+      const notifylog = ((await safeGetJSON("meta/notifylog")) || {}).events || [];
+      return new Response(JSON.stringify(Object.assign({ assign, hours, budgets, subs, projstate, workorders, wodone, wonotes, clientnotes, notifylog, maplinks,
         v: V, now: Date.now(), epoch: EP.n, resetAt: EP.at || 0,
         assets: ids.length, ids, dels: Object.entries(dels).map(([id, at]) => [id, at]),
         migrating: !mig.done,
