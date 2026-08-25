@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v31.6">
+<meta name="version" content="trice-v31.7">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.6">
-<script defer src="/vendor/leaflet.min.js?v=trice-v31.6" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.6" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.7">
+<script defer src="/vendor/leaflet.min.js?v=trice-v31.7" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.7" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.6') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.7') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -346,6 +346,8 @@ const S = {
   maplinks: {},
   mvNew: null,
   audit: null,
+  wonotes: {}, clientnotes: {}, notifylog: [],
+  woNoteDraft: {},
   predAdjust: (() => { try { return localStorage.getItem('trice_predadjust') || ''; } catch (e) { return ''; } })(),
   projState: (() => { try { return JSON.parse(localStorage.getItem('trice_projstate') || '{}'); } catch (e) { return {}; } })(),
   projStateDirty: {},
@@ -785,6 +787,9 @@ function applySharedMeta(j) {
   if (mergeLWW(S.budgets, j.budgets, S.budgetDirty)) teamCh = true;
   if (mergeLWW(S.subs, j.subs, S.subsDirty)) teamCh = true;
   if (mergeLWW(S.wodone, j.wodone, S.wodoneDirty)) teamCh = true;
+  if (j.wonotes) S.wonotes = j.wonotes;
+  if (j.clientnotes) S.clientnotes = j.clientnotes;
+  if (j.notifylog) S.notifylog = j.notifylog;
   if (j.workorders && typeof j.workorders === 'object' && JSON.stringify(j.workorders) !== JSON.stringify(S.workorders)) { S.workorders = j.workorders; teamCh = true; }
   if (j.maplinks && typeof j.maplinks === 'object' && JSON.stringify(j.maplinks) !== JSON.stringify(S.maplinks)) { S.maplinks = j.maplinks; teamCh = true; }
   if (teamCh) { try { localStorage.setItem('trice_wo', JSON.stringify(S.workorders)); localStorage.setItem('trice_wodone', JSON.stringify(S.wodone)); } catch (e) {} }
@@ -2714,6 +2719,7 @@ function mapView() {
     <span style="display:flex;align-items:center;gap:6px"><span style="width:13px;height:13px;border-radius:50%;background:var(--good);border:2px solid #fff;box-shadow:0 0 0 1px var(--line)"></span>✓ Cleared · ${T.byHaz['Cleared'].lines}</span>
   </div>
   <div style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.55">${S.mapProject ? 'Crews navigate straight to the red pins. As work completes, mark the asset Cleared and the pin flips green in real time — the map is the task list, and the register keeps itself current.' : 'Each badge is a project — the ring shows its worst open hazard. Tap a badge to open that project and see every specimen pin.'}</div>
+  ${clientNotesCard()}
   ${mvLinksCard()}
   ${netCard()}`;
 }
@@ -3094,6 +3100,56 @@ async function recoverCollisions() {
   } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
 }
 
+
+/* ---- Notes on a work order, and what the client flagged ---- */
+async function woNoteGo(token) {
+  const el = document.getElementById('won-' + token);
+  const text = ((el && el.value) || '').trim();
+  if (!text) { toast('Write the note first'); return; }
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ woNote: { token, text, by: S.surveyor || 'Admin' } }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error('refused');
+    (S.wonotes[token] = S.wonotes[token] || []).push(j.note);
+    if (el) el.value = '';
+    S.woNoteDraft[token] = '';
+    render();
+  } catch (e) { toast('Could not reach the server \u2014 try again with signal'); }
+}
+function noteThread(token) {
+  const list = (S.wonotes || {})[token] || [];
+  return `<div style="margin-top:9px">
+    ${list.slice(-30).map(n => `<div style="padding:7px 0;border-top:1px solid var(--hair)">
+      <div style="font-size:10px;color:var(--faint)">${esc(n.by)} \u00b7 ${fmtWhen(n.at)}</div>
+      <div style="font-size:12px;line-height:1.5;margin-top:2px">${esc(n.text)}</div>
+    </div>`).join('')}
+    <div style="display:flex;gap:7px;margin-top:8px">
+      <input id="won-${token}" placeholder="Add a note \u2014 the sub sees it on their link" value="${esc(S.woNoteDraft[token] || '')}" oninput="S.woNoteDraft['${token}']=this.value"
+        style="flex:1;min-width:0;border:1px solid var(--hair);border-radius:9px;padding:9px 11px;font:inherit;font-size:12px">
+      <button class="btn dark" style="width:auto;margin:0;padding:9px 15px;font-size:11.5px;flex:none" onclick="woNoteGo('${token}')">Send</button>
+    </div>
+  </div>`;
+}
+function clientNotesCard() {
+  const scope = S.mapProject || null;
+  const all = [];
+  for (const [proj, list] of Object.entries(S.clientnotes || {})) {
+    if (scope && proj !== scope) continue;
+    for (const n of list) all.push(Object.assign({ project: proj }, n));
+  }
+  if (!all.length) return '';
+  all.sort((a, b) => b.at - a.at);
+  return `<div class="card" style="margin-top:14px;padding:15px 16px">
+    <span class="slab">From your clients \u00b7 ${all.length}</span>
+    <div style="margin-top:4px;font-size:11px;color:var(--muted);line-height:1.55">Notes left on the view-only map. The link can write nothing else.</div>
+    ${all.slice(0, 25).map(n => `<div style="padding:9px 0;border-top:1px solid var(--hair)">
+      <div style="font-size:10px;color:var(--faint)">${esc(n.project)}${n.treeId ? ' \u00b7 tree ' + esc(n.treeId) : ''} \u00b7 ${fmtWhen(n.at)}</div>
+      <div style="font-size:12.5px;line-height:1.55;margin-top:2px">${esc(n.text)}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
 async function restoreDeleted() {
   const ids = ((S.audit && S.audit.srv && S.audit.srv.deletedIds) || []);
   if (!ids.length) return;
@@ -3418,10 +3474,13 @@ function workView() {
             ? `<button class="btn ghost" style="margin:0;padding:11px" onclick="woRevokeGo('${tk}', true)">Re-enable link</button>`
             : `<button class="btn primary" style="margin:0;padding:11px" onclick="woCopyLink('${tk}')">Copy link</button>
                <button class="btn ghost" style="margin:0;padding:11px;color:var(--bad)" onclick="woRevokeGo('${tk}')">Revoke link</button>`}
-          <button class="btn ghost" style="margin:0;padding:11px" onclick="S.woOpen=S.woOpen==='${tk}'?'':'${tk}';render()">${open ? 'Hide tasks' : 'Tasks ›'}</button>
+          <button class="btn ghost" style="margin:0;padding:11px" onclick="S.woOpen=S.woOpen==='${tk}'?'':'${tk}';render()">${open ? 'Hide tasks' : `Tasks${((S.wonotes || {})[tk] || []).length ? ' \u00b7 ' + ((S.wonotes || {})[tk] || []).length + ' note' + (((S.wonotes || {})[tk] || []).length === 1 ? '' : 's') : ''} \u203a`}</button>
         </div>
       </div>
       ${open ? `<div style="margin-top:14px;border-top:1px solid var(--hair);padding-top:6px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 0 2px">Notes</div>
+        ${noteThread(tk)}
+        <div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 2px">Tasks</div>
         ${scope.length ? scope.slice().sort((a, b) => zoneSort(a.zone || '', b.zone || '') || (a.id < b.id ? -1 : 1)).map(t => {
           const e = S.wodone[token + '|' + t.id] || {};
           const a = t.ai || {};
@@ -4794,7 +4853,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.6</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.7</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4838,13 +4897,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.6', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.7', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.6', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.7', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5810,7 +5869,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.6</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.7</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -6084,9 +6143,34 @@ function subRender() {
     + '<div style="display:flex;justify-content:flex-end;margin:6px 2px 10px"><button onclick="woFetch()" style="border:1px solid #e0ded6;background:#fff;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#6e6e73">↻ Refresh</button></div>'
     + zones.map(z => '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#98948a;font-weight:800;margin:16px 4px 9px">' + esc(z) + '</div>'
         + assets.filter(t => (t.zone || 'Unassigned') === z).map(card).join('')).join('')
+    + '<div style="margin-top:22px;background:#fff;border:1px solid #e8e6df;border-radius:14px;padding:14px 15px">'
+    + '<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#98948a;font-weight:800">Notes</div>'
+    + ((WOS.data.notes || []).slice(-30).map(n => '<div style="padding:8px 0;border-top:1px solid #f0efe9;margin-top:6px">'
+        + '<div style="font-size:10px;color:#aeaeb2">' + esc(n.by) + ' · ' + fmtWhen(n.at) + '</div>'
+        + '<div style="font-size:12.5px;line-height:1.55;margin-top:2px;color:#17181a">' + esc(n.text) + '</div>'
+      + '</div>').join(''))
+    + '<div style="display:flex;gap:7px;margin-top:10px">'
+    + '<input id="subNote" placeholder="Note for the office — they see it in Trice" style="flex:1;min-width:0;border:1px solid #e0ded6;border-radius:9px;padding:10px 11px;font:inherit;font-size:12.5px">'
+    + '<button onclick="subNoteGo()" style="flex:none;border:0;background:#17181a;color:#fff;border-radius:9px;padding:10px 16px;font-size:12px;font-weight:800">Send</button>'
+    + '</div></div>'
     + '<div style="text-align:center;font-size:10.5px;color:#aeaeb2;margin-top:26px;line-height:1.6">WTR Group · Rooted in expertise.<br>This link shows only your assigned work. Questions — call your WTR contact.</div>'
     + '</div>';
 }
+
+async function subNoteGo() {
+  const el = document.getElementById('subNote');
+  const text = ((el && el.value) || '').trim();
+  if (!text) return;
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ woNote: { token: WO_TOKEN, text, by: (WOS.data && WOS.data.wo && WOS.data.wo.sub) || 'Sub' } }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error('refused');
+    WOS.data.notes = (WOS.data.notes || []).concat([j.note]);
+    subRender();
+  } catch (e) { alert('No signal \u2014 try again when you have service.'); }
+}
+
 function subBoot() {
   publicShellReset();
   document.title = 'WTR — Work order';
@@ -6120,6 +6204,7 @@ function mvPinData(assets) {
       + (t.work ? '<div style="margin-top:7px;font-size:11px;font-weight:700;' + (t.work.s === 'done' ? 'color:#1e7e3e">\u2713 Work complete' + (t.work.by ? ' \u00b7 ' + esc(t.work.by) : '') + (t.work.at ? ' \u00b7 ' + fmtWhen(t.work.at) : '') : 'color:#0a66c2">\u25cf Work scheduled') + (t.work.num ? ' \u00b7 WO-' + String(t.work.num).padStart(4, '0') : '') + '</div>' : '')
       + (t.notes ? '<div style="margin-top:6px;font-size:11px;color:#3c3c43;line-height:1.55;max-height:88px;overflow:auto">' + esc(t.notes) + '</div>' : '')
       + '<div style="margin-top:6px;font-size:10.5px;color:#6e6e73">' + esc(t.zone || '') + (t.locDetails ? ' \u00b7 ' + esc(t.locDetails) : '') + ' \u00b7 ' + esc(t.id) + '</div>'
+      + '<button onclick="mvNoteOpen(&quot;' + esc(t.id) + '&quot;)" style="display:block;width:100%;margin-top:9px;border:1px solid #e8e8ed;background:#f7f7f9;border-radius:9px;padding:8px;font-size:11.5px;font-weight:700;color:#0a66c2;cursor:pointer">\u270e Flag this tree for the crew</button>'
       + '</div>'
   }));
 }
@@ -6147,6 +6232,7 @@ function mvRender() {
   el.innerHTML = '<div style="position:fixed;inset:0;font-family:' + F + ';isolation:isolate">'
     + '<div id="mvMap" style="position:absolute;inset:0;background:#e8e6df"></div>'
     + '<div id="mvHead" style="position:absolute;top:12px;left:12px;z-index:500;max-width:min(400px,calc(100vw - 24px))"></div>'
+    + '<div id="mvNoteWrap"></div>'
     + '<div style="position:absolute;top:12px;right:12px;z-index:500;display:flex;flex-direction:column;gap:8px;align-items:stretch">'
     + '<button id="mvBase" onclick="mvBaseToggle()" style="border:1px solid #e8e8ed;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-radius:13px;padding:10px 16px;font-size:12px;font-weight:800;color:#1d1d1f;box-shadow:0 6px 24px rgba(16,18,22,.10);cursor:pointer">Satellite</button>'
     + '<button onclick="mvResetView()" style="border:1px solid #e8e8ed;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-radius:13px;padding:10px 16px;font-size:12px;font-weight:700;color:#3c3c43;box-shadow:0 6px 24px rgba(16,18,22,.10);cursor:pointer">Reset view</button>'
@@ -6234,6 +6320,51 @@ async function mvRefresh() {
 /* ---- The client console: project header, live progress, and the work-order
    dropdown. Selecting an order dims every other pin and flies to its trees;
    the header re-renders in place so the map never resets. ---- */
+
+/* ---- The client's pen ----
+   The one thing a view-only link can write: a note to the crew. Opens from the
+   console, or from a pin popup with that tree attached, so "you missed the pine
+   on 3" arrives pointing at the exact pine. */
+function mvNoteOpen(treeId) {
+  MVS.noteTree = treeId || null;
+  MVS.noteOpen = true;
+  mvNotePanel();
+}
+function mvNotePanel() {
+  let host = document.getElementById('mvNoteWrap');
+  if (!host) return;
+  if (!MVS.noteOpen) { host.innerHTML = ''; return; }
+  const t = MVS.noteTree ? (MVS.data.assets.find(a => a.id === MVS.noteTree) || null) : null;
+  host.innerHTML = '<div style="position:absolute;inset:0;background:rgba(11,14,18,.4);z-index:600" onclick="MVS.noteOpen=false;mvNotePanel()"></div>'
+    + '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:610;width:min(420px,calc(100vw - 28px));background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(16,18,22,.25);padding:18px 18px 16px">'
+    + '<div style="font-size:15px;font-weight:800;color:#1d1d1f">Note for the crew</div>'
+    + (t ? '<div style="margin-top:5px;font-size:11.5px;color:#6e6e73">About: ' + esc(t.species || 'tree') + ' \u00b7 ' + esc(t.zone || '') + ' \u00b7 ' + esc(t.id) + '</div>'
+         : '<div style="margin-top:5px;font-size:11.5px;color:#6e6e73">Tell us what\u2019s outstanding or missed \u2014 the team lead sees it in the office.</div>')
+    + '<textarea id="mvNoteText" rows="4" maxlength="400" placeholder="e.g. The pine by the cart path on 3 still looks half done" style="width:100%;box-sizing:border-box;margin-top:10px;border:1px solid #e8e8ed;border-radius:11px;padding:11px 12px;font:inherit;font-size:13px;line-height:1.5;resize:none"></textarea>'
+    + '<div style="display:flex;gap:8px;margin-top:10px">'
+    + '<button id="mvNoteSend" onclick="mvNoteSend()" style="flex:1;border:0;background:#17181a;color:#fff;border-radius:11px;padding:12px;font-size:13px;font-weight:800;cursor:pointer">Send to the crew</button>'
+    + '<button onclick="MVS.noteOpen=false;mvNotePanel()" style="flex:none;border:1px solid #e8e8ed;background:#fff;border-radius:11px;padding:12px 16px;font-size:13px;font-weight:600;cursor:pointer">Cancel</button>'
+    + '</div></div>';
+  const ta = document.getElementById('mvNoteText');
+  if (ta) ta.focus();
+}
+async function mvNoteSend() {
+  const ta = document.getElementById('mvNoteText');
+  const text = ((ta && ta.value) || '').trim();
+  if (!text) return;
+  const btn = document.getElementById('mvNoteSend');
+  if (btn) { btn.textContent = 'Sending\u2026'; btn.disabled = true; }
+  try {
+    const r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mvNote: { token: MV_TOKEN, text, treeId: MVS.noteTree || '' } }) });
+    if (!r.ok) throw new Error('refused');
+    if (btn) { btn.textContent = 'Sent \u2713'; }
+    setTimeout(() => { MVS.noteOpen = false; MVS.noteTree = null; mvNotePanel(); }, 900);
+  } catch (e) {
+    if (btn) { btn.textContent = 'Could not send \u2014 try again'; btn.disabled = false; }
+  }
+}
+
 function mvOrders() { return (MVS.data && MVS.data.orders) || []; }
 function mvHeadRender() {
   const host = document.getElementById('mvHead');
@@ -6270,6 +6401,7 @@ function mvHeadRender() {
     + (orders.length ? '<button onclick="MVS.open=!MVS.open;mvHeadRender()" style="display:flex;align-items:center;gap:8px;width:100%;border:0;border-top:1px solid #f0f0f2;background:none;padding:10px 15px;cursor:pointer;font-size:11.5px;font-weight:800;color:#1d1d1f">'
       + '<span style="flex:1;text-align:left">' + (sel ? 'Showing WO-' + String(sel.num).padStart(4, '0') + ' \u00b7 ' + esc(sel.sub || 'Crew') : orders.length + ' work order' + (orders.length > 1 ? 's' : '') + ' on this property') + '</span>'
       + '<span style="flex:none;transition:transform .2s;transform:rotate(' + (MVS.open ? '180' : '0') + 'deg)">\u25be</span></button>' : '')
+    + '<button onclick="mvNoteOpen()" style="display:flex;align-items:center;gap:8px;width:100%;border:0;border-top:1px solid #f0f0f2;background:none;padding:10px 15px;cursor:pointer;font-size:11.5px;font-weight:800;color:#0a66c2;text-align:left">\u270e Leave a note for the crew</button>'
     + (MVS.open && orders.length
       ? '<div style="max-height:min(300px,44vh);overflow-y:auto">'
         + '<button onclick="mvFilter(0)" style="display:block;width:100%;text-align:left;border:0;background:' + (!MVS.filterNum ? '#f2f6ff' : 'none') + ';padding:10px 14px;cursor:pointer;border-top:1px solid #f0f0f2;font-size:12px;font-weight:700;color:#1d1d1f">All work orders \u00b7 every tree</button>'
