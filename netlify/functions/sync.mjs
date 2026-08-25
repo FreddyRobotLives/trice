@@ -1117,6 +1117,25 @@ var sync_src_default = async (req) => {
       await metaMerge("meta/maplinks", (cur) => { if (cur[tk] && !cur[tk].revoked) { cur[tk].revoked = Date.now(); return { next: cur, changed: true }; } return { next: cur, changed: false }; });
       return new Response(JSON.stringify({ v: V, ok: true }), { headers: cors });
     }
+    if (Array.isArray(b.restore) && b.restore.length) {
+      /* Undelete: write the newest surviving revision back with a fresh
+         timestamp, which outranks the tombstone. Nothing is ever destroyed in
+         this store, so any deleted record can come back whole. */
+      const A = await listAll();
+      const out = [];
+      for (const rid of b.restore.slice(0, 400)) {
+        const id = String(rid || "");
+        const r = A.all[id];
+        if (!r) { out.push({ id, ok: false, note: "never existed" }); continue; }
+        if (!A.dels[id] || A.dels[id] < r.u) { out.push({ id, ok: false, note: "not deleted" }); continue; }
+        const rec = await safeGetJSON(r.k);
+        if (!rec) { out.push({ id, ok: false, note: "unreadable" }); continue; }
+        rec.updated = Date.now();
+        try { await store.setJSON(PRE + "r/" + id + "!" + rec.updated, rec); out.push({ id, ok: true }); }
+        catch (e) { out.push({ id, ok: false, note: "write failed" }); }
+      }
+      return new Response(JSON.stringify({ v: V, restored: out }), { headers: cors });
+    }
     if (b.mvDelete && typeof b.mvDelete === "string") {
       const tk = b.mvDelete.trim();
       /* Permanent: the token leaves the registry, so the link 404s forever and
