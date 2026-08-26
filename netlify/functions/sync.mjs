@@ -805,6 +805,14 @@ var sync_src_default = async (req) => {
     const T0 = Date.now();
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const safeGetJSON = async (k) => { try { return await store.get(k, { type: "json", consistency: "strong" }); } catch (e) { return null; } };
+    const strictGetJSON = async (k) => {
+      for (let i = 0; i < 3; i++) {
+        try { return { ok: true, data: await store.get(k, { type: "json", consistency: "strong" }) }; }
+        catch (e) { if (i < 2) await sleep(120 * (i + 1)); }
+      }
+      return { ok: false, data: null };
+    };
+    const RETRY_503 = () => new Response(JSON.stringify({ error: "Couldn\u2019t load right now. Give it a moment and try again.", retry: true }), { status: 503, headers: cors });
     const safeGetText = async (k) => { try { return await store.get(k, { consistency: "strong" }); } catch (e) { return null; } };
 
     // ---- epoch ----
@@ -1061,7 +1069,9 @@ var sync_src_default = async (req) => {
       }
       const mvT = url.searchParams.get("mv");
       if (mvT && /^[A-Za-z0-9]{12,40}$/.test(mvT)) {
-        const mls = (await safeGetJSON("meta/maplinks")) || {};
+        const mlr = await strictGetJSON("meta/maplinks");
+        if (!mlr.ok) return RETRY_503();
+        const mls = mlr.data || {};
         const ml = mls[mvT];
         if (!ml || ml.revoked) return new Response(JSON.stringify({ error: "This map link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
         const assets = (await woScope({ project: ml.project, zones: [] })).map(woPublic);
@@ -1093,7 +1103,13 @@ var sync_src_default = async (req) => {
       }
       const woT = url.searchParams.get("wo");
       if (woT && /^[A-Za-z0-9]{12,40}$/.test(woT)) {
-        const wos = await ensureWoNums();
+        /* Existence is decided ONLY by a verified read. ensureWoNums swallows
+           storage errors into an empty object, which is indistinguishable from
+           "your link was revoked" — that lie reached a sub's phone once. */
+        const sr = await strictGetJSON("meta/workorders");
+        if (!sr.ok) return RETRY_503();
+        let wos = sr.data || {};
+        try { const wn = await ensureWoNums(); if (wn && wn[woT]) wos = wn; } catch (e) {}
         const wo = wos[woT];
         if (!wo || wo.revoked) return new Response(JSON.stringify({ error: "This work link is no longer active. Ask WTR for a fresh one." }), { status: 404, headers: cors });
         const assets = (await woScope(wo)).map(woPublic);
