@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v31.7">
+<meta name="version" content="trice-v31.8">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.7">
-<script defer src="/vendor/leaflet.min.js?v=trice-v31.7" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.7" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v31.8">
+<script defer src="/vendor/leaflet.min.js?v=trice-v31.8" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v31.8" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.7') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v31.8') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -4853,7 +4853,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.7</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v31.8</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4897,13 +4897,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.7', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v31.8', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.7', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v31.8', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5869,7 +5869,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.7</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v31.8</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
@@ -6062,12 +6062,26 @@ function woPendKey() { return 'trice_wopend_' + WO_TOKEN; }
 function woPending() { try { return JSON.parse(localStorage.getItem(woPendKey()) || '{}'); } catch (e) { return {}; } }
 function woPendSet(m) { try { localStorage.setItem(woPendKey(), JSON.stringify(m)); } catch (e) {} }
 async function woFetch() {
+  if (!/^[A-Za-z0-9]{12,40}$/.test(WO_TOKEN || '')) {
+    WOS.err = 'This link looks incomplete \u2014 part of it may have been cut off in the text or email. Ask WTR to send it again.';
+    subRender(); return;
+  }
   try {
     const r = await fetch('/api/sync?wo=' + encodeURIComponent(WO_TOKEN));
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || 'Could not load this work order.');
-    WOS.data = j; WOS.err = '';
-  } catch (e) { WOS.err = (e && e.message) || 'Could not load this work order.'; }
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 404) { WOS.err = j.error || 'This work link is no longer active. Ask WTR for a fresh one.'; WOS.net = ''; subRender(); return; }
+    if (!r.ok) throw new Error('transient');
+    WOS.data = j; WOS.err = ''; WOS.net = ''; WOS.tries = 0;
+  } catch (e) {
+    /* A hiccup \u2014 server 5xx, dead spot, cold start. Never call the link
+       expired for this: keep whatever is on screen and retry on a backoff. */
+    WOS.net = 'down';
+    WOS.tries = (WOS.tries || 0) + 1;
+    const wait = [2000, 5000, 10000, 30000][Math.min(WOS.tries - 1, 3)];
+    clearTimeout(WOS.retryT);
+    WOS.retryT = setTimeout(woFetch, wait);
+    if (!WOS.data) WOS.err = '';
+  }
   subRender();
 }
 async function woFlushPending() {
@@ -6101,6 +6115,15 @@ async function woMarkGo(assetId) {
 function subRender() {
   const el = document.getElementById('app'); if (!el) return;
   const F = "-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif";
+  if (!WOS.data && !WOS.err && WOS.net === 'down') {
+    el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;background:#fbfbfd">'
+      + '<img src="' + WTR_LOGO + '" style="width:150px;margin-bottom:22px">'
+      + '<div style="font-size:15px;font-weight:800;color:#17181a">Connecting\u2026</div>'
+      + '<div style="margin-top:8px;font-size:12.5px;color:#6e6e73;line-height:1.6;max-width:300px">Weak signal or a busy server. Your work order is safe \u2014 this page will keep trying on its own.</div>'
+      + '<button onclick="WOS.tries=0;woFetch()" style="margin-top:18px;border:1px solid #e0ded6;background:#fff;border-radius:999px;padding:10px 22px;font-size:12.5px;font-weight:700">Try now</button>'
+      + '</div>';
+    return;
+  }
   if (WOS.err) {
     el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;background:#fbfbfd"><img src="' + WTR_LOGO + '" style="width:180px;margin-bottom:26px"><div style="font-size:15px;font-weight:700;color:#1d1d1f">' + esc(WOS.err) + '</div><button onclick="woFetch()" style="margin-top:18px;border:1px solid #d6d3ca;background:#fff;border-radius:999px;padding:12px 26px;font-size:13.5px;font-weight:700">Try again</button></div>';
     return;
@@ -6209,17 +6232,38 @@ function mvPinData(assets) {
   }));
 }
 async function mvFetch() {
+  if (!/^[A-Za-z0-9]{12,40}$/.test(MV_TOKEN || '')) {
+    MVS.err = 'This link looks incomplete \u2014 part of it may have been cut off in the text or email. Ask for it to be sent again.';
+    mvRender(); return;
+  }
   try {
     const r = await fetch('/api/sync?mv=' + encodeURIComponent(MV_TOKEN));
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || 'Could not load this map.');
-    MVS.data = j; MVS.err = '';
-  } catch (e) { MVS.err = (e && e.message) || 'Could not load this map.'; }
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 404) { MVS.err = j.error || 'This map link is no longer active.'; mvRender(); return; }
+    if (!r.ok) throw new Error('transient');
+    MVS.data = j; MVS.err = ''; MVS.tries = 0; MVS.lastFetch = Date.now();
+  } catch (e) {
+    /* Hiccup, not a verdict: keep the map if we have one and retry on a backoff. */
+    MVS.tries = (MVS.tries || 0) + 1;
+    clearTimeout(MVS.retryT);
+    MVS.retryT = setTimeout(mvFetch, [2000, 5000, 10000, 30000][Math.min(MVS.tries - 1, 3)]);
+    if (MVS.data) return;                      // map stays up, retry runs quietly
+    MVS.err = '';
+    MVS.connecting = true;
+  }
   mvRender();
 }
 function mvRender() {
   const el = document.getElementById('app'); if (!el) return;
   const F = "-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif";
+  if (!MVS.data && !MVS.err && MVS.connecting) {
+    el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;background:#fbfbfd">'
+      + '<img src="' + WTR_LOGO + '" style="width:150px;margin-bottom:22px">'
+      + '<div style="font-size:15px;font-weight:800;color:#17181a">Loading your map\u2026</div>'
+      + '<div style="margin-top:8px;font-size:12.5px;color:#6e6e73;line-height:1.6;max-width:300px">Weak signal or a busy server. This page keeps trying on its own.</div>'
+      + '</div>';
+    return;
+  }
   if (MVS.err) {
     el.innerHTML = '<div style="font-family:' + F + ';min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;background:#fbfbfd"><img src="' + WTR_LOGO + '" style="width:180px;margin-bottom:26px"><div style="font-size:15px;font-weight:700;color:#1d1d1f">' + esc(MVS.err) + '</div><button onclick="mvFetch()" style="margin-top:18px;border:1px solid #d6d3ca;background:#fff;border-radius:999px;padding:12px 26px;font-size:13.5px;font-weight:700">Try again</button></div>';
     return;
