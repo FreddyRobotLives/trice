@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WTR — Restore Burnham assets</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fbfbfd;color:#17181a;margin:0;padding:28px 16px}
+.wrap{max-width:660px;margin:0 auto}
+h1{font-size:19px;margin:0 0 6px}
+p{font-size:13px;color:#6e6e73;line-height:1.6;margin:0 0 4px}
+table{width:100%;border-collapse:collapse;margin:18px 0;background:#fff;border:1px solid #e8e8ed;border-radius:12px;overflow:hidden}
+th,td{font-size:12px;text-align:left;padding:9px 12px;border-top:1px solid #f0f0f2}
+th{background:#f7f7f9;border:0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#6e6e73}
+td.m{font-weight:700;font-variant-numeric:tabular-nums}td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+button{width:100%;border:0;background:#17181a;color:#fff;border-radius:12px;padding:15px;font-size:14px;font-weight:800;cursor:pointer}
+button:disabled{opacity:.55}
+#out{margin-top:14px;font-size:12.5px;line-height:1.7}
+.ok{color:#1e7e3e;font-weight:700}.bad{color:#b3261e;font-weight:700}
+.note{margin-top:16px;font-size:11px;color:#98948a;line-height:1.6}
+</style></head><body><div class="wrap">
+<h1>Restore the 10 Burnham Wood assets</h1>
+<p>These are the register rows that went missing: full pricing from rev7 (+12.5%), arborist notes, and GPS from the original workbook. Restoring writes them back to the server; every phone picks them up on its next sync.</p>
+<p><b>Adds back:</b> 10 line items \u00b7 13 specimens \u00b7 $19,843.13 \u2014 the register returns to 147 and 200.</p>
+<table><thead><tr><th>Asset</th><th>Species</th><th>Location</th><th class="r">Qty</th><th class="r">Line total</th></tr></thead>
+<tbody><tr><td class="m">CIOP-0006</td><td>Red oak</td><td>Center island parking lot</td><td class="r">1</td><td class="r">$2,265.00</td></tr>
+<tr><td class="m">CIOP-0007</td><td>Burr Oak</td><td>Center island parking lot</td><td class="r">1</td><td class="r">$2,325.00</td></tr>
+<tr><td class="m">CIOP-0008</td><td>Cottonwood</td><td>Center island parking lot</td><td class="r">1</td><td class="r">$1,578.75</td></tr>
+<tr><td class="m">CIOP-0009</td><td>Burr Oak</td><td>Center island parking lot</td><td class="r">1</td><td class="r">$1,132.50</td></tr>
+<tr><td class="m">ESIO-0013</td><td>Cottonwood</td><td>Eastside parking lot</td><td class="r">3</td><td class="r">$1,638.75</td></tr>
+<tr><td class="m">ESIO-0014</td><td>Honey locust</td><td>Eastside parking lot</td><td class="r">1</td><td class="r">$819.38</td></tr>
+<tr><td class="m">NSOF-0005</td><td>Burr oak</td><td>Northside front entrance</td><td class="r">2</td><td class="r">$3,060.00</td></tr>
+<tr><td class="m">SSOF-0010</td><td>Cottonwood</td><td>Southside front entrance</td><td class="r">1</td><td class="r">$1,578.75</td></tr>
+<tr><td class="m">SSOF-0011</td><td>Cottonwood</td><td>Southside front entrance</td><td class="r">1</td><td class="r">$2,385.00</td></tr>
+<tr><td class="m">SSOF-0012</td><td>Cottonwood</td><td>Southside front entrance</td><td class="r">1</td><td class="r">$3,060.00</td></tr></tbody></table>
+<button id="go" onclick="restore()">Restore these 10 assets</button>
+<div id="out"></div>
+<div class="note">Safe to press more than once \u2014 restoring again just rewrites the same records. After it finishes, open Trice and run a sync; the Report tab should read 147 line items \u00b7 200 specimens. This page can be removed from the site afterwards.</div>
+</div>
+<script>
+var RECS = [{"id": "CIOP-0006", "site": "Burnham Wood Golf Course", "zone": "Center island parking lot", "locDetails": "", "ai": {"species": "Red oak", "latin": "Quercus rubra", "description": "", "findings": [], "why": "", "action": "Remove"}, "aiOriginal": null, "qty": 1, "dbhIn": 22, "heightFt": 50, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Canopy Failure"], "cause": "Wind", "salv": "N", "prune": 0, "removal": 2025, "disposal": 240, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Tree has suffered multiple limb loss at around 30% loss in canopy with multiple hangers still in the tree recommended for hanger removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6374598822893, "lng": -87.538688353328}, {"id": "CIOP-0007", "site": "Burnham Wood Golf Course", "zone": "Center island parking lot", "locDetails": "", "ai": {"species": "Burr Oak", "latin": "Quercus macrocarpa", "description": "", "findings": [], "why": "", "action": "Remove"}, "aiOriginal": null, "qty": 1, "dbhIn": 26, "heightFt": 50, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Canopy Failure"], "cause": "Wind", "salv": "N", "prune": 0, "removal": 2025, "disposal": 300, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Tree has suffered multiple limb losses with a loss of canopy at 15% and has multiple hangers still in the tree recommended for hanger removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6373745369125, "lng": -87.5387423367426}, {"id": "CIOP-0008", "site": "Burnham Wood Golf Course", "zone": "Center island parking lot", "locDetails": "", "ai": {"species": "Cottonwood", "latin": "Populus deltoides", "description": "", "findings": [], "why": "", "action": "Prune / repair"}, "aiOriginal": null, "qty": 1, "dbhIn": 22, "heightFt": 65, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Branch Hangers"], "cause": "Wind", "salv": "Y", "prune": 1518.75, "removal": 0, "disposal": 60, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Red Oak loss of 40% of its canopy due to large limb loss and small hanger loss recommended for removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6376520221496, "lng": -87.5383979968852}, {"id": "CIOP-0009", "site": "Burnham Wood Golf Course", "zone": "Center island parking lot", "locDetails": "", "ai": {"species": "Burr Oak", "latin": "Quercus macrocarpa", "description": "", "findings": [], "why": "", "action": "Prune / repair"}, "aiOriginal": null, "qty": 1, "dbhIn": 24, "heightFt": 50, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Branch Hangers"], "cause": "Wind", "salv": "Y", "prune": 1012.5, "removal": 0, "disposal": 120, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Burr oak suffered 30% of canopy loss due to large limb failure as well as multiple hangers throughout the tree", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6377566972442, "lng": -87.5385135467628}, {"id": "ESIO-0013", "site": "Burnham Wood Golf Course", "zone": "Eastside parking lot", "locDetails": "", "ai": {"species": "Cottonwood", "latin": "Populus deltoides", "description": "", "findings": [], "why": "", "action": "Prune / repair"}, "aiOriginal": null, "qty": 3, "dbhIn": 28, "heightFt": 65, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Branch Hangers"], "cause": "Wind", "salv": "Y", "prune": 1518.75, "removal": 0, "disposal": 120, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Cottonwood has 10% of canopy loss due to limb loss and hangers does not require a removal but will require hanger removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6373487892007, "lng": -87.5375138425574}, {"id": "ESIO-0014", "site": "Burnham Wood Golf Course", "zone": "Eastside parking lot", "locDetails": "", "ai": {"species": "Honey locust", "latin": "Gleditsia triacanthos", "description": "", "findings": [], "why": "", "action": "Prune / repair"}, "aiOriginal": null, "qty": 1, "dbhIn": 28, "heightFt": 75, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Branch Hangers"], "cause": "Wind", "salv": "Y", "prune": 759.38, "removal": 0, "disposal": 60, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Burr oak has suffered 5% or less canopy damage, but has multiple hangers in it recommended to do hanger removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.637296841632, "lng": -87.5375747838855}, {"id": "NSOF-0005", "site": "Burnham Wood Golf Course", "zone": "Northside front entrance", "locDetails": "", "ai": {"species": "Burr oak", "latin": "Quercus macrocarpa", "description": "", "findings": [], "why": "", "action": "Remove"}, "aiOriginal": null, "qty": 2, "dbhIn": 22, "heightFt": 50, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Canopy Failure"], "cause": "Wind", "salv": "N", "prune": 0, "removal": 2700, "disposal": 360, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Burr oak has lost 60% of its canopy due to large hanger and fallen limb recommended for removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6374260391597, "lng": -87.5391694434264}, {"id": "SSOF-0010", "site": "Burnham Wood Golf Course", "zone": "Southside front entrance", "locDetails": "", "ai": {"species": "Cottonwood", "latin": "Populus deltoides", "description": "", "findings": [], "why": "", "action": "Prune / repair"}, "aiOriginal": null, "qty": 1, "dbhIn": 28, "heightFt": 65, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Branch Hangers"], "cause": "Wind", "salv": "Y", "prune": 1518.75, "removal": 0, "disposal": 60, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Tree has large limb, lash and hangers canopy 20% requires hanger removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6372675232175, "lng": -87.5391638925773}, {"id": "SSOF-0011", "site": "Burnham Wood Golf Course", "zone": "Southside front entrance", "locDetails": "", "ai": {"species": "Cottonwood", "latin": "Populus deltoides", "description": "", "findings": [], "why": "", "action": "Remove"}, "aiOriginal": null, "qty": 1, "dbhIn": 20, "heightFt": 40, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Trunk Failure"], "cause": "Wind", "salv": "N", "prune": 0, "removal": 2025, "disposal": 360, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Trunk failure", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6371620491824, "lng": -87.5387150493071}, {"id": "SSOF-0012", "site": "Burnham Wood Golf Course", "zone": "Southside front entrance", "locDetails": "", "ai": {"species": "Cottonwood", "latin": "Populus deltoides", "description": "", "findings": [], "why": "", "action": "Remove"}, "aiOriginal": null, "qty": 1, "dbhIn": 22, "heightFt": 75, "ip": "OP", "mgd": "Yes", "hazard": "High Hazard", "failures": ["Canopy Failure"], "cause": "Wind", "salv": "N", "prune": 0, "removal": 2700, "disposal": 360, "stump": 0, "pred": null, "priceSource": "Register rev7 +12.5%", "notes": "Cottonwood has 100% loss in canopy and is subject for a removal", "reviewed": true, "overrideBy": "Brian Davis / Andy Cushman", "overrideAt": 1787068800000, "regRev": "bw-rev8", "lat": 41.6370771337542, "lng": -87.5388813806583}];
+async function restore() {
+  var btn = document.getElementById('go'), out = document.getElementById('out');
+  btn.disabled = true; btn.textContent = 'Restoring\u2026';
+  try {
+    var now = Date.now();
+    var recs = RECS.map(function (t, i) { var c = JSON.parse(JSON.stringify(t)); c.updated = now + i; return c; });
+    var r = await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op: 'put', recs: recs, photos: {} }) });
+    var j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'server refused');
+    var ok = new Set(j.saved || []);
+    out.innerHTML = RECS.map(function (t) {
+      return (ok.has(t.id) ? '<span class="ok">\u2713</span> ' : '<span class="bad">\u2717</span> ') + t.id;
+    }).join('<br>');
+    if (ok.size === RECS.length) {
+      btn.textContent = 'All 10 restored \u2713';
+      try {
+        var a = await (await fetch('/api/sync?audit=1')).json();
+        var bw = (a.byProject || {})['Burnham Wood Golf Course'];
+        out.innerHTML += '<br><br><b>Server now holds ' + bw + ' Burnham Wood line items.</b> Open Trice and sync.';
+      } catch (e) {}
+    } else {
+      btn.disabled = false; btn.textContent = 'Some failed \u2014 press to retry';
+    }
+  } catch (e) {
+    out.innerHTML = '<span class="bad">' + (e.message || 'Could not reach the server') + '</span> \u2014 check signal and try again.';
+    btn.disabled = false; btn.textContent = 'Restore these 10 assets';
+  }
+}
+</script></body></html>
