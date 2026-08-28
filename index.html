@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Trice">
-<meta name="version" content="trice-v32.1">
+<meta name="version" content="trice-v32.2">
 <meta property="og:title" content="Trice — The field changes fast. Your data should keep up.">
 <meta property="og:description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <meta property="og:image" content="https://trice.live/og.png?v=32">
@@ -20,9 +20,9 @@
 <meta name="twitter:image" content="https://trice.live/og.png?v=32">
 <meta name="description" content="Purpose-built technology designed for your operation, your teams, and the decisions they make.">
 <title>Trice · Tree survey</title>
-<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v32.1">
-<script defer src="/vendor/leaflet.min.js?v=trice-v32.1" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
-<script defer src="/vendor/xlsx.full.min.js?v=trice-v32.1" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
+<link rel="stylesheet" href="/vendor/leaflet.min.css?v=trice-v32.2">
+<script defer src="/vendor/leaflet.min.js?v=trice-v32.2" onerror="(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';document.head.appendChild(s);var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(l);})()"></script>
+<script defer src="/vendor/xlsx.full.min.js?v=trice-v32.2" onerror="console.warn('vendor xlsx missing; loads on demand')"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <style>
 *{box-sizing:border-box}
@@ -34,7 +34,7 @@
 }
 html,body{height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v32.1') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Inter';src:url('/vendor/InterVariable.woff2?v=trice-v32.2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;font-feature-settings:'cv11','ss01';-webkit-font-smoothing:antialiased;line-height:1.5;font-size:14px;overscroll-behavior-y:contain}
 ::selection{background:rgba(200,69,44,.16)}
 a{color:var(--info);text-decoration:none}
@@ -482,48 +482,83 @@ const BW7_MAP = {}; for (const r of BW7) BW7_MAP[r.id] = r;
 const ESIO10_GPS = {"CIOP-0006": [41.6374599, -87.5386884], "CIOP-0007": [41.6373745, -87.5387423], "CIOP-0008": [41.637652, -87.538398], "CIOP-0009": [41.6377567, -87.5385135], "ESIO-0013": [41.6373488, -87.5375138], "ESIO-0014": [41.6372968, -87.5375748], "NSOF-0005": [41.637426, -87.5391694], "SSOF-0010": [41.6372675, -87.5391639], "SSOF-0011": [41.637162, -87.538715], "SSOF-0012": [41.6370771, -87.5388814]};
 function restoreEsio10() {
   const IDS = Object.keys(ESIO10_GPS);
-  /* These ten are canon — the signed register says they exist. Whatever wiped
-     them left deletion markers on devices, and those markers also block the
-     records from syncing back in. Clear them every boot, unconditionally. */
+  const CANON = 'Burnham Wood Golf Course';
+  const BURN_RE = /^burnham\s+woods?\s+golf(\s+course)?$/i;
+  /* markers from the original wipe also block these from syncing in — scrub */
   try {
     const tb = JSON.parse(localStorage.getItem('trice_tombs') || '[]');
     const tb2 = tb.filter((id) => !IDS.includes(id));
     if (tb2.length !== tb.length) localStorage.setItem('trice_tombs', JSON.stringify(tb2));
   } catch (e) {}
-  try { if (localStorage.getItem('trice_esio10_v2') === 'done') return 0; } catch (e) {}
-  const have = new Set(S.trees.map(t => t.id));
-  let made = 0;
+  const byId = new Map(S.trees.map((t) => [t.id, t]));
+  let made = 0, fixed = 0, rehomed = 0;
+  /* Any record filed under a variant spelling of the project folds into the
+     canonical name — a record under "Burnham Woods Golf Course" exists but
+     never counts, which reads as "missing" everywhere that matters. */
+  for (const t of S.trees) {
+    const st = String(t.site || '').trim();
+    if (st && st !== CANON && BURN_RE.test(st)) {
+      t.site = CANON; t.updated = Date.now(); t.dirty = true;
+      try { DB.putTree(stripRuntime(t)); } catch (e) {}
+      rehomed++;
+    }
+  }
   for (const id of IDS) {
-    if (have.has(id)) continue;
     const r = BW7_MAP[id];
     if (!r) continue;
     const gz = ESIO10_GPS[id];
-    const t = {
-      id, site: 'Burnham Wood Golf Course', zone: r.z, locDetails: '',
-      ai: { species: r.s, latin: r.l, description: '', findings: [], why: '',
-        action: r.r > 0 ? 'Remove' : (r.p > 0 ? 'Prune / repair' : '') },
-      aiOriginal: null,
-      qty: r.q, dbhIn: r.d || null, heightFt: r.h || null, ip: r.ip || 'IP', mgd: 'Yes',
-      hazard: r.hz || '', failures: r.f ? [r.f] : [], cause: r.c || '', salv: r.sv || '',
-      prune: r.p || 0, removal: r.r || 0, disposal: r.db || 0, stump: r.st || 0,
-      pred: null, priceSource: 'Register rev7 +12.5%',
-      notes: r.n || '', reviewed: true,
-      overrideBy: 'Brian Davis / Andy Cushman', overrideAt: Date.UTC(2026, 7, 18, 16, 0, 0),
-      regRev: BW7_REV,
-      lat: gz[0], lng: gz[1],
-      created: Date.now(), updated: Date.now(), dirty: true,
-    };
-    S.trees.push(t);
-    try { DB.putTree(stripRuntime(t)); } catch (e) {}
-    made++;
+    let t = byId.get(id);
+    if (!t) {
+      t = {
+        id, site: CANON, zone: r.z, locDetails: '',
+        ai: { species: r.s, latin: r.l, description: '', findings: [], why: '',
+          action: r.r > 0 ? 'Remove' : (r.p > 0 ? 'Prune / repair' : '') },
+        aiOriginal: null,
+        qty: r.q, dbhIn: r.d || null, heightFt: r.h || null, ip: r.ip || 'IP', mgd: 'Yes',
+        hazard: r.hz || '', failures: r.f ? [r.f] : [], cause: r.c || '', salv: r.sv || '',
+        prune: r.p || 0, removal: r.r || 0, disposal: r.db || 0, stump: r.st || 0,
+        pred: null, priceSource: 'Register rev7 +12.5%',
+        notes: r.n || '', reviewed: true,
+        overrideBy: 'Brian Davis / Andy Cushman', overrideAt: Date.UTC(2026, 7, 18, 16, 0, 0),
+        regRev: BW7_REV,
+        lat: gz[0], lng: gz[1],
+        created: Date.now(), updated: Date.now(), dirty: true,
+      };
+      S.trees.push(t);
+      try { DB.putTree(stripRuntime(t)); } catch (e) {}
+      made++;
+      continue;
+    }
+    /* Present but possibly not counting: force the billing fields to the
+       signed register. Field capture (photo, GPS, zone) is kept when set. */
+    let ch = false;
+    if (String(t.site || '').trim() !== CANON) { t.site = CANON; ch = true; }
+    if ((t.prune || 0) !== (r.p || 0) || (t.removal || 0) !== (r.r || 0) || (t.disposal || 0) !== (r.db || 0) || (t.stump || 0) !== (r.st || 0)) {
+      t.prune = r.p || 0; t.removal = r.r || 0; t.disposal = r.db || 0; t.stump = r.st || 0;
+      t.pred = null; t.priceSource = 'Register rev7 +12.5%'; ch = true;
+    }
+    t.ai = t.ai || {};
+    if (!t.ai.species) { t.ai.species = r.s; t.ai.latin = r.l; ch = true; }
+    if (!t.ai.action) { t.ai.action = r.r > 0 ? 'Remove' : (r.p > 0 ? 'Prune / repair' : ''); ch = true; }
+    if ((t.qty || 1) !== r.q) { t.qty = r.q; ch = true; }
+    if (!t.hazard) { t.hazard = r.hz || ''; ch = true; }
+    if (!t.zone) { t.zone = r.z; ch = true; }
+    if (typeof t.lat !== 'number' && gz) { t.lat = gz[0]; t.lng = gz[1]; ch = true; }
+    if (ch) { t.updated = Date.now(); t.dirty = true; t.regRev = BW7_REV; try { DB.putTree(stripRuntime(t)); } catch (e) {} fixed++; }
   }
-  try { localStorage.setItem('trice_esio10_v2', 'done'); } catch (e) {}
-  if (made) {
+  if (made || fixed || rehomed) {
     S.trees.sort((a, b) => a.id < b.id ? -1 : 1);
-    toast('Restored ' + made + ' Burnham assets \u2014 syncing to the team');
+    toast('Register repaired \u2014 ' + made + ' restored, ' + fixed + ' corrected' + (rehomed ? ', ' + rehomed + ' re-homed to ' + CANON : ''));
     queueSync();
   }
-  return made;
+  return { made, fixed, rehomed };
+}
+function esioGap() {
+  const CANON = 'Burnham Wood Golf Course';
+  return Object.keys(ESIO10_GPS).filter((id) => {
+    const t = S.trees.find((x) => x.id === id);
+    return !t || siteOfT(t) !== CANON || projHidden(siteOfT(t));
+  });
 }
 
 function applyRegisterRev() {
@@ -920,6 +955,7 @@ async function syncNow() {
       for (const t of S.trees) { if (!serverIds.has(t.id) && !serverDels.has(t.id) && !t.dirty) { t.dirty = true; t.photoSent = null; repushed++; } }
       if (repushed) { SYNC.repushPending = repushed; queueSync(); }
       else SYNC.repushPending = 0;
+      restoreEsio10();
       pumpPhotos();
     }
     if (!failed.length) localStorage.setItem('trice_tombs', '[]');
@@ -2154,6 +2190,10 @@ function homeGlance() {
       <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em">${money(T.total)}</div><div style="font-size:11px;color:var(--muted)">Remediation priced</div></div>
       <div><div style="font-size:25px;font-weight:700;letter-spacing:-.02em;color:${T.unpriced ? 'var(--warn)' : 'var(--good)'}">${T.unpriced}</div><div style="font-size:11px;color:var(--muted)">Lines unpriced</div></div>
     </div>
+    ${S.admin && esioGap().length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 13px;background:#fdf3f2;border:1px solid #f3d9d6;border-radius:11px">
+      <span style="flex:1;font-size:12px;color:#8a2f26;line-height:1.5"><b>${esioGap().length} of the 10 restored register rows are not counting here.</b> They exist but sit under the wrong project name or hidden state.</span>
+      <button class="btn dark" style="width:auto;margin:0;padding:9px 15px;font-size:11.5px;flex:none" onclick="restoreEsio10();render();syncNow()">Repair now</button>
+    </div>` : ''}
     <div style="display:flex;height:9px;border-radius:999px;overflow:hidden;margin-top:13px">${hz.map(h => `<div style="flex:${T.byHaz[h].specimens || 0.001};background:${hcol[h]}"></div>`).join('')}</div>
     <div style="display:flex;gap:12px;margin-top:8px;font-size:10.5px;color:var(--muted);flex-wrap:wrap">${hz.map(h => `<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:${hcol[h]};margin-right:4px"></span><strong style="color:var(--ink)">${T.byHaz[h].specimens}</strong> ${h}</span>`).join('')}</div>
     <div style="display:flex;gap:16px;margin-top:13px;padding-top:11px;border-top:1px solid var(--hair);flex-wrap:wrap">${link("go('trees')",'Register')}${link("go('sheet')",'Live grid')}${link("go('map')",'Map')}${link("go('report')",'Report')}</div>
@@ -4906,7 +4946,7 @@ function reportView() {
     <div class="field" style="margin-top:10px"><label>Adjuster / consultant on the loss <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(drives the conflict check)</span></label><input id="setAdjuster" value="${esc(j.adjuster||'')}"></div>
     <button class="btn dark" style="margin-top:12px" onclick="saveSettings()">Save header</button>
   </div>` : ''}
-  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v32.1</div>`;
+  <div style="margin-top:16px;font-size:11px;color:var(--faint);line-height:1.55;text-align:center;padding:0 8px">Assessment performed by visual inspection from the ground, to ANSI A300 and Z133. AI-assisted; estimates support — but do not replace — the judgement of a qualified arborist. Not legal, tax or insurance advice. · v32.2</div>`;
 }
 function saveSettings() {
   const g = id => (document.getElementById(id) || {}).value || '';
@@ -4950,13 +4990,13 @@ function loadScriptChain(urls) {
 function loadExcelJS() {
   if (window.ExcelJS) return Promise.resolve();
   if (EXCELJS_P) return EXCELJS_P;
-  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v32.1', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
+  EXCELJS_P = loadScriptChain(['/vendor/exceljs.min.js?v=trice-v32.2', 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js', 'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'])
     .catch(e => { EXCELJS_P = null; throw new Error('ExcelJS unavailable from every source'); });
   return EXCELJS_P;
 }
 function ensureSheetJS() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
-  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v32.1', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
+  return loadScriptChain(['/vendor/xlsx.full.min.js?v=trice-v32.2', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js']);
 }
 function thumbJPEG(dataUrl, maxW) {
   return new Promise((res) => {
@@ -5922,7 +5962,7 @@ function render() {
   app.innerHTML = `
     <div class="hdr">
       <button onclick="goHome()" aria-label="Trice — start screen" style="border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink)"><div class="logo"><span></span><span></span><span></span></div>
-      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v32.1</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
+      <div><div class="t1">Trice</div><div class="t2">WTR Field Module · v32.2</div><div id="beaconLine" style="margin-top:6px;font-size:10px;color:var(--bad);font-weight:700;letter-spacing:.02em"></div></div></button>
       ${IS_DESKTOP() ? `<button onclick="toggleAdmin()" style="flex:none;border:1px solid ${S.admin ? 'var(--accent)' : 'var(--line)'};background:${S.admin ? 'var(--accent)' : '#fff'};color:${S.admin ? '#fff' : 'var(--muted)'};border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;margin-right:10px">${S.admin ? 'Admin ✓' : 'Admin'}</button>` : ''}
       <button onclick="S.hdrMenu=!S.hdrMenu;render()" aria-label="Menu" style="margin-left:auto;flex:none;width:44px;height:44px;border:1px solid var(--line);background:#fff;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.5px;position:relative;cursor:pointer">
         <span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span><span style="width:17px;height:2px;background:var(--ink);border-radius:1px"></span>
