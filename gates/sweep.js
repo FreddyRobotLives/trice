@@ -68,5 +68,24 @@ for (const f of ['netlify/functions/sync.mjs', 'netlify/functions/mvcard.mjs', '
 ck('vendor: leaflet + sheetjs + exceljs + font committed', ['leaflet.min.js','leaflet.min.css','xlsx.full.min.js','exceljs.min.js','InterVariable.woff2'].every(f => fs.existsSync(path.join(ROOT, 'vendor', f))));
 ck('manifest + icons present', ['manifest.webmanifest', 'icon-192.png', 'icon-512.png'].every(f => fs.existsSync(path.join(ROOT, f))));
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
-process.exit(fail ? 1 : 0);
+
+// 9 · real-browser boot check (runs when jsdom is installed anywhere on this machine)
+try {
+  const { JSDOM, VirtualConsole } = require(require('path').resolve(process.env.JSDOM_PATH || '/tmp/jd/node_modules/jsdom'));
+  const vc = new VirtualConsole(); const errs = [];
+  vc.on('jsdomError', (e) => errs.push(e.message));
+  const dom = new JSDOM(html, { url: 'https://app.trice.live/', runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(w) { w.localStorage.setItem('trice_gate', '1630778633'); w.matchMedia = () => ({ matches: false, addListener() {}, addEventListener() {} }); w.scrollTo = () => {}; } });
+  setTimeout(() => {
+    const app = dom.window.document.getElementById('app');
+    const rendered = app && app.innerHTML.length > 1000 && errs.length === 0;
+    if (rendered) pass++; else fail++;
+    console.log((rendered ? 'PASS' : 'FAIL') + ' boot: the module renders signed in with zero errors' + (errs.length ? ' \u2014 ' + errs[0] : ''));
+    console.log('\n' + pass + ' passed, ' + fail + ' failed');
+    process.exit(fail ? 1 : 0);
+  }, 2000);
+} catch (e) {
+  console.log('SKIP boot check (jsdom not available here)');
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  process.exit(fail ? 1 : 0);
+}
