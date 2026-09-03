@@ -65,6 +65,17 @@
   [headers.values]
     Cache-Control = "no-cache, must-revalidate"
 
+# Team Access page: a standalone page, always fresh, never the cached app shell
+[[redirects]]
+  from = "/team"
+  to = "/team.html"
+  status = 200
+
+[[headers]]
+  for = "/team.html"
+  [headers.values]
+    Cache-Control = "no-store"
+
 [[redirects]]
   from = "/"
   query = { mv = ":token" }
