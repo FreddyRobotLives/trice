@@ -13,9 +13,9 @@
     *{margin:0;padding:0;box-sizing:border-box}
     html{-webkit-text-size-adjust:100%}
     body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;background:var(--ink);color:#fff;-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
-    .glow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;pointer-events:none;z-index:0}
-    .g1{width:70vw;height:70vw;max-width:900px;max-height:900px;background:radial-gradient(circle,#2E5D3E 0%,rgba(46,93,62,0) 62%);top:-22vw;left:-16vw;animation:d1 22s ease-in-out infinite alternate}
-    .g2{width:60vw;height:60vw;max-width:760px;max-height:760px;background:radial-gradient(circle,#E8632B 0%,rgba(232,99,43,0) 60%);bottom:-24vw;right:-18vw;opacity:.38;animation:d2 26s ease-in-out infinite alternate}
+    .glow{position:fixed;border-radius:50%;opacity:.55;pointer-events:none;z-index:0;will-change:transform}
+    .g1{width:70vw;height:70vw;max-width:900px;max-height:900px;background:radial-gradient(circle,rgba(46,93,62,.9) 0%,rgba(46,93,62,.35) 30%,rgba(46,93,62,0) 68%);top:-22vw;left:-16vw;animation:d1 22s ease-in-out infinite alternate}
+    .g2{width:60vw;height:60vw;max-width:760px;max-height:760px;background:radial-gradient(circle,rgba(232,99,43,.8) 0%,rgba(232,99,43,.28) 30%,rgba(232,99,43,0) 66%);bottom:-24vw;right:-18vw;opacity:.38;animation:d2 26s ease-in-out infinite alternate}
     @keyframes d1{to{transform:translate(9vw,7vw) scale(1.1)}}@keyframes d2{to{transform:translate(-8vw,-9vw) scale(.95)}}
     header{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:22px 26px}
     .mark{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:24px;letter-spacing:-.04em;color:#fff;text-decoration:none}
@@ -49,7 +49,7 @@
     footer{position:relative;z-index:1;text-align:center;padding:0 20px calc(22px + env(safe-area-inset-bottom));font-size:12.5px;color:var(--muted)}
     @keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
     @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-    @media (max-width:600px){.glow{filter:blur(60px)}.card{padding:26px 20px 22px;border-radius:24px}h1{font-size:34px}.field{flex-wrap:wrap;border-radius:20px;padding:8px}.field input{width:100%;flex:1 1 55%;padding:10px 12px}.field .btn{flex:1 1 100%;padding:14px}}
+    @media (max-width:600px){.card{padding:26px 20px 22px;border-radius:24px}h1{font-size:34px}.field{flex-wrap:wrap;border-radius:20px;padding:8px}.field input{width:100%;flex:1 1 55%;padding:10px 12px}.field .btn{flex:1 1 100%;padding:14px}}
   </style>
 </head>
 <body>
