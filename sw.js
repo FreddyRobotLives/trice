@@ -4,8 +4,8 @@
    loses the race and the cached shell paints instead — and the network fetch is
    NOT aborted: when it eventually lands, the new build is cached and the in-page
    build watchdog (the single reload authority) swaps it in at a safe moment. */
-const CACHE = 'trice-shell-v136';
-const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/InterVariable.woff2'];
+const CACHE = 'trice-shell-v137';
+const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/vendor/leaflet.min.js', '/vendor/leaflet.min.css', '/vendor/InterVariable.woff2', '/brand/wordmark-ink.svg', '/brand/wordmark-bone.svg'];
 const NAV_TIMEOUT = 3500;
 
 self.addEventListener('install', (e) => {
